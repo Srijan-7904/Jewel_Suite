@@ -5,6 +5,12 @@ import { LoginPage } from './pages/LoginPage';
 import { AppLayout } from './layouts/AppLayout';
 import { DashboardPage } from './pages/DashboardPage';
 import { PlaceholderPage } from './pages/PlaceholderPage';
+import { CustomersPage } from './pages/masters/CustomersPage';
+import { SuppliersPage } from './pages/masters/SuppliersPage';
+import { KarigarsPage } from './pages/masters/KarigarsPage';
+import { CategoriesPage } from './pages/masters/CategoriesPage';
+import { ProductsPage } from './pages/masters/ProductsPage';
+import { MetalRatesPage } from './pages/masters/MetalRatesPage';
 import { Gem } from 'lucide-react';
 
 const ProtectedRoute: React.FC<{ children: React.ReactElement }> = ({ children }) => {
@@ -204,22 +210,7 @@ export const App: React.FC = () => {
                 />
               }
             />
-            <Route
-              path="workshop/karigars"
-              element={
-                <PlaceholderPage
-                  title="Karigar & Artisan Master"
-                  moduleGroup="Workshop"
-                  targetPhase="Part 1: Masters"
-                  description="Directory of workshop artisans, specialized crafts, and contact profiles."
-                  plannedFeatures={[
-                    'Artisan contact and guarantee details',
-                    'Specialty tags (Bangles, Casting, Hand-made, Polishing)',
-                    'Current metal liability summary',
-                  ]}
-                />
-              }
-            />
+            <Route path="workshop/karigars" element={<KarigarsPage />} />
             <Route
               path="workshop/jobs"
               element={
@@ -342,39 +333,12 @@ export const App: React.FC = () => {
               }
             />
 
-            {/* Masters Routes (Roadmap: Part 1) */}
-            <Route
-              path="masters/customers"
-              element={
-                <PlaceholderPage
-                  title="Customer & Party Master"
-                  moduleGroup="Masters"
-                  targetPhase="Part 1: Masters"
-                  description="Centralized directory of retail customers, wholesale parties, and suppliers."
-                  plannedFeatures={[
-                    'Customer contact, GSTIN, and PAN records',
-                    'Purchase history and loyalty points',
-                    'Credit limit and balance overview',
-                  ]}
-                />
-              }
-            />
-            <Route
-              path="masters/rates"
-              element={
-                <PlaceholderPage
-                  title="Metal Rate Master (Au/Ag/Pt)"
-                  moduleGroup="Masters"
-                  targetPhase="Part 1: Masters"
-                  description="Daily gold, silver, and platinum board rate board with historical rate logs."
-                  plannedFeatures={[
-                    'Today’s board rates: 24K, 22K, 18K, 14K, Silver 999, 925',
-                    'Historical rate archive for invoice auditing',
-                    'Automatic billing rate pre-fill',
-                  ]}
-                />
-              }
-            />
+            {/* Masters Routes */}
+            <Route path="masters/customers" element={<CustomersPage />} />
+            <Route path="masters/suppliers" element={<SuppliersPage />} />
+            <Route path="masters/categories" element={<CategoriesPage />} />
+            <Route path="masters/products" element={<ProductsPage />} />
+            <Route path="masters/rates" element={<MetalRatesPage />} />
 
             {/* System Routes */}
             <Route

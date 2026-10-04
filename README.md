@@ -1,3 +1,4 @@
+
 # 💎 Jewel Suite — Offline-First Jewellery Shop ERP & POS
 
 Jewel Suite is a standalone, offline-first Enterprise Resource Planning (ERP) and Point of Sale (POS) system designed for independent jewellery retail and wholesale operations running on a single local Windows computer.

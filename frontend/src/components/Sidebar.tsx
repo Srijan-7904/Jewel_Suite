@@ -99,6 +99,9 @@ export const Sidebar: React.FC = () => {
       icon: <Users size={18} />,
       items: [
         { label: 'Customers', path: '/masters/customers' },
+        { label: 'Suppliers', path: '/masters/suppliers' },
+        { label: 'Categories', path: '/masters/categories' },
+        { label: 'Products', path: '/masters/products' },
         { label: 'Au/Ag Rates', path: '/masters/rates', badge: 'Live' },
       ],
     },

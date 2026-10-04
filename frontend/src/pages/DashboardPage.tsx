@@ -1,5 +1,7 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { rateApi } from '../services/masters';
+import { CurrentRate } from '../types';
 import {
   TrendingUp,
   Receipt,
@@ -15,13 +17,30 @@ import './DashboardPage.css';
 
 export const DashboardPage: React.FC = () => {
   const { user, health } = useAuth();
+  const [rates, setRates] = useState<CurrentRate[]>([]);
+
+  useEffect(() => {
+    rateApi.getCurrentRates()
+      .then(setRates)
+      .catch((err) => console.error('Failed to load dashboard rates:', err));
+  }, []);
+
+  const gold24 = rates.find((r) => r.metal_code === 'GOLD' && r.purity_code === '24K');
+  const gold22 = rates.find((r) => r.metal_code === 'GOLD' && r.purity_code === '22K');
+  const silver999 = rates.find((r) => r.metal_code === 'SILVER' && (r.purity_code === '999' || r.purity_name.includes('999')));
+  const plat950 = rates.find((r) => r.metal_code === 'PLATINUM' && r.purity_code === '950');
+
+  const formatRate = (rateObj?: CurrentRate) => {
+    if (!rateObj || !rateObj.rate) return 'N/A';
+    return `₹${rateObj.rate.toLocaleString('en-IN', { minimumFractionDigits: 2 })}/g`;
+  };
 
   return (
     <div className="dashboard-page">
-      {/* Welcome Banner */}
+      {/* Welcome Banner with Real Database-driven Rates */}
       <div className="welcome-banner">
         <div className="welcome-text">
-          <div className="welcome-tag font-mono">JEWEL SUITE ERP • FOUNDATION READY</div>
+          <div className="welcome-tag font-mono">JEWEL SUITE ERP • MASTERS CONNECTED</div>
           <h2 className="welcome-title font-serif">Welcome, {user?.username || 'Jeweller'}</h2>
           <p className="welcome-desc">
             Offline-First Jewellery POS and ERP terminal is operational on this machine.
@@ -30,19 +49,26 @@ export const DashboardPage: React.FC = () => {
         <div className="rate-ticker">
           <div className="rate-card">
             <span className="rate-metal">GOLD 24K</span>
-            <span className="rate-value font-mono">₹7,850/g</span>
-            <span className="rate-change positive">+0.4%</span>
+            <span className="rate-value font-mono">{formatRate(gold24)}</span>
+            <span className="rate-change neutral font-mono">Live DB</span>
           </div>
           <div className="rate-card">
             <span className="rate-metal">GOLD 22K (916)</span>
-            <span className="rate-value font-mono">₹7,190/g</span>
-            <span className="rate-change positive">+0.4%</span>
+            <span className="rate-value font-mono">{formatRate(gold22)}</span>
+            <span className="rate-change neutral font-mono">Live DB</span>
           </div>
           <div className="rate-card">
             <span className="rate-metal">SILVER 999</span>
-            <span className="rate-value font-mono">₹94.50/g</span>
-            <span className="rate-change neutral">0.0%</span>
+            <span className="rate-value font-mono">{formatRate(silver999)}</span>
+            <span className="rate-change neutral font-mono">Live DB</span>
           </div>
+          {plat950 && (
+            <div className="rate-card">
+              <span className="rate-metal">PLATINUM 950</span>
+              <span className="rate-value font-mono">{formatRate(plat950)}</span>
+              <span className="rate-change neutral font-mono">Live DB</span>
+            </div>
+          )}
         </div>
       </div>
 
