@@ -7,6 +7,8 @@ import { karigarRoutes } from './karigar.routes.js';
 import { categoryRoutes } from './category.routes.js';
 import { productRoutes } from './product.routes.js';
 import { rateRoutes } from './rate.routes.js';
+import { inventoryRoutes } from './inventory.routes.js';
+import { purchaseRoutes } from './purchase.routes.js';
 
 export const apiRouter = Router();
 
@@ -18,6 +20,8 @@ apiRouter.use('/karigars', karigarRoutes);
 apiRouter.use('/categories', categoryRoutes);
 apiRouter.use('/products', productRoutes);
 apiRouter.use('/rates', rateRoutes);
+apiRouter.use('/inventory', inventoryRoutes);
+apiRouter.use('/purchases', purchaseRoutes);
 
 // Compatibility alias for /api/masters/...
 apiRouter.use('/masters/metals', rateRoutes);

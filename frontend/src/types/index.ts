@@ -167,3 +167,220 @@ export interface CurrentRate {
   created_by_username: string | null;
   created_at: string;
 }
+
+// Inventory Entities (Part 3)
+export interface StockItem {
+  id: string;
+  tag_no: string;
+  product_id: string;
+  metal_id: string;
+  purity_id: string;
+
+  gross_weight: number;
+  less_weight: number;
+  net_weight: number;
+
+  tunch_percent: number;
+  fine_weight: number;
+
+  wastage_percent: number;
+  making_charge: number;
+
+  rate_per_gram: number;
+  metal_value: number;
+  current_value: number | null;
+
+  acquisition_type: string;
+  acquisition_reference: string | null;
+
+  status: 'IN_STOCK' | 'SOLD' | 'EXCHANGED' | 'REPAIR' | 'WITH_KARIGAR' | 'RESERVED' | 'RETURNED' | 'ADJUSTED' | 'DAMAGED';
+  huid: string | null;
+  notes: string | null;
+
+  created_at: string;
+  updated_at: string;
+
+  product_code?: string;
+  product_name?: string;
+  category_id?: string;
+  category_name?: string;
+  category_code?: string;
+  metal_code?: string;
+  metal_name?: string;
+  purity_code?: string;
+  purity_name?: string;
+  current_rate?: number | null;
+  current_valuation?: number | null;
+}
+
+export interface StockMovement {
+  id: string;
+  stock_item_id: string;
+  tag_no?: string;
+  movement_type: string;
+  reference_type: string | null;
+  reference_id: string | null;
+  from_status: string | null;
+  to_status: string;
+  quantity: number;
+  gross_weight: number;
+  net_weight: number;
+  fine_weight: number;
+  notes: string | null;
+  created_by: string | null;
+  created_by_username?: string | null;
+  created_at: string;
+}
+
+export interface ValuationSummaryGroup {
+  metal_id: string;
+  metal_code: string;
+  metal_name: string;
+  purity_id: string;
+  purity_code: string;
+  purity_name: string;
+  item_count: number;
+  gross_weight: number;
+  less_weight: number;
+  net_weight: number;
+  fine_weight: number;
+  current_rate: number;
+  current_valuation: number;
+  acquisition_value: number;
+}
+
+export interface StockValuationResponse {
+  total_items: number;
+  total_gross_weight: number;
+  total_less_weight: number;
+  total_net_weight: number;
+  total_fine_weight: number;
+  total_acquisition_value: number;
+  total_current_valuation: number;
+  groups: ValuationSummaryGroup[];
+}
+
+export interface CreateStockInput {
+  tag_no: string;
+  product_id: string;
+  metal_id: string;
+  purity_id: string;
+  gross_weight: number;
+  less_weight?: number;
+  tunch_percent: number;
+  wastage_percent?: number;
+  making_charge?: number;
+  rate_per_gram?: number;
+  acquisition_type?: string;
+  status?: string;
+  huid?: string;
+  notes?: string;
+}
+
+// Purchase Billing Entities (Part 5)
+export interface PurchaseBillItem {
+  id: string;
+  purchase_bill_id: string;
+  product_id: string;
+  product_name?: string;
+  product_code?: string;
+  category_name?: string;
+  metal_id: string;
+  metal_code?: string;
+  metal_name?: string;
+  purity_id: string;
+  purity_code?: string;
+  purity_name?: string;
+  tag_no: string;
+  item_name: string;
+  gross_weight: number;
+  less_weight: number;
+  net_weight: number;
+  tunch_percent: number;
+  fine_weight: number;
+  wastage_percent: number;
+  making_charge: number;
+  rate_per_gram: number;
+  metal_value: number;
+  item_amount: number;
+  huid: string | null;
+  notes: string | null;
+  created_at: string;
+}
+
+export interface PurchaseBillPayment {
+  id: string;
+  purchase_bill_id: string;
+  payment_mode: 'CASH' | 'CARD' | 'UPI' | 'BANK' | 'CREDIT';
+  amount: number;
+  reference_number: string | null;
+  notes: string | null;
+  created_at: string;
+}
+
+export interface PurchaseBill {
+  id: string;
+  purchase_number: string;
+  supplier_id: string;
+  supplier_name?: string;
+  supplier_code?: string;
+  supplier_phone?: string | null;
+  supplier_gstin?: string | null;
+  purchase_date: string;
+  supplier_invoice_number: string | null;
+  subtotal: number;
+  discount_amount: number;
+  taxable_amount: number;
+  gst_rate: number;
+  gst_amount: number;
+  round_off: number;
+  grand_total: number;
+  amount_paid: number;
+  balance_amount: number;
+  status: 'DRAFT' | 'FINALIZED' | 'CANCELLED';
+  notes: string | null;
+  created_by: string | null;
+  created_by_username?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PurchaseBillDetails extends PurchaseBill {
+  items: PurchaseBillItem[];
+  payments: PurchaseBillPayment[];
+}
+
+export interface CreatePurchaseInput {
+  supplier_id: string;
+  purchase_date?: string;
+  supplier_invoice_number?: string;
+  discount_amount?: number;
+  gst_rate?: number;
+  notes?: string;
+  items?: AddPurchaseItemInput[];
+  payments?: AddPurchasePaymentInput[];
+}
+
+export interface AddPurchaseItemInput {
+  product_id: string;
+  metal_id: string;
+  purity_id: string;
+  tag_no: string;
+  gross_weight: number;
+  less_weight?: number;
+  tunch_percent: number;
+  wastage_percent?: number;
+  making_charge?: number;
+  rate_per_gram: number;
+  huid?: string;
+  notes?: string;
+}
+
+export interface AddPurchasePaymentInput {
+  payment_mode: 'CASH' | 'CARD' | 'UPI' | 'BANK' | 'CREDIT';
+  amount: number;
+  reference_number?: string;
+  notes?: string;
+}
+
+

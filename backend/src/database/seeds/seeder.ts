@@ -149,4 +149,186 @@ export async function runSeeds(): Promise<void> {
     }
     console.log('[Seed] Populated standard jewellery categories');
   }
+
+  // 6. Seed Standard Jewellery Products if none exist
+  const productCount = (db.prepare('SELECT COUNT(*) as count FROM products').get() as { count: number }).count;
+  if (productCount === 0) {
+    const { v4: uuidv4 } = await import('uuid');
+    const ringCat = db.prepare("SELECT id FROM categories WHERE code = 'RNG'").get() as { id: string } | undefined;
+    const nckCat = db.prepare("SELECT id FROM categories WHERE code = 'NCK'").get() as { id: string } | undefined;
+    const bngCat = db.prepare("SELECT id FROM categories WHERE code = 'BNG'").get() as { id: string } | undefined;
+    const brcCat = db.prepare("SELECT id FROM categories WHERE code = 'BRC'").get() as { id: string } | undefined;
+
+    const products = [
+      { code: 'PRD-RNG-01', name: 'Gold Ring Classic', category_id: ringCat?.id, metal: 'GOLD', purity: '22K', hsn: '711319' },
+      { code: 'PRD-NCK-01', name: 'Gold Necklace Royal', category_id: nckCat?.id, metal: 'GOLD', purity: '22K', hsn: '711319' },
+      { code: 'PRD-BNG-01', name: 'Gold Bangle Traditional', category_id: bngCat?.id, metal: 'GOLD', purity: '22K', hsn: '711319' },
+      { code: 'PRD-BRC-01', name: 'Silver Men Bracelet 925', category_id: brcCat?.id, metal: 'SILVER', purity: '925', hsn: '711311' },
+    ];
+
+    const insertProduct = db.prepare(`
+      INSERT INTO products (id, product_code, name, category_id, default_metal, default_purity, default_unit, hsn_code)
+      VALUES (?, ?, ?, ?, ?, ?, 'g', ?)
+    `);
+
+    for (const p of products) {
+      if (p.category_id) {
+        insertProduct.run(uuidv4(), p.code, p.name, p.category_id, p.metal, p.purity, p.hsn);
+      }
+    }
+    console.log('[Seed] Populated standard jewellery products');
+  }
+
+  // 7. Seed Initial Demo Stock Items if none exist
+  const stockCount = (db.prepare('SELECT COUNT(*) as count FROM stock_items').get() as { count: number }).count;
+  if (stockCount === 0) {
+    const { v4: uuidv4 } = await import('uuid');
+    const gold = db.prepare("SELECT id FROM metals WHERE code = 'GOLD'").get() as { id: string } | undefined;
+    const silver = db.prepare("SELECT id FROM metals WHERE code = 'SILVER'").get() as { id: string } | undefined;
+    const p22k = gold ? (db.prepare("SELECT id, tunch_percent FROM metal_purities WHERE metal_id = ? AND code = '22K'").get(gold.id) as { id: string; tunch_percent: number } | undefined) : undefined;
+    const p925 = silver ? (db.prepare("SELECT id, tunch_percent FROM metal_purities WHERE metal_id = ? AND code = '925'").get(silver.id) as { id: string; tunch_percent: number } | undefined) : undefined;
+
+    const ringProd = db.prepare("SELECT id FROM products WHERE product_code = 'PRD-RNG-01'").get() as { id: string } | undefined;
+    const nckProd = db.prepare("SELECT id FROM products WHERE product_code = 'PRD-NCK-01'").get() as { id: string } | undefined;
+    const bngProd = db.prepare("SELECT id FROM products WHERE product_code = 'PRD-BNG-01'").get() as { id: string } | undefined;
+    const brcProd = db.prepare("SELECT id FROM products WHERE product_code = 'PRD-BRC-01'").get() as { id: string } | undefined;
+
+    if (gold && silver && p22k && p925 && ringProd && nckProd && bngProd && brcProd) {
+      const demoItems = [
+        {
+          tag_no: 'GOLD-R-001',
+          product_id: ringProd.id,
+          metal_id: gold.id,
+          purity_id: p22k.id,
+          gross_weight: 8.500,
+          less_weight: 0.200,
+          net_weight: 8.300,
+          tunch_percent: 91.67,
+          fine_weight: 7.6086,
+          wastage_percent: 2.5,
+          making_charge: 850.0,
+          rate_per_gram: 7190.0,
+          metal_value: 54705.83,
+          huid: 'HD9281',
+          notes: '22K CZ Designer Ring',
+        },
+        {
+          tag_no: 'GOLD-N-002',
+          product_id: nckProd.id,
+          metal_id: gold.id,
+          purity_id: p22k.id,
+          gross_weight: 24.750,
+          less_weight: 0.500,
+          net_weight: 24.250,
+          tunch_percent: 91.67,
+          fine_weight: 22.2299,
+          wastage_percent: 3.0,
+          making_charge: 2500.0,
+          rate_per_gram: 7190.0,
+          metal_value: 159833.18,
+          huid: 'HD9282',
+          notes: 'Bridal Floral Choker Necklace',
+        },
+        {
+          tag_no: 'GOLD-B-003',
+          product_id: bngProd.id,
+          metal_id: gold.id,
+          purity_id: p22k.id,
+          gross_weight: 16.200,
+          less_weight: 0.000,
+          net_weight: 16.200,
+          tunch_percent: 91.67,
+          fine_weight: 14.8505,
+          wastage_percent: 2.0,
+          making_charge: 1600.0,
+          rate_per_gram: 7190.0,
+          metal_value: 106775.10,
+          huid: 'HD9283',
+          notes: 'Kada Style Single Bangle',
+        },
+        {
+          tag_no: 'SILVER-B-001',
+          product_id: brcProd.id,
+          metal_id: silver.id,
+          purity_id: p925.id,
+          gross_weight: 35.000,
+          less_weight: 0.000,
+          net_weight: 35.000,
+          tunch_percent: 92.50,
+          fine_weight: 32.3750,
+          wastage_percent: 0.0,
+          making_charge: 600.0,
+          rate_per_gram: 87.40,
+          metal_value: 2829.58,
+          huid: null,
+          notes: '925 Heavy Link Gents Bracelet',
+        },
+      ];
+
+      const insertStock = db.prepare(`
+        INSERT INTO stock_items (
+          id, tag_no, product_id, metal_id, purity_id,
+          gross_weight, less_weight, net_weight,
+          tunch_percent, fine_weight, wastage_percent, making_charge,
+          rate_per_gram, metal_value, current_value,
+          acquisition_type, status, huid, notes,
+          created_at, updated_at
+        ) VALUES (
+          ?, ?, ?, ?, ?,
+          ?, ?, ?,
+          ?, ?, ?, ?,
+          ?, ?, ?,
+          'OPENING_STOCK', 'IN_STOCK', ?, ?,
+          datetime('now'), datetime('now')
+        )
+      `);
+
+      const insertMovement = db.prepare(`
+        INSERT INTO stock_movements (
+          id, stock_item_id, movement_type, reference_type,
+          from_status, to_status, quantity,
+          gross_weight, net_weight, fine_weight,
+          notes, created_at
+        ) VALUES (
+          ?, ?, 'OPENING_STOCK', 'INVENTORY_OPENING',
+          NULL, 'IN_STOCK', 1,
+          ?, ?, ?,
+          'Seeded initial opening stock', datetime('now')
+        )
+      `);
+
+      for (const item of demoItems) {
+        const itemId = uuidv4();
+        insertStock.run(
+          itemId,
+          item.tag_no,
+          item.product_id,
+          item.metal_id,
+          item.purity_id,
+          item.gross_weight,
+          item.less_weight,
+          item.net_weight,
+          item.tunch_percent,
+          item.fine_weight,
+          item.wastage_percent,
+          item.making_charge,
+          item.rate_per_gram,
+          item.metal_value,
+          item.metal_value,
+          item.huid,
+          item.notes
+        );
+
+        insertMovement.run(
+          uuidv4(),
+          itemId,
+          item.gross_weight,
+          item.net_weight,
+          item.fine_weight
+        );
+      }
+      console.log('[Seed] Populated initial demo stock items with opening movements');
+    }
+  }
 }
+

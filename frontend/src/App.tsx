@@ -11,6 +11,8 @@ import { KarigarsPage } from './pages/masters/KarigarsPage';
 import { CategoriesPage } from './pages/masters/CategoriesPage';
 import { ProductsPage } from './pages/masters/ProductsPage';
 import { MetalRatesPage } from './pages/masters/MetalRatesPage';
+import { StockPage } from './pages/inventory/StockPage';
+import { PurchaseBillsPage } from './pages/billing/PurchaseBillsPage';
 import { Gem } from 'lucide-react';
 
 const ProtectedRoute: React.FC<{ children: React.ReactElement }> = ({ children }) => {
@@ -111,23 +113,7 @@ export const App: React.FC = () => {
                 />
               }
             />
-            <Route
-              path="billing/purchases"
-              element={
-                <PlaceholderPage
-                  title="Purchase Bills & Inward Stock"
-                  moduleGroup="Billing"
-                  targetPhase="Part 4: Purchase"
-                  description="Inward metal and ornament purchases from bullion dealers and manufacturing suppliers."
-                  plannedFeatures={[
-                    'Supplier tax invoice logging and item tagging',
-                    'Fine weight credit / bullion settlement',
-                    'Automatic stock-in tag generation',
-                    'Supplier Cr/Dr ledger balance sync',
-                  ]}
-                />
-              }
-            />
+            <Route path="billing/purchases" element={<PurchaseBillsPage />} />
             <Route
               path="billing/karigar-bill"
               element={
@@ -295,24 +281,8 @@ export const App: React.FC = () => {
               }
             />
 
-            {/* Inventory Routes (Roadmap: Part 2) */}
-            <Route
-              path="inventory/stock"
-              element={
-                <PlaceholderPage
-                  title="Jewellery Stock & Tag Inventory"
-                  moduleGroup="Inventory"
-                  targetPhase="Part 2: Inventory"
-                  description="Tag-level jewellery inventory tracking Gross, Less, Net, Tunch %, Fine Weight, and Valuation."
-                  plannedFeatures={[
-                    'Individual RFID / Barcode tag generation',
-                    'Purity classification (24K, 22K, 18K, 14K, Silver 999, 925)',
-                    'Immutable stock movement audit trail (Purchased, Sold, In-Repair)',
-                    'Live stock valuation using current daily metal rates',
-                  ]}
-                />
-              }
-            />
+            {/* Inventory Routes (Part 3: Inventory & Valuation) */}
+            <Route path="inventory/stock" element={<StockPage />} />
 
             {/* Reports Routes (Roadmap: Part 8) */}
             <Route

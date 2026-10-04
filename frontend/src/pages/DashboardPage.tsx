@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { rateApi } from '../services/masters';
-import { CurrentRate } from '../types';
+import { inventoryApi } from '../services/inventory';
+import { CurrentRate, StockValuationResponse } from '../types';
 import {
   TrendingUp,
   Receipt,
@@ -18,11 +19,16 @@ import './DashboardPage.css';
 export const DashboardPage: React.FC = () => {
   const { user, health } = useAuth();
   const [rates, setRates] = useState<CurrentRate[]>([]);
+  const [valuation, setValuation] = useState<StockValuationResponse | null>(null);
 
   useEffect(() => {
     rateApi.getCurrentRates()
       .then(setRates)
       .catch((err) => console.error('Failed to load dashboard rates:', err));
+
+    inventoryApi.getValuation()
+      .then(setValuation)
+      .catch((err) => console.error('Failed to load dashboard stock valuation:', err));
   }, []);
 
   const gold24 = rates.find((r) => r.metal_code === 'GOLD' && r.purity_code === '24K');
@@ -40,7 +46,7 @@ export const DashboardPage: React.FC = () => {
       {/* Welcome Banner with Real Database-driven Rates */}
       <div className="welcome-banner">
         <div className="welcome-text">
-          <div className="welcome-tag font-mono">JEWEL SUITE ERP • MASTERS CONNECTED</div>
+          <div className="welcome-tag font-mono">JEWEL SUITE ERP • INVENTORY & VALUATION CONNECTED</div>
           <h2 className="welcome-title font-serif">Welcome, {user?.username || 'Jeweller'}</h2>
           <p className="welcome-desc">
             Offline-First Jewellery POS and ERP terminal is operational on this machine.
@@ -72,7 +78,7 @@ export const DashboardPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Metrics Row (Placeholders for upcoming business modules) */}
+      {/* Metrics Row */}
       <div className="metrics-grid">
         <div className="metric-card">
           <div className="metric-header">
@@ -83,7 +89,7 @@ export const DashboardPage: React.FC = () => {
           </div>
           <div className="metric-value font-mono">₹0.00</div>
           <div className="metric-footer">
-            <span className="metric-phase">Module: Retail Billing (Part 3)</span>
+            <span className="metric-phase">Module: Retail Billing (Part 4)</span>
           </div>
         </div>
 
@@ -94,9 +100,15 @@ export const DashboardPage: React.FC = () => {
               <Scale size={18} />
             </div>
           </div>
-          <div className="metric-value font-mono">₹0.00</div>
+          <div className="metric-value font-mono">
+            {valuation ? `₹${valuation.total_current_valuation.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '₹0.00'}
+          </div>
           <div className="metric-footer">
-            <span className="metric-phase">Module: Inventory & Tags (Part 2)</span>
+            <span className="metric-phase">
+              {valuation && valuation.total_items > 0
+                ? `${valuation.total_items} items in stock • ${valuation.total_fine_weight.toFixed(3)}g fine wt`
+                : '0 items in inventory'}
+            </span>
           </div>
         </div>
 

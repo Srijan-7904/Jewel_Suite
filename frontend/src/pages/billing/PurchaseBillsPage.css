@@ -1,0 +1,273 @@
+/* PurchaseBillsPage.css - Jewel Suite Part 5 */
+
+.purchase-page {
+  padding: 1.5rem;
+  max-width: 1700px;
+  margin: 0 auto;
+}
+
+/* Metric Banner */
+.purchase-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1.25rem;
+  margin-bottom: 1.5rem;
+}
+
+.purchase-metric-card {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.03) 0%, rgba(20, 20, 24, 0.95) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 1.1rem 1.25rem;
+}
+
+.purchase-metric-label {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 0.25rem;
+}
+
+.purchase-metric-val {
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.purchase-metric-val.emerald {
+  color: #10b981;
+}
+
+.purchase-metric-val.amber {
+  color: #f59e0b;
+}
+
+.purchase-metric-sub {
+  font-size: 0.72rem;
+  color: var(--color-text-muted);
+  margin-top: 0.2rem;
+}
+
+/* Status Badges */
+.purchase-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.65rem;
+  border-radius: 4px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.purchase-badge.draft {
+  background: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.purchase-badge.finalized {
+  background: rgba(16, 185, 129, 0.15);
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.purchase-badge.cancelled {
+  background: rgba(100, 116, 139, 0.2);
+  color: #94a3b8;
+  border: 1px solid rgba(100, 116, 139, 0.3);
+}
+
+/* Form Sections for Inward Screen */
+.purchase-form-container {
+  background: rgba(20, 20, 24, 0.8);
+  border: 1px solid rgba(212, 175, 55, 0.2);
+  border-radius: 12px;
+  padding: 1.5rem;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
+.purchase-section-card {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  padding: 1.25rem;
+  margin-bottom: 1.25rem;
+}
+
+.section-card-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-gold);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  padding-bottom: 0.4rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* Settlement Grid */
+.settlement-grid {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 1.5rem;
+}
+
+.totals-box {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 1.25rem;
+}
+
+.totals-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.4rem 0;
+  font-size: 0.85rem;
+}
+
+.totals-row.grand-total {
+  border-top: 1px solid rgba(212, 175, 55, 0.3);
+  margin-top: 0.5rem;
+  padding-top: 0.75rem;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--color-gold);
+}
+
+.totals-row.balance {
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  font-weight: 700;
+  color: #f59e0b;
+}
+
+/* Printable Purchase Invoice (A4 Layout) */
+.invoice-print-container {
+  background: #ffffff;
+  color: #111827;
+  padding: 2.5rem;
+  border-radius: 6px;
+  max-width: 850px;
+  margin: 0 auto;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.invoice-print-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  border-bottom: 2px solid #e5e7eb;
+  padding-bottom: 1.25rem;
+  margin-bottom: 1.5rem;
+}
+
+.shop-brand-name {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: #b45309;
+  letter-spacing: 0.5px;
+}
+
+.invoice-badge-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #374151;
+  text-align: right;
+}
+
+.invoice-party-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+  margin-bottom: 1.5rem;
+  font-size: 0.85rem;
+}
+
+.party-box {
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 1rem;
+}
+
+.party-box-title {
+  font-weight: 700;
+  color: #4b5563;
+  margin-bottom: 0.5rem;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+}
+
+.print-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 1.5rem;
+  font-size: 0.82rem;
+}
+
+.print-table th {
+  background: #f3f4f6;
+  color: #374151;
+  padding: 0.6rem 0.5rem;
+  border: 1px solid #e5e7eb;
+  font-weight: 600;
+  text-align: left;
+}
+
+.print-table td {
+  padding: 0.5rem;
+  border: 1px solid #e5e7eb;
+  color: #1f2937;
+}
+
+.print-totals-box {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 1.5rem;
+}
+
+.print-totals-table {
+  width: 320px;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.print-totals-table td {
+  padding: 0.35rem 0.5rem;
+}
+
+.print-totals-table .total-bold {
+  font-weight: 700;
+  font-size: 1rem;
+  border-top: 2px solid #111827;
+  color: #111827;
+}
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .invoice-print-container,
+  .invoice-print-container * {
+    visibility: visible;
+  }
+  .invoice-print-container {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+  }
+  .no-print {
+    display: none !important;
+  }
+}
