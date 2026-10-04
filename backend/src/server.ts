@@ -1,0 +1,80 @@
+import express from 'express';
+import cors from 'cors';
+import { config } from './config/env.js';
+import { getDb, closeDb } from './database/connection/db.js';
+import { runMigrations } from './database/migrations/migrator.js';
+import { runSeeds } from './database/seeds/seeder.js';
+import { apiRouter } from './routes/index.js';
+import { errorHandler } from './middleware/errorHandler.js';
+
+export async function bootstrapApp(): Promise<express.Application> {
+  console.log(`[Jewel Suite] Initializing backend in ${config.env} mode...`);
+  console.log(`[Jewel Suite] Database path: ${config.dbPath}`);
+
+  // 1. Initialize DB and run migrations
+  const db = getDb();
+  const migrationResult = runMigrations(db);
+  if (migrationResult.appliedCount > 0) {
+    console.log(`[Jewel Suite] Applied ${migrationResult.appliedCount} migration(s).`);
+  } else {
+    console.log(`[Jewel Suite] Schema is up to date.`);
+  }
+
+  // 2. Run seeders
+  await runSeeds();
+
+  // 3. Setup Express
+  const app = express();
+
+  app.use(cors({
+    origin: true,
+    credentials: true,
+  }));
+
+  app.use(express.json());
+
+  // Request logging
+  app.use((req, _res, next) => {
+    if (config.isDev) {
+      console.log(`[HTTP] ${req.method} ${req.url}`);
+    }
+    next();
+  });
+
+  // Mount API Router
+  app.use('/api', apiRouter);
+
+  // Centralized Error Handler
+  app.use(errorHandler);
+
+  return app;
+}
+
+// Start server if executed directly
+if (process.env.NODE_ENV !== 'test') {
+  bootstrapApp()
+    .then((app) => {
+      const server = app.listen(config.port, config.host, () => {
+        console.log(`=======================================================`);
+        console.log(`   💎 Jewel Suite Server running at http://${config.host}:${config.port}`);
+        console.log(`   💎 Offline ERP/POS Ready`);
+        console.log(`=======================================================`);
+      });
+
+      const handleShutdown = (signal: string) => {
+        console.log(`\n[Jewel Suite] Received ${signal}. Shutting down gracefully...`);
+        server.close(() => {
+          closeDb();
+          console.log(`[Jewel Suite] Closed database and HTTP server. Exiting.`);
+          process.exit(0);
+        });
+      };
+
+      process.on('SIGINT', () => handleShutdown('SIGINT'));
+      process.on('SIGTERM', () => handleShutdown('SIGTERM'));
+    })
+    .catch((err) => {
+      console.error('[Jewel Suite Fatal Error on Startup]', err);
+      process.exit(1);
+    });
+}
