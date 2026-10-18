@@ -10,7 +10,8 @@ const isDev = NODE_ENV === 'development';
 
 // Determine Database Path:
 // In Dev: ./data/jewel-suite.db (relative to project root)
-// In Prod: %LOCALAPPDATA%/JewelSuite/data/jewel-suite.db on Windows
+// In Windows Prod: %LOCALAPPDATA%/JewelSuite/data/jewel-suite.db
+// In Linux / Render Cloud: $DB_FILE_PATH or $APP_DATA_DIR/data/jewel-suite.db or ./data/jewel-suite.db
 function resolveDbPath(): string {
   if (process.env.DB_FILE_PATH) {
     return path.resolve(process.env.DB_FILE_PATH);
@@ -27,9 +28,14 @@ function resolveDbPath(): string {
     return path.join(localData, 'jewel-suite.db');
   }
 
-  // Windows LocalAppData
-  const localAppData = process.env.LOCALAPPDATA || path.join(process.env.USERPROFILE || 'C:\\', 'AppData', 'Local');
-  return path.join(localAppData, 'JewelSuite', 'data', 'jewel-suite.db');
+  if (process.platform === 'win32' && (process.env.LOCALAPPDATA || process.env.USERPROFILE)) {
+    const localAppData = process.env.LOCALAPPDATA || path.join(process.env.USERPROFILE || 'C:\\', 'AppData', 'Local');
+    return path.join(localAppData, 'JewelSuite', 'data', 'jewel-suite.db');
+  }
+
+  // Cloud / Linux / Render default
+  const base = getBaseStorageDir();
+  return path.join(base, 'data', 'jewel-suite.db');
 }
 
 function resolveBackupDir(): string {
@@ -45,8 +51,13 @@ function resolveBackupDir(): string {
     return path.resolve(process.cwd(), 'backups');
   }
 
-  const localAppData = process.env.LOCALAPPDATA || path.join(process.env.USERPROFILE || 'C:\\', 'AppData', 'Local');
-  return path.join(localAppData, 'JewelSuite', 'backups');
+  if (process.platform === 'win32' && (process.env.LOCALAPPDATA || process.env.USERPROFILE)) {
+    const localAppData = process.env.LOCALAPPDATA || path.join(process.env.USERPROFILE || 'C:\\', 'AppData', 'Local');
+    return path.join(localAppData, 'JewelSuite', 'backups');
+  }
+
+  const base = getBaseStorageDir();
+  return path.join(base, 'backups');
 }
 
 function getBaseStorageDir(): string {
@@ -60,8 +71,16 @@ function getBaseStorageDir(): string {
     }
     return process.cwd();
   }
-  const localAppData = process.env.LOCALAPPDATA || path.join(process.env.USERPROFILE || 'C:\\', 'AppData', 'Local');
-  return path.join(localAppData, 'JewelSuite');
+  if (process.platform === 'win32' && (process.env.LOCALAPPDATA || process.env.USERPROFILE)) {
+    const localAppData = process.env.LOCALAPPDATA || path.join(process.env.USERPROFILE || 'C:\\', 'AppData', 'Local');
+    return path.join(localAppData, 'JewelSuite');
+  }
+  // Linux / Render / Docker fallback: check ../data or ./data or cwd
+  const rootDataDir = path.resolve(process.cwd(), '../data');
+  if (fs.existsSync(rootDataDir)) {
+    return path.resolve(process.cwd(), '..');
+  }
+  return process.cwd();
 }
 
 const baseDir = getBaseStorageDir();
@@ -89,7 +108,7 @@ export const config = {
   env: NODE_ENV,
   isDev,
   port: parseInt(process.env.PORT || '4500', 10),
-  host: process.env.HOST || '127.0.0.1',
+  host: process.env.HOST || (isDev ? '127.0.0.1' : '0.0.0.0'),
   jwtSecret: process.env.JWT_SECRET || 'jewel_suite_offline_default_secret_key_2026',
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
   dbPath: resolveDbPath(),

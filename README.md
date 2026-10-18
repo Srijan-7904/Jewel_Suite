@@ -161,3 +161,19 @@ npm run test
 - ✅ **Part 9 — Girvi Loans + Saving Schemes** (Gold Pledge Loans, LTV, Interest, Custody, Chit Funds, Maturity)
 - ⏳ *Upcoming:* **Part 10 — Reports + GST Reports**
 
+---
+
+## 8. Cloud Hosting on Render
+
+Jewel Suite includes a production-ready **Render Blueprint** ([`render.yaml`](./render.yaml)) supporting both:
+1. **Full-Stack Unified Web Service** (Node.js API + embedded Vite UI on a single URL with optional persistent SSD for SQLite WAL data).
+2. **Decoupled Architecture** (Backend Web Service + dedicated Frontend Static Site with global CDN).
+
+To deploy on Render:
+1. Push your repository to GitHub / GitLab.
+2. In the [Render Dashboard](https://dashboard.render.com), click **New + -> Blueprint**.
+3. Select your repository. Render will automatically parse [`render.yaml`](./render.yaml).
+4. Click **Apply**.
+
+For complete step-by-step instructions, persistent disk configuration, environment variable options, and free-tier instructions, see [**RENDER.md**](./RENDER.md).
+

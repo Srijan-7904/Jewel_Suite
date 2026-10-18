@@ -1,7 +1,7 @@
 // frontend/src/services/reports.ts
 // Jewel Suite Part 10: Frontend Reports API Client
 
-import { request, getStoredToken } from './api';
+import { request, getStoredToken, getApiUrl } from './api';
 
 export interface DateFilterParams {
   preset?: string;
@@ -498,7 +498,7 @@ export const reportsApi = {
   downloadCsv: async (reportType: string, params: Record<string, any> = {}): Promise<void> => {
     const token = getStoredToken();
     const query = buildQuery(params);
-    const url = `/api/reports/export/${reportType}${query}`;
+    const url = getApiUrl(`/api/reports/export/${reportType}${query}`);
     const headers: Record<string, string> = {};
     if (token) headers['Authorization'] = `Bearer ${token}`;
 

@@ -28,6 +28,20 @@ export class ApiClientError extends Error {
   }
 }
 
+export const API_BASE_URL = (
+  (typeof window !== 'undefined' && (window as any).__JEWEL_API_URL__) ||
+  import.meta.env.VITE_API_URL ||
+  ''
+).replace(/\/+$/, '');
+
+export function getApiUrl(path: string): string {
+  if (path.startsWith('http://') || path.startsWith('https://')) {
+    return path;
+  }
+  const cleanPath = path.startsWith('/') ? path : `/${path}`;
+  return `${API_BASE_URL}${cleanPath}`;
+}
+
 export async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const token = getStoredToken();
   const headers: Record<string, string> = {
@@ -39,7 +53,8 @@ export async function request<T>(endpoint: string, options: RequestInit = {}): P
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  const response = await fetch(endpoint, {
+  const url = getApiUrl(endpoint);
+  const response = await fetch(url, {
     ...options,
     headers,
   });

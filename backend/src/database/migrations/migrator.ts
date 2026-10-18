@@ -32,11 +32,29 @@ export function runMigrations(customDb?: DatabaseType): MigrationResult {
   const appliedSet = new Set(appliedRows.map((r) => r.migration_name));
 
   // 3. Discover SQL migration files
-  // In development/build, migrations are in the same folder as migrator
-  const migrationsDir = __dirname;
-  const files = fs.readdirSync(migrationsDir)
-    .filter((file) => file.endsWith('.sql'))
-    .sort();
+  // In development/build, migrations may be in __dirname (dist), src/database/migrations, or cwd
+  const candidateDirs = [
+    __dirname,
+    path.resolve(__dirname, '../../../src/database/migrations'),
+    path.resolve(process.cwd(), 'src/database/migrations'),
+    path.resolve(process.cwd(), 'backend/src/database/migrations'),
+    path.resolve(process.cwd(), 'dist/database/migrations'),
+    path.resolve(process.cwd(), 'backend/dist/database/migrations'),
+  ];
+
+  let migrationsDir = __dirname;
+  let files: string[] = [];
+
+  for (const dir of candidateDirs) {
+    if (fs.existsSync(dir)) {
+      const sqlFiles = fs.readdirSync(dir).filter((file) => file.endsWith('.sql'));
+      if (sqlFiles.length > 0) {
+        migrationsDir = dir;
+        files = sqlFiles.sort();
+        break;
+      }
+    }
+  }
 
   const newlyApplied: string[] = [];
 

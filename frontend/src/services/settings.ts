@@ -1,5 +1,5 @@
 // frontend/src/services/settings.ts
-import { request } from './api';
+import { request, getApiUrl } from './api';
 
 export type UserRole = 'ADMIN' | 'STAFF';
 export type TaxMode = 'INCLUSIVE' | 'EXCLUSIVE' | 'NO_TAX';
@@ -176,7 +176,7 @@ export const settingsApi = {
   },
 
   getLogoUrl(): string {
-    return '/api/settings/shop/logo';
+    return getApiUrl('/api/settings/shop/logo');
   },
 
   // General Settings

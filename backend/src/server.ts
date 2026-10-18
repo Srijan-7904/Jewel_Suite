@@ -1,5 +1,7 @@
 import express from 'express';
 import cors from 'cors';
+import fs from 'fs';
+import path from 'path';
 import { config, ensureLocalDirectoriesExist } from './config/env.js';
 import { getDb, closeDb } from './database/connection/db.js';
 import { runMigrations } from './database/migrations/migrator.js';
@@ -42,8 +44,44 @@ export async function bootstrapApp(): Promise<express.Application> {
     next();
   });
 
+  // Health check endpoint for Render / cloud monitoring
+  app.get('/health', (_req, res) => {
+    res.json({
+      status: 'ok',
+      service: 'jewel-suite-backend',
+      timestamp: new Date().toISOString(),
+      database: 'connected',
+    });
+  });
+
   // Mount API Router
   app.use('/api', apiRouter);
+
+  // Serve Frontend static assets if available (Unified full-stack hosting on Render)
+  const candidateFrontendDirs = [
+    path.resolve(process.cwd(), '../frontend/dist'),
+    path.resolve(process.cwd(), 'frontend/dist'),
+    path.resolve(process.cwd(), 'dist/public'),
+  ];
+
+  let frontendDist: string | null = null;
+  for (const candidate of candidateFrontendDirs) {
+    if (fs.existsSync(path.join(candidate, 'index.html'))) {
+      frontendDist = candidate;
+      break;
+    }
+  }
+
+  if (frontendDist) {
+    console.log(`[Jewel Suite] Serving frontend static assets from: ${frontendDist}`);
+    app.use(express.static(frontendDist));
+    app.get('*', (req, res, next) => {
+      if (req.path.startsWith('/api') || req.path === '/health') {
+        return next();
+      }
+      res.sendFile(path.join(frontendDist!, 'index.html'));
+    });
+  }
 
   // Centralized Error Handler
   app.use(errorHandler);
