@@ -1,17 +1,14 @@
 # ==============================================================================
-# Jewel Suite ERP & POS — Render Blueprint Specification (Single Full-Stack Service)
+# Jewel Suite ERP & POS — Render Free-Tier Blueprint
 # Docs: https://render.com/docs/blueprint-spec
-# ==============================================================================
-# This blueprint defines a single unified Web Service that builds and serves
-# both the backend API and frontend React SPA on a single URL, saving service slots.
 # ==============================================================================
 
 services:
   - type: web
     name: jewel-suite-app
     runtime: node
-    plan: starter # Starter plan ($7/mo) supports persistent disk. For 100% free tier, change plan to 'free' and remove the 'disk' block.
-    region: oregon # Options: oregon, ohio, frankfurt, singapore
+    plan: free
+    region: oregon
     rootDir: .
     buildCommand: npm run render:build:all
     startCommand: npm run render:start:all
@@ -29,12 +26,8 @@ services:
       - key: JWT_EXPIRES_IN
         value: 7d
       - key: APP_DATA_DIR
-        value: /var/data
+        value: /tmp/jewel-suite-data
       - key: DB_FILE_PATH
-        value: /var/data/jewel-suite.db
+        value: /tmp/jewel-suite-data/jewel-suite.db
       - key: BACKUP_DIR
-        value: /var/data/backups
-    disk:
-      name: jewel-data
-      mountPath: /var/data
-      sizeGB: 1
+        value: /tmp/jewel-suite-data/backups
