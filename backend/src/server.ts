@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import { config, ensureLocalDirectoriesExist } from './config/env.js';
 import { getDb, closeDb } from './database/connection/db.js';
 import { runMigrations } from './database/migrations/migrator.js';
@@ -58,9 +59,13 @@ export async function bootstrapApp(): Promise<express.Application> {
   app.use('/api', apiRouter);
 
   // Serve Frontend static assets if available (Unified full-stack hosting on Render)
+  const currentDir = path.dirname(fileURLToPath(import.meta.url));
   const candidateFrontendDirs = [
+    path.resolve(currentDir, 'public'),
+    path.resolve(currentDir, '../../frontend/dist'),
     path.resolve(process.cwd(), '../frontend/dist'),
     path.resolve(process.cwd(), 'frontend/dist'),
+    path.resolve(currentDir, '../frontend/dist'),
     path.resolve(process.cwd(), 'dist/public'),
   ];
 
@@ -79,7 +84,24 @@ export async function bootstrapApp(): Promise<express.Application> {
       if (req.path.startsWith('/api') || req.path === '/health') {
         return next();
       }
+      if (path.extname(req.path)) {
+        return res.status(404).end();
+      }
       res.sendFile(path.join(frontendDist!, 'index.html'));
+    });
+  } else {
+    console.warn('[Jewel Suite Warning] Frontend dist directory not found. Checked candidate paths:');
+    for (const p of candidateFrontendDirs) {
+      console.warn(`  - ${p}`);
+    }
+    app.get('/', (_req, res) => {
+      res.status(200).json({
+        service: 'Jewel Suite Backend API',
+        status: 'online',
+        health: '/health',
+        api: '/api',
+        message: 'Backend is running. Frontend build directory was not detected.',
+      });
     });
   }
 
