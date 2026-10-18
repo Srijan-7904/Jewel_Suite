@@ -1,26 +1,16 @@
 # ==============================================================================
-# Jewel Suite ERP & POS — Render Blueprint Specification
+# Jewel Suite ERP & POS — Render Blueprint Specification (Single Full-Stack Service)
 # Docs: https://render.com/docs/blueprint-spec
 # ==============================================================================
-# This blueprint defines two services:
-# 1. jewel-suite-app: Unified Full-Stack Node.js Web Service (API + UI bundled)
-#    with Persistent Disk for SQLite WAL database safety.
-# 2. jewel-suite-frontend: (Optional) Standalone Static Site served via Render CDN.
-#
-# NOTE FOR FREE TIER USERS:
-# Render disks require the 'starter' plan ($7/mo). If you want 100% free hosting,
-# change 'plan: starter' to 'plan: free' and remove the 'disk:' block in service 1,
-# or refer to RENDER.md for the free tier single-service configuration.
+# This blueprint defines a single unified Web Service that builds and serves
+# both the backend API and frontend React SPA on a single URL, saving service slots.
 # ==============================================================================
 
 services:
-  # ============================================================================
-  # 1. Full-Stack Web Service (Backend API + Embedded Frontend SPA)
-  # ============================================================================
   - type: web
     name: jewel-suite-app
     runtime: node
-    plan: starter
+    plan: starter # Starter plan ($7/mo) supports persistent disk. For 100% free tier, change plan to 'free' and remove the 'disk' block.
     region: oregon # Options: oregon, ohio, frankfurt, singapore
     rootDir: .
     buildCommand: npm run render:build:all
@@ -48,21 +38,3 @@ services:
       name: jewel-data
       mountPath: /var/data
       sizeGB: 1
-
-  # ============================================================================
-  # 2. Dedicated Frontend Static Site (Optional CDN Deployment)
-  # ============================================================================
-  - type: web
-    name: jewel-suite-frontend
-    runtime: static
-    rootDir: .
-    buildCommand: npm run render:build:frontend
-    staticPublishPath: frontend/dist
-    autoDeploy: true
-    routes:
-      - type: rewrite
-        source: /*
-        destination: /index.html
-    envVars:
-      - key: VITE_API_URL
-        value: https://jewel-suite-app.onrender.com
