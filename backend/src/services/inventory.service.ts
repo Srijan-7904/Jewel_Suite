@@ -4,7 +4,7 @@ import { stockMovementRepository, StockMovementRecord, MovementQueryParams } fro
 import { productRepository } from '../repositories/product.repository.js';
 import { metalRepository } from '../repositories/metal.repository.js';
 import { auditRepository } from '../repositories/audit.repository.js';
-import Decimal from 'decimal.js';
+import { Decimal } from 'decimal.js';
 import { withTransaction, getDb } from '../database/connection/db.js';
 import { toDecimal } from '../utils/precision.js';
 import {

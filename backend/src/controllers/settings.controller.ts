@@ -1,7 +1,7 @@
 // backend/src/controllers/settings.controller.ts
 import { Request, Response, NextFunction } from 'express';
 import fs from 'fs';
-import { settingsService } from '../services/settings.service.ts';
+import { settingsService } from '../services/settings.service.js';
 import { amcService } from '../services/amc.service.js';
 import { sendSuccess } from '../utils/response.js';
 import { BadRequestError, NotFoundError } from '../utils/errors.js';

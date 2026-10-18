@@ -30,7 +30,7 @@ export class ApiClientError extends Error {
 
 export const API_BASE_URL = (
   (typeof window !== 'undefined' && (window as any).__JEWEL_API_URL__) ||
-  import.meta.env.VITE_API_URL ||
+  ((import.meta as any)?.env?.VITE_API_URL as string | undefined) ||
   ''
 ).replace(/\/+$/, '');
 

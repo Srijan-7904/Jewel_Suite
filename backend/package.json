@@ -20,6 +20,7 @@
     "decimal.js": "^10.6.0",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
+    "jewel-suite": "file:..",
     "jsonwebtoken": "^9.0.2",
     "uuid": "^11.0.5",
     "zod": "^3.24.2"
@@ -28,7 +29,7 @@
     "@types/bcryptjs": "^2.4.6",
     "@types/better-sqlite3": "^7.6.12",
     "@types/cors": "^2.8.17",
-    "@types/express": "^5.0.0",
+    "@types/express": "^4.17.25",
     "@types/jsonwebtoken": "^9.0.8",
     "@types/node": "^22.13.1",
     "@types/supertest": "^7.2.1",

@@ -1,7 +1,7 @@
 // backend/src/utils/girviMath.ts
 // Jewel Suite: Isolated Precision Calculation Engine for Girvi / Pledged Jewellery Loans
 
-import Decimal from 'decimal.js';
+import { Decimal } from 'decimal.js';
 import { GirviInterestType } from '../domain/girvi.js';
 import { toDecimal } from './precision.js';
 

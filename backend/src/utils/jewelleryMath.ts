@@ -1,4 +1,4 @@
-import Decimal from 'decimal.js';
+import { Decimal } from 'decimal.js';
 import { BadRequestError } from './errors.js';
 import { toDecimal } from './precision.js';
 

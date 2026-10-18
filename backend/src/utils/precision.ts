@@ -1,4 +1,4 @@
-import Decimal from 'decimal.js';
+import { Decimal } from 'decimal.js';
 
 // Configure Decimal defaults for precision financial and weight calculations
 Decimal.set({ precision: 28, rounding: Decimal.ROUND_HALF_UP });

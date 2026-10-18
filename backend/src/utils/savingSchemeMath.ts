@@ -1,7 +1,7 @@
 // backend/src/utils/savingSchemeMath.ts
 // Jewel Suite: Isolated Precision Calculation Engine for Jewellery Saving Schemes
 
-import Decimal from 'decimal.js';
+import { Decimal } from 'decimal.js';
 import { MaturityBenefitType } from '../domain/savingScheme.js';
 import { toDecimal } from './precision.js';
 

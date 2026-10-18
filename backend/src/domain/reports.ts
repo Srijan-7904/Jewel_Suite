@@ -235,6 +235,17 @@ export interface PaymentCollectionSummary {
   creditOther: number;
 }
 
+export interface LedgerReportItem {
+  id: string;
+  date: string;
+  referenceNumber: string | null;
+  referenceType: string | null;
+  description: string;
+  debit: number;
+  credit: number;
+  balance: number;
+}
+
 // 5. Workshop & Karigar Reports
 export interface KarigarJobReportItem {
   id: string;
