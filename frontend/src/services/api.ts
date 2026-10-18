@@ -44,17 +44,44 @@ export async function request<T>(endpoint: string, options: RequestInit = {}): P
     headers,
   });
 
-  const data = await response.json();
+  const text = await response.text();
+  let data: any;
+
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch (_e) {
+    if (!response.ok) {
+      throw new ApiClientError(
+        `Server returned error ${response.status} (${response.statusText})`,
+        'SERVER_ERROR',
+        response.status
+      );
+    }
+    throw new ApiClientError(
+      'Invalid JSON response from server',
+      'PARSE_ERROR',
+      response.status
+    );
+  }
 
   if (!response.ok || !data.success) {
     const errorObj = data.error || {};
+    let msg = errorObj.message || 'An unexpected error occurred';
+    if (errorObj.details && Array.isArray(errorObj.details) && errorObj.details.length > 0) {
+      const first = errorObj.details[0];
+      if (first.field && first.message) {
+        msg = `${first.field}: ${first.message}`;
+      } else if (first.message) {
+        msg = first.message;
+      }
+    }
     throw new ApiClientError(
-      errorObj.message || 'An unexpected error occurred',
+      msg,
       errorObj.code || 'UNKNOWN_ERROR',
       response.status,
       errorObj.details
     );
   }
 
-  return (data as ApiResponse<T>).data;
+  return (data as ApiResponse<T>).data !== undefined ? (data as ApiResponse<T>).data : (data as unknown as T);
 }

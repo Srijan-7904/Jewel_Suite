@@ -1,0 +1,130 @@
+/* frontend/src/pages/finance/Finance.css */
+/* Jewel Suite Luxury Finance & Cr/Dr Ledger Styles */
+
+.finance-page {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding: 1.5rem;
+  background-color: var(--bg-app);
+  color: var(--text-main);
+  min-height: 100%;
+}
+
+.finance-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.finance-title {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--text-main);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.finance-subtitle {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  margin-top: 0.25rem;
+}
+
+.finance-summary-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1.25rem;
+}
+
+.finance-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  padding: 1.2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.2s ease, border-color 0.2s ease;
+}
+
+.finance-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--gold-primary);
+}
+
+.finance-card-title {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.finance-card-value {
+  font-size: 1.6rem;
+  font-weight: 700;
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--text-main);
+}
+
+.finance-card-sub {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}
+
+.text-gold { color: var(--gold-primary); }
+.text-emerald { color: var(--success); }
+.text-rose { color: var(--danger); }
+.text-amber { color: var(--warning); }
+.text-cyan { color: var(--info); }
+
+.party-selector-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+  background: var(--bg-surface);
+  padding: 1rem;
+  border-radius: 8px;
+  border: 1px solid var(--border-default);
+  box-shadow: var(--shadow-sm);
+}
+
+.debit-text {
+  color: var(--danger);
+  font-weight: 600;
+  font-family: monospace;
+}
+
+.credit-text {
+  color: var(--success);
+  font-weight: 600;
+  font-family: monospace;
+}
+
+.balance-text {
+  font-weight: 700;
+  font-family: monospace;
+}
+
+.badge-mode {
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.badge-mode-cash { background: var(--success-bg); color: var(--success); border: 1px solid rgba(13, 130, 82, 0.25); }
+.badge-mode-bank { background: var(--info-bg); color: var(--info); border: 1px solid rgba(29, 111, 184, 0.25); }
+.badge-mode-upi { background: rgba(124, 58, 237, 0.12); color: #7C3AED; border: 1px solid rgba(124, 58, 237, 0.25); }
+.badge-mode-card { background: var(--warning-bg); color: var(--warning); border: 1px solid rgba(194, 120, 3, 0.25); }
+.badge-mode-credit { background: var(--danger-bg); color: var(--danger); border: 1px solid rgba(220, 38, 38, 0.25); }

@@ -39,15 +39,15 @@
 }
 
 .status-db {
-  background: rgba(59, 130, 246, 0.12);
-  color: #60A5FA;
-  border: 1px solid rgba(59, 130, 246, 0.25);
+  background: var(--info-bg);
+  color: var(--info);
+  border: 1px solid rgba(29, 111, 184, 0.25);
 }
 
 .status-offline {
-  background: rgba(16, 185, 129, 0.12);
-  color: #34D399;
-  border: 1px solid rgba(16, 185, 129, 0.25);
+  background: var(--success-bg);
+  color: var(--success);
+  border: 1px solid rgba(13, 130, 82, 0.25);
 }
 
 .status-conn {

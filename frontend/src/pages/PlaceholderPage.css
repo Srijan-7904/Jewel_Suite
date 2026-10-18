@@ -30,7 +30,7 @@
   width: 64px;
   height: 64px;
   border-radius: 16px;
-  background: radial-gradient(circle, #2a200a 0%, #151005 100%);
+  background: linear-gradient(135deg, #FFF9ED 0%, #F5E6BE 100%);
   border: 1px solid var(--gold-border);
   display: flex;
   align-items: center;

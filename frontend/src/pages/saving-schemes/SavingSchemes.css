@@ -1,0 +1,113 @@
+/* frontend/src/pages/saving-schemes/SavingSchemes.css */
+/* Jewel Suite: Jewellery Saving Schemes Styles */
+
+.schemes-page {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding: 1.5rem;
+  background-color: var(--bg-app);
+  color: var(--text-main);
+  min-height: 100%;
+}
+
+.schemes-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.schemes-title {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--text-main);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.schemes-subtitle {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  margin-top: 0.25rem;
+}
+
+.schemes-summary-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 1.25rem;
+}
+
+.schemes-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  padding: 1.2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.2s ease, border-color 0.2s ease;
+}
+
+.schemes-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--gold-primary);
+}
+
+.schemes-card-title {
+  font-size: 0.825rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+.schemes-card-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.schemes-card-value.gold { color: var(--gold-primary); }
+.schemes-card-value.green { color: var(--success); }
+.schemes-card-value.blue { color: var(--info); }
+
+.scheme-progress-bar-container {
+  width: 100%;
+  height: 8px;
+  background: var(--bg-surface-hover);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-top: 4px;
+  border: 1px solid var(--border-subtle);
+}
+
+.scheme-progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--gold-primary), var(--success));
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.scheme-status-badge {
+  display: inline-block;
+  padding: 0.25rem 0.6rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.scheme-status-active { background: var(--success-bg); color: var(--success); border: 1px solid rgba(13, 130, 82, 0.3); }
+.scheme-status-matured { background: var(--gold-subtle); color: var(--gold-primary); border: 1px solid var(--gold-border); }
+.scheme-status-completed { background: var(--info-bg); color: var(--info); border: 1px solid rgba(29, 111, 184, 0.3); }
+.scheme-status-cancelled { background: var(--danger-bg); color: var(--danger); border: 1px solid rgba(220, 38, 38, 0.3); }
+
+.inst-status-pending { background: var(--bg-surface-hover); color: var(--text-muted); border: 1px solid var(--border-default); }
+.inst-status-partial { background: var(--warning-bg); color: var(--warning); border: 1px solid rgba(194, 120, 3, 0.3); }
+.inst-status-paid { background: var(--success-bg); color: var(--success); border: 1px solid rgba(13, 130, 82, 0.3); }
+.inst-status-overdue { background: var(--danger-bg); color: var(--danger); border: 1px solid rgba(220, 38, 38, 0.3); }

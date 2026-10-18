@@ -1,6 +1,7 @@
 import { getDb } from '../database/connection/db.js';
 import { PaginatedResult } from './customer.repository.js';
 import { v4 as uuidv4 } from 'uuid';
+import { documentSequenceRepository } from './documentSequence.repository.js';
 
 export interface PurchaseBillRecord {
   id: string;
@@ -64,6 +65,8 @@ export interface PurchaseBillItemRecord {
   fine_weight: number;
 
   wastage_percent: number;
+  wastage_weight: number;
+  wastage_amount: number;
   making_charge: number;
 
   rate_per_gram: number;
@@ -106,26 +109,7 @@ export class PurchaseRepository {
    * Format: PUR-YYYY-000001
    */
   getNextPurchaseNumber(): string {
-    const db = getDb();
-    const currentYear = new Date().getFullYear();
-    const prefix = `PUR-${currentYear}-`;
-
-    const row = db.prepare(`
-      SELECT purchase_number 
-      FROM purchase_bills 
-      WHERE purchase_number LIKE ? 
-      ORDER BY purchase_number DESC 
-      LIMIT 1
-    `).get(`${prefix}%`) as { purchase_number: string } | undefined;
-
-    if (!row) {
-      return `${prefix}000001`;
-    }
-
-    const lastNumStr = row.purchase_number.replace(prefix, '');
-    const lastNum = parseInt(lastNumStr, 10);
-    const nextSeq = isNaN(lastNum) ? 1 : lastNum + 1;
-    return `${prefix}${nextSeq.toString().padStart(6, '0')}`;
+    return documentSequenceRepository.getNextNumber('PURCHASE');
   }
 
   create(data: {
@@ -389,6 +373,8 @@ export class PurchaseRepository {
     tunch_percent: number;
     fine_weight: number;
     wastage_percent?: number;
+    wastage_weight?: number;
+    wastage_amount?: number;
     making_charge?: number;
     rate_per_gram: number;
     metal_value: number;
@@ -403,15 +389,15 @@ export class PurchaseRepository {
       INSERT INTO purchase_bill_items (
         id, purchase_bill_id, product_id, metal_id, purity_id,
         tag_no, item_name, gross_weight, less_weight, net_weight,
-        tunch_percent, fine_weight, wastage_percent, making_charge,
-        rate_per_gram, metal_value, item_amount,
-        huid, notes, created_at
+        tunch_percent, fine_weight, wastage_percent, wastage_weight,
+        wastage_amount, making_charge, rate_per_gram, metal_value,
+        item_amount, huid, notes, created_at
       ) VALUES (
         ?, ?, ?, ?, ?,
         ?, ?, ?, ?, ?,
         ?, ?, ?, ?,
-        ?, ?, ?,
-        ?, ?, datetime('now')
+        ?, ?, ?, ?,
+        ?, ?, ?, datetime('now')
       )
     `);
 
@@ -429,6 +415,8 @@ export class PurchaseRepository {
       itemData.tunch_percent,
       itemData.fine_weight,
       itemData.wastage_percent ?? 0.0,
+      itemData.wastage_weight ?? 0.0,
+      itemData.wastage_amount ?? 0.0,
       itemData.making_charge ?? 0.0,
       itemData.rate_per_gram,
       itemData.metal_value,

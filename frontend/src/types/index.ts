@@ -299,6 +299,8 @@ export interface PurchaseBillItem {
   tunch_percent: number;
   fine_weight: number;
   wastage_percent: number;
+  wastage_weight?: number;
+  wastage_amount?: number;
   making_charge: number;
   rate_per_gram: number;
   metal_value: number;
@@ -382,5 +384,370 @@ export interface AddPurchasePaymentInput {
   reference_number?: string;
   notes?: string;
 }
+
+// ==================== WORKSHOP TYPES (Part 7) ====================
+export type JobType = 'REPAIR' | 'MANUFACTURING' | 'POLISHING' | 'SETTING' | 'ALTERATION' | 'OTHER';
+export type JobStatus = 'DRAFT' | 'READY_TO_ISSUE' | 'ISSUED' | 'IN_PROGRESS' | 'RETURNED' | 'QUALITY_CHECK' | 'COMPLETED' | 'CANCELLED';
+export type JobPriority = 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT';
+
+export interface WorkshopJobItem {
+  id: string;
+  workshop_job_id: string;
+  stock_item_id: string | null;
+  tag_no: string;
+  issue_gross_weight: number;
+  issue_less_weight: number;
+  issue_net_weight: number;
+  issue_fine_weight: number;
+  return_gross_weight: number | null;
+  return_less_weight: number | null;
+  return_net_weight: number | null;
+  return_fine_weight: number | null;
+  weight_difference: number;
+  material_issued: string | null;
+  material_returned: string | null;
+  labour_charge: number;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WorkshopJob {
+  id: string;
+  job_number: string;
+  job_type: JobType;
+  karigar_id: string;
+  karigar_name?: string;
+  karigar_phone?: string | null;
+  karigar_specialization?: string;
+  customer_id: string | null;
+  customer_name?: string | null;
+  customer_phone?: string | null;
+  status: JobStatus;
+  priority: JobPriority;
+  issue_date: string | null;
+  expected_return_date: string | null;
+  actual_return_date: string | null;
+  description: string;
+  instructions: string | null;
+  estimated_labour: number;
+  actual_labour: number;
+  estimated_weight: number;
+  returned_weight: number;
+  notes: string | null;
+  created_by: string | null;
+  creator_name?: string | null;
+  created_at: string;
+  updated_at: string;
+  item_count?: number;
+  items?: WorkshopJobItem[];
+}
+
+export type RepairStatus = 'RECEIVED' | 'ASSIGNED' | 'IN_REPAIR' | 'READY' | 'DELIVERED' | 'CANCELLED';
+export type RepairOwnership = 'CUSTOMER_OWNED' | 'SHOP_OWNED';
+
+export interface Repair {
+  id: string;
+  repair_number: string;
+  ownership: RepairOwnership;
+  customer_id: string | null;
+  customer_name?: string | null;
+  customer_phone?: string | null;
+  stock_item_id: string | null;
+  tag_no?: string | null;
+  karigar_id: string | null;
+  karigar_name?: string | null;
+  karigar_phone?: string | null;
+  item_description: string;
+  metal_type: string | null;
+  purity: string | null;
+  gross_weight: number | null;
+  net_weight: number | null;
+  problem_description: string;
+  instructions: string | null;
+  estimated_cost: number;
+  actual_cost: number;
+  status: RepairStatus;
+  priority: JobPriority;
+  received_date: string;
+  expected_completion_date: string | null;
+  actual_completion_date: string | null;
+  delivered_date: string | null;
+  notes: string | null;
+  created_by: string | null;
+  creator_name?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// ==================== FINANCE TYPES (Part 8) ====================
+export type PartyType = 'CUSTOMER' | 'SUPPLIER' | 'KARIGAR' | 'GIRVI_CLIENT' | 'OTHER';
+export type EntryType =
+  | 'SALE'
+  | 'SALE_PAYMENT'
+  | 'PURCHASE'
+  | 'PURCHASE_PAYMENT'
+  | 'OPENING_BALANCE'
+  | 'ADJUSTMENT'
+  | 'KARIGAR_LABOUR'
+  | 'KARIGAR_PAYMENT'
+  | 'REFUND'
+  | 'OTHER';
+
+export type DebitCredit = 'DEBIT' | 'CREDIT';
+export type PaymentType = 'RECEIPT' | 'PAYMENT';
+export type PaymentMode = 'CASH' | 'CARD' | 'UPI' | 'BANK' | 'CREDIT' | 'GOLD' | 'SILVER' | 'OTHER';
+
+export interface LedgerEntry {
+  id: string;
+  party_type: PartyType;
+  party_id: string;
+  party_name?: string;
+  party_code?: string;
+  entry_type: EntryType;
+  debit_credit: DebitCredit;
+  amount: number;
+  balance_before: number;
+  balance_after: number;
+  reference_type: string | null;
+  reference_id: string | null;
+  reference_number: string | null;
+  description: string | null;
+  payment_method: PaymentMode | null;
+  created_by: string | null;
+  creator_name?: string | null;
+  created_at: string;
+}
+
+export interface Payment {
+  id: string;
+  payment_number: string;
+  party_type: PartyType;
+  party_id: string;
+  party_name?: string;
+  party_code?: string;
+  payment_type: PaymentType;
+  payment_mode: PaymentMode;
+  amount: number;
+  reference_number: string | null;
+  payment_date: string;
+  reference_type: string | null;
+  reference_id: string | null;
+  notes: string | null;
+  created_by: string | null;
+  creator_name?: string | null;
+  created_at: string;
+}
+
+export interface PartyStatementSummary {
+  total_debit: number;
+  total_credit: number;
+  entry_count: number;
+  current_balance: number;
+}
+
+export interface CashBookRow {
+  id: string;
+  date: string;
+  reference_number: string;
+  description: string;
+  party_type: string;
+  party_id: string;
+  party_name: string;
+  cash_in: number;
+  cash_out: number;
+  running_balance: number;
+}
+
+export interface CashBookResponse {
+  items: CashBookRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  opening_balance: number;
+  closing_balance: number;
+  total_cash_in: number;
+  total_cash_out: number;
+}
+
+export interface FinanceSummary {
+  total_receivables: number;
+  total_payables: number;
+  supplier_payables: number;
+  karigar_payables: number;
+  cash_balance: number;
+  today_collections: number;
+  today_payments: number;
+  today_sales: number;
+}
+
+// --- Part 9: Girvi Loans & Pledged Jewellery ---
+export type GirviLoanStatus = 'DRAFT' | 'ACTIVE' | 'PARTIALLY_PAID' | 'OVERDUE' | 'CLOSED' | 'DEFAULTED' | 'CANCELLED';
+export type GirviInterestType = 'MONTHLY_PERCENT' | 'ANNUAL_PERCENT' | 'FLAT_AMOUNT';
+export type GirviPledgeStatus = 'PLEDGED' | 'RELEASED' | 'FORFEITED';
+
+export interface GirviLoanItem {
+  id: string;
+  loan_id: string;
+  source_type: string;
+  stock_item_id?: string | null;
+  description: string;
+  tag_no?: string | null;
+  metal_id?: string | null;
+  metal_name?: string | null;
+  purity_id?: string | null;
+  purity_name?: string | null;
+  gross_weight: number;
+  less_weight: number;
+  net_weight: number;
+  tunch_percent: number;
+  fine_weight: number;
+  valuation_rate: number;
+  valuation_amount: number;
+  pledged_value: number;
+  status: GirviPledgeStatus;
+  release_date?: string | null;
+  released_by?: string | null;
+  release_notes?: string | null;
+  notes?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GirviLoanPayment {
+  id: string;
+  loan_id: string;
+  payment_number: string;
+  payment_date: string;
+  principal_amount: number;
+  interest_amount: number;
+  charges_amount: number;
+  total_amount: number;
+  payment_mode: string;
+  reference_number?: string | null;
+  finance_payment_id?: string | null;
+  notes?: string | null;
+  created_by?: string | null;
+  created_at: string;
+}
+
+export interface GirviPledgeEvent {
+  id: string;
+  loan_id: string;
+  loan_item_id?: string | null;
+  event_type: string;
+  event_date: string;
+  description: string;
+  created_by?: string | null;
+  created_at: string;
+}
+
+export interface GirviLoan {
+  id: string;
+  loan_number: string;
+  customer_id: string;
+  customer_name?: string;
+  customer_phone?: string;
+  loan_date: string;
+  due_date: string;
+  principal_amount: number;
+  interest_rate: number;
+  interest_type: GirviInterestType;
+  processing_fee: number;
+  other_charges: number;
+  total_interest: number;
+  total_charges: number;
+  total_repaid: number;
+  outstanding_amount: number;
+  status: GirviLoanStatus;
+  ltv_percent: number;
+  max_allowed_loan: number;
+  is_overridden: number;
+  override_reason?: string | null;
+  disbursement_date?: string | null;
+  disbursed_by?: string | null;
+  closure_date?: string | null;
+  closed_by?: string | null;
+  closure_notes?: string | null;
+  notes?: string | null;
+  items?: GirviLoanItem[];
+  payments?: GirviLoanPayment[];
+  pledge_events?: GirviPledgeEvent[];
+  created_by?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GirviMetrics {
+  active_loans_count: number;
+  total_principal_outstanding: number;
+  total_interest_accrued: number;
+  overdue_loans_count: number;
+  total_pledged_value: number;
+  total_repaid_amount: number;
+}
+
+// --- Part 9: Saving Schemes (Chits) ---
+export type SavingSchemeStatus = 'ACTIVE' | 'MATURED' | 'COMPLETED' | 'CANCELLED' | 'DEFAULTED';
+export type InstallmentStatus = 'PENDING' | 'PARTIAL' | 'PAID' | 'OVERDUE' | 'WAIVED';
+export type MaturityBenefitType = 'NONE' | 'FIXED' | 'PERCENTAGE' | 'BONUS';
+
+export interface SavingSchemeType {
+  id: string;
+  name: string;
+  code: string;
+  duration_months: number;
+  installment_amount: number;
+  maturity_benefit_type: MaturityBenefitType;
+  maturity_benefit_value: number;
+  description?: string | null;
+  is_active: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SavingSchemeInstallment {
+  id: string;
+  saving_scheme_id: string;
+  installment_number: number;
+  due_date: string;
+  amount_due: number;
+  amount_paid: number;
+  payment_date?: string | null;
+  payment_mode?: string | null;
+  reference_number?: string | null;
+  status: InstallmentStatus;
+  finance_payment_id?: string | null;
+  notes?: string | null;
+  created_at: string;
+}
+
+export interface SavingScheme {
+  id: string;
+  scheme_number: string;
+  customer_id: string;
+  customer_name?: string;
+  customer_phone?: string;
+  scheme_type_id: string;
+  scheme_type_name?: string;
+  scheme_type_code?: string;
+  start_date: string;
+  maturity_date: string;
+  installment_amount: number;
+  total_installments: number;
+  paid_installments: number;
+  paid_amount: number;
+  maturity_amount: number;
+  status: SavingSchemeStatus;
+  maturity_payout_date?: string | null;
+  maturity_notes?: string | null;
+  notes?: string | null;
+  installments?: SavingSchemeInstallment[];
+  created_by?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 
 

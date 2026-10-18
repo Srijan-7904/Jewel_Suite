@@ -4,16 +4,16 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background-color: #070A10;
+  background: radial-gradient(circle at 50% 35%, #FFFDF8 0%, #F6EFE0 55%, #EBE0C8 100%);
   position: relative;
   overflow: hidden;
 }
 
 .login-bg-glow {
   position: absolute;
-  width: 600px;
-  height: 600px;
-  background: radial-gradient(circle, rgba(212, 175, 55, 0.12) 0%, rgba(17, 24, 39, 0) 70%);
+  width: 650px;
+  height: 650px;
+  background: radial-gradient(circle, rgba(212, 175, 55, 0.16) 0%, rgba(246, 239, 224, 0) 70%);
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
@@ -24,11 +24,11 @@
   width: 100%;
   max-width: 420px;
   padding: 2.25rem;
-  background: rgba(17, 23, 38, 0.85);
+  background: rgba(255, 255, 255, 0.92);
   backdrop-filter: blur(16px);
   border: 1px solid var(--gold-border);
   border-radius: 12px;
-  box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.8), var(--shadow-gold);
+  box-shadow: 0 20px 40px -15px rgba(184, 134, 11, 0.15), 0 0 25px rgba(212, 175, 55, 0.12);
   z-index: 1;
   display: flex;
   flex-direction: column;
@@ -44,12 +44,12 @@
   height: 58px;
   margin: 0 auto 1rem auto;
   border-radius: 12px;
-  background: radial-gradient(circle, #332709 0%, #171103 100%);
+  background: linear-gradient(135deg, #FFF9ED 0%, #F5E6BE 100%);
   border: 1px solid var(--gold-primary);
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 0 20px rgba(212, 175, 55, 0.3);
+  box-shadow: 0 4px 18px rgba(184, 134, 11, 0.2);
 }
 
 .login-logo-icon {
@@ -74,10 +74,10 @@
   align-items: center;
   gap: 0.6rem;
   padding: 0.75rem 1rem;
-  background: var(--danger-bg);
-  border: 1px solid rgba(239, 68, 68, 0.4);
+  background: #fef2f2;
+  border: 1px solid #fecaca;
   border-radius: 6px;
-  color: #FCA5A5;
+  color: #b91c1c;
   font-size: 0.825rem;
   margin-bottom: 1.25rem;
 }
@@ -131,22 +131,23 @@
   gap: 0.5rem;
   padding: 0.85rem;
   margin-top: 0.5rem;
-  background: linear-gradient(135deg, #E5C158 0%, #D4AF37 50%, #B89225 100%);
+  background: var(--gold-gradient);
   border: none;
   border-radius: 6px;
-  color: #0B0E14;
+  color: #1A160F;
   font-size: 0.95rem;
   font-weight: 700;
   letter-spacing: 0.03em;
   cursor: pointer;
-  box-shadow: 0 4px 15px rgba(212, 175, 55, 0.3);
+  box-shadow: 0 4px 15px rgba(184, 134, 11, 0.25);
   transition: all var(--transition-fast);
 }
 
 .login-submit-btn:hover:not(:disabled) {
-  background: linear-gradient(135deg, #F3D270 0%, #DFBA44 50%, #C79F30 100%);
+  background: var(--gold-gradient-hover);
+  color: #1A160F;
   transform: translateY(-1px);
-  box-shadow: 0 6px 20px rgba(212, 175, 55, 0.4);
+  box-shadow: 0 6px 20px rgba(184, 134, 11, 0.35);
 }
 
 .login-submit-btn:disabled {
@@ -157,7 +158,7 @@
 .demo-credentials-box {
   margin-top: 1.5rem;
   padding: 0.75rem;
-  background: rgba(212, 175, 55, 0.06);
+  background: var(--gold-bg-subtle);
   border: 1px dashed var(--gold-border);
   border-radius: 6px;
 }

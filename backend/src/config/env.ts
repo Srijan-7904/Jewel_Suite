@@ -49,6 +49,42 @@ function resolveBackupDir(): string {
   return path.join(localAppData, 'JewelSuite', 'backups');
 }
 
+function getBaseStorageDir(): string {
+  if (process.env.APP_DATA_DIR) {
+    return path.resolve(process.env.APP_DATA_DIR);
+  }
+  if (isDev) {
+    const rootDataDir = path.resolve(process.cwd(), '../data');
+    if (fs.existsSync(rootDataDir)) {
+      return path.resolve(process.cwd(), '..');
+    }
+    return process.cwd();
+  }
+  const localAppData = process.env.LOCALAPPDATA || path.join(process.env.USERPROFILE || 'C:\\', 'AppData', 'Local');
+  return path.join(localAppData, 'JewelSuite');
+}
+
+const baseDir = getBaseStorageDir();
+const dataDir = path.join(baseDir, 'data');
+const backupDir = resolveBackupDir();
+const shopDir = path.join(baseDir, 'shop');
+const exportsDir = path.join(baseDir, 'exports');
+const logsDir = path.join(baseDir, 'logs');
+const configDir = path.join(baseDir, 'config');
+
+export function ensureLocalDirectoriesExist(): void {
+  const dirs = [dataDir, backupDir, shopDir, exportsDir, logsDir, configDir];
+  for (const dir of dirs) {
+    try {
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+    } catch {
+      // Ignore if folder creation has OS permission restrictions in sandbox
+    }
+  }
+}
+
 export const config = {
   env: NODE_ENV,
   isDev,
@@ -57,5 +93,12 @@ export const config = {
   jwtSecret: process.env.JWT_SECRET || 'jewel_suite_offline_default_secret_key_2026',
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
   dbPath: resolveDbPath(),
-  backupDir: resolveBackupDir(),
+  backupDir,
+  dataDir,
+  shopDir,
+  exportsDir,
+  logsDir,
+  configDir,
+  baseDir,
 };
+

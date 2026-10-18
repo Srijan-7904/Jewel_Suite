@@ -7,8 +7,8 @@
 }
 
 .welcome-banner {
-  background: linear-gradient(135deg, rgba(24, 34, 56, 0.7) 0%, rgba(13, 19, 31, 0.9) 100%);
-  border: 1px solid var(--border-default);
+  background: linear-gradient(135deg, #FFFDF8 0%, #F5EEDC 60%, #ECE2CA 100%);
+  border: 1px solid var(--gold-border);
   border-radius: 10px;
   padding: 1.5rem 1.75rem;
   display: flex;
@@ -16,6 +16,7 @@
   align-items: center;
   position: relative;
   overflow: hidden;
+  box-shadow: var(--shadow-sm);
 }
 
 .welcome-banner::after {
@@ -23,9 +24,9 @@
   position: absolute;
   top: 0;
   right: 0;
-  width: 300px;
+  width: 320px;
   height: 100%;
-  background: radial-gradient(circle, rgba(212, 175, 55, 0.08) 0%, transparent 70%);
+  background: radial-gradient(circle, rgba(184, 134, 11, 0.12) 0%, transparent 70%);
   pointer-events: none;
 }
 
@@ -99,12 +100,28 @@
   padding: 1.25rem;
   display: flex;
   flex-direction: column;
-  transition: transform var(--transition-fast), border-color var(--transition-fast);
+  transition: all var(--transition-fast);
 }
 
 .metric-card:hover {
   transform: translateY(-2px);
   border-color: var(--gold-border);
+}
+
+.metric-card-clickable {
+  cursor: pointer;
+  position: relative;
+  user-select: none;
+}
+
+.metric-card-clickable:hover {
+  transform: translateY(-3px);
+  border-color: var(--gold-primary);
+  box-shadow: 0 10px 24px -6px rgba(212, 175, 55, 0.22);
+}
+
+.metric-card-clickable:active {
+  transform: translateY(-1px);
 }
 
 .metric-header {
@@ -140,10 +157,20 @@
   color: var(--success);
   border: 1px solid rgba(16, 185, 129, 0.3);
 }
+.metric-icon-box.rose {
+  background: var(--danger-bg);
+  color: var(--danger);
+  border: 1px solid rgba(220, 38, 38, 0.3);
+}
+.metric-icon-box.purple {
+  background: rgba(147, 51, 234, 0.12);
+  color: #a855f7;
+  border: 1px solid rgba(147, 51, 234, 0.3);
+}
 .metric-icon-box.indigo {
-  background: rgba(99, 102, 241, 0.12);
-  color: #818CF8;
-  border: 1px solid rgba(99, 102, 241, 0.3);
+  background: var(--info-bg);
+  color: var(--info);
+  border: 1px solid rgba(29, 111, 184, 0.3);
 }
 .metric-icon-box.amber {
   background: var(--warning-bg);
@@ -159,8 +186,28 @@
 }
 
 .metric-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
   font-size: 0.725rem;
   color: var(--text-dim);
+  margin-top: auto;
+}
+
+.metric-link-text {
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--gold-primary);
+  opacity: 0;
+  transform: translateX(-4px);
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+}
+
+.metric-card-clickable:hover .metric-link-text {
+  opacity: 1;
+  transform: translateX(0);
 }
 
 /* Foundation Panel */

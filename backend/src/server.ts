@@ -1,6 +1,6 @@
 import express from 'express';
 import cors from 'cors';
-import { config } from './config/env.js';
+import { config, ensureLocalDirectoriesExist } from './config/env.js';
 import { getDb, closeDb } from './database/connection/db.js';
 import { runMigrations } from './database/migrations/migrator.js';
 import { runSeeds } from './database/seeds/seeder.js';
@@ -8,6 +8,7 @@ import { apiRouter } from './routes/index.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
 export async function bootstrapApp(): Promise<express.Application> {
+  ensureLocalDirectoriesExist();
   console.log(`[Jewel Suite] Initializing backend in ${config.env} mode...`);
   console.log(`[Jewel Suite] Database path: ${config.dbPath}`);
 

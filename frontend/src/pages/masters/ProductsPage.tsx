@@ -261,7 +261,15 @@ export const ProductsPage: React.FC = () => {
                     <td>
                       <span className="badge badge-gold">{p.category_name || '—'}</span>
                     </td>
-                    <td>{p.default_metal || <span className="text-muted-cell">—</span>}</td>
+                    <td>
+                      {p.default_metal ? (
+                        <span className={`metal-pill ${p.default_metal.toLowerCase() === 'gold' ? 'gold' : p.default_metal.toLowerCase() === 'silver' ? 'silver' : p.default_metal.toLowerCase() === 'platinum' ? 'platinum' : 'other'}`}>
+                          {p.default_metal}
+                        </span>
+                      ) : (
+                        <span className="text-muted-cell">—</span>
+                      )}
+                    </td>
                     <td>{p.default_purity || <span className="text-muted-cell">—</span>}</td>
                     <td className="font-mono">{p.hsn_code || <span className="text-muted-cell">—</span>}</td>
                     <td>

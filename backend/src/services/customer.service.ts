@@ -47,6 +47,26 @@ export class CustomerService {
       email: validated.email || null,
     });
 
+    if (customer.opening_balance > 0) {
+      try {
+        // Lazy import to prevent circular dependency
+        import('./finance.service.js').then(({ financeService }) => {
+          financeService.recordOpeningBalance(
+            {
+              party_type: 'CUSTOMER',
+              party_id: customer.id,
+              amount: customer.opening_balance,
+              direction: customer.opening_balance_type,
+              notes: 'Initial customer master opening balance',
+            },
+            userId
+          );
+        }).catch(() => {});
+      } catch (e) {
+        // Suppress if finance not yet initialized
+      }
+    }
+
     auditRepository.log({
       user_id: userId,
       action: 'CUSTOMER_CREATED',

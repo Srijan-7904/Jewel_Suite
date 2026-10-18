@@ -114,7 +114,7 @@ export async function runSeeds(): Promise<void> {
       { metal: 'PLATINUM', purity: '950', rate: 3450.0, unit: 'gram' },
     ];
 
-    const insertRate = db.prepare('INSERT INTO metal_rates (id, metal_id, purity_id, rate, unit, effective_from) VALUES (?, ?, ?, ?, ?, datetime(\'now\'))');
+    const insertRate = db.prepare('INSERT INTO metal_rates (id, metal_id, purity_id, rate, unit, effective_from) VALUES (?, ?, ?, ?, ?, datetime(\'now\', \'-1 day\'))');
     for (const r of initialRates) {
       const mId = metalIds[r.metal];
       const pId = purityIds[`${r.metal}_${r.purity}`];

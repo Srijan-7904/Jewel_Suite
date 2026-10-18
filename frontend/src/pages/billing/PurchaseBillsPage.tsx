@@ -10,6 +10,16 @@ import {
 } from '../../types';
 import { purchaseApi } from '../../services/purchase';
 import { supplierApi, productApi, rateApi } from '../../services/masters';
+import Decimal from 'decimal.js';
+import {
+  toDecimal,
+  formatWeight,
+  formatFineWeight,
+  formatMetalRate,
+  formatPercentage,
+  formatCurrency,
+  parseDecimalInput,
+} from '../../utils/precision';
 import {
   Receipt,
   Plus,
@@ -23,6 +33,7 @@ import {
   Trash2,
   AlertCircle,
   Truck,
+  RefreshCw,
 } from 'lucide-react';
 import '../../styles/masters.css';
 import './PurchaseBillsPage.css';
@@ -80,6 +91,8 @@ export const PurchaseBillsPage: React.FC = () => {
     tunch_percent: '',
     wastage_percent: '0',
     making_charge: '0',
+    making_charge_type: 'FIXED' as 'FIXED' | 'PER_PIECE' | 'PER_GRAM' | 'PERCENTAGE',
+    making_rate: '0',
     rate_per_gram: '',
     huid: '',
     notes: '',
@@ -154,22 +167,67 @@ export const PurchaseBillsPage: React.FC = () => {
 
   // Live Calculations for Item Sub-Form
   const liveItemCalc = useMemo(() => {
-    const gross = parseFloat(itemForm.gross_weight) || 0;
-    const less = parseFloat(itemForm.less_weight) || 0;
-    const tunch = parseFloat(itemForm.tunch_percent) || 0;
-    const rate = parseFloat(itemForm.rate_per_gram) || 0;
-    const making = parseFloat(itemForm.making_charge) || 0;
-    const wastage = parseFloat(itemForm.wastage_percent) || 0;
+    const gross = toDecimal(itemForm.gross_weight);
+    const less = toDecimal(itemForm.less_weight);
+    const tunch = toDecimal(itemForm.tunch_percent);
+    const rate = toDecimal(itemForm.rate_per_gram);
+    const wastage = toDecimal(itemForm.wastage_percent);
 
-    const net = Math.max(0, Math.round((gross - less + Number.EPSILON) * 1000) / 1000);
-    const fine = Math.round(((net * tunch) / 100 + Number.EPSILON) * 10000) / 10000;
-    const metalVal = Math.round((fine * rate + Number.EPSILON) * 100) / 100;
-    const wastageFine = Math.round(((net * wastage) / 100 + Number.EPSILON) * 10000) / 10000;
-    const wastageVal = Math.round((wastageFine * rate + Number.EPSILON) * 100) / 100;
-    const itemAmount = Math.round((metalVal + wastageVal + making + Number.EPSILON) * 100) / 100;
+    const net = Decimal.max(0, gross.minus(less));
+    const fine = net.times(tunch).dividedBy(100);
+    const metalVal = fine.times(rate);
+    const wastageFine = net.times(wastage).dividedBy(100);
+    const wastageVal = wastageFine.times(rate);
 
-    return { net, fine, metalVal, itemAmount };
-  }, [itemForm.gross_weight, itemForm.less_weight, itemForm.tunch_percent, itemForm.rate_per_gram, itemForm.making_charge, itemForm.wastage_percent]);
+    const makingRateDec = toDecimal(itemForm.making_rate);
+    let making = toDecimal(itemForm.making_charge);
+    if (itemForm.making_charge_type === 'PER_GRAM') {
+      making = net.times(makingRateDec);
+    } else if (itemForm.making_charge_type === 'PERCENTAGE') {
+      making = metalVal.times(makingRateDec).dividedBy(100);
+    } else if (itemForm.making_charge_type === 'PER_PIECE') {
+      making = makingRateDec;
+    } else if (itemForm.making_charge_type === 'FIXED') {
+      making = makingRateDec;
+    }
+
+    const itemAmount = metalVal.plus(wastageVal).plus(making);
+
+    return {
+      net: net.toNumber(),
+      fine: fine.toNumber(),
+      metalVal: metalVal.toNumber(),
+      making: making.toDecimalPlaces(2).toNumber(),
+      itemAmount: itemAmount.toNumber(),
+    };
+  }, [itemForm.gross_weight, itemForm.less_weight, itemForm.tunch_percent, itemForm.rate_per_gram, itemForm.making_charge, itemForm.making_rate, itemForm.making_charge_type, itemForm.wastage_percent]);
+
+  const handleMakingChange = (rateStr: string, type: 'FIXED' | 'PER_PIECE' | 'PER_GRAM' | 'PERCENTAGE') => {
+    const rateDec = toDecimal(rateStr);
+    const gross = toDecimal(itemForm.gross_weight);
+    const less = toDecimal(itemForm.less_weight);
+    const net = Decimal.max(0, gross.minus(less));
+    const tunch = toDecimal(itemForm.tunch_percent);
+    const rate = toDecimal(itemForm.rate_per_gram);
+    const fine = net.times(tunch).dividedBy(100);
+    const metalVal = fine.times(rate);
+
+    let calculatedMaking = rateDec;
+    if (type === 'PER_GRAM') {
+      calculatedMaking = net.times(rateDec);
+    } else if (type === 'PERCENTAGE') {
+      calculatedMaking = metalVal.times(rateDec).dividedBy(100);
+    } else if (type === 'PER_PIECE' || type === 'FIXED') {
+      calculatedMaking = rateDec;
+    }
+
+    setItemForm((prev) => ({
+      ...prev,
+      making_charge_type: type,
+      making_rate: rateStr,
+      making_charge: calculatedMaking.toDecimalPlaces(2).toString(),
+    }));
+  };
 
   // Handle Product Change in Item Sub-Form
   const handleItemProductChange = (productId: string) => {
@@ -284,6 +342,8 @@ export const PurchaseBillsPage: React.FC = () => {
       tunch_percent: defaultPurity && defaultPurity.tunch_percent !== null ? defaultPurity.tunch_percent.toString() : '91.67',
       wastage_percent: '0',
       making_charge: '0',
+      making_charge_type: 'FIXED',
+      making_rate: '0',
       rate_per_gram: defaultRate,
       huid: '',
       notes: '',
@@ -362,17 +422,17 @@ export const PurchaseBillsPage: React.FC = () => {
     setIsSubmitting(true);
 
     try {
-      const gross = parseFloat(itemForm.gross_weight);
-      const less = parseFloat(itemForm.less_weight) || 0;
-      const tunch = parseFloat(itemForm.tunch_percent);
-      const rate = parseFloat(itemForm.rate_per_gram);
+      const gross = toDecimal(itemForm.gross_weight);
+      const less = toDecimal(itemForm.less_weight);
+      const tunch = toDecimal(itemForm.tunch_percent);
+      const rate = toDecimal(itemForm.rate_per_gram);
 
       if (!itemForm.tag_no.trim()) throw new Error('Tag number is required');
       if (!itemForm.product_id) throw new Error('Please select a product');
-      if (isNaN(gross) || gross <= 0) throw new Error('Gross weight must be greater than zero');
-      if (less < 0 || less > gross) throw new Error('Less weight cannot exceed gross weight');
-      if (isNaN(tunch) || tunch < 0 || tunch > 100) throw new Error('Tunch % must be between 0 and 100');
-      if (isNaN(rate) || rate <= 0) throw new Error('Purchase rate per gram must be greater than zero');
+      if (gross.lte(0)) throw new Error('Gross weight must be greater than zero');
+      if (less.lt(0) || less.gt(gross)) throw new Error('Less weight cannot exceed gross weight');
+      if (tunch.lt(0) || tunch.gt(100)) throw new Error('Tunch % must be between 0 and 100');
+      if (rate.lte(0)) throw new Error('Purchase rate per gram must be greater than zero');
 
       let currentBill = activeBill;
       if (!currentBill) {
@@ -382,8 +442,8 @@ export const PurchaseBillsPage: React.FC = () => {
           supplier_id: formData.supplier_id,
           purchase_date: formData.purchase_date,
           supplier_invoice_number: formData.supplier_invoice_number.trim() || undefined,
-          discount_amount: parseFloat(formData.discount_amount) || 0,
-          gst_rate: parseFloat(formData.gst_rate) || 0,
+          discount_amount: toDecimal(formData.discount_amount).toNumber(),
+          gst_rate: toDecimal(formData.gst_rate).toNumber(),
           notes: formData.notes.trim() || undefined,
         });
         setActiveBill(currentBill);
@@ -394,12 +454,12 @@ export const PurchaseBillsPage: React.FC = () => {
         metal_id: itemForm.metal_id,
         purity_id: itemForm.purity_id,
         tag_no: itemForm.tag_no.trim().toUpperCase(),
-        gross_weight: gross,
-        less_weight: less,
-        tunch_percent: tunch,
-        wastage_percent: parseFloat(itemForm.wastage_percent) || 0,
-        making_charge: parseFloat(itemForm.making_charge) || 0,
-        rate_per_gram: rate,
+        gross_weight: gross.toNumber(),
+        less_weight: less.toNumber(),
+        tunch_percent: tunch.toNumber(),
+        wastage_percent: toDecimal(itemForm.wastage_percent).toNumber(),
+        making_charge: liveItemCalc.making,
+        rate_per_gram: rate.toNumber(),
         huid: itemForm.huid.trim() || undefined,
         notes: itemForm.notes.trim() || undefined,
       });
@@ -520,6 +580,38 @@ export const PurchaseBillsPage: React.FC = () => {
     <div className="purchase-page">
       {viewMode === 'list' ? (
         <>
+          {/* Page Header */}
+          <div className="purchase-header">
+            <div className="purchase-header-left">
+              <div className="purchase-icon-box">
+                <Truck size={24} className="gold" />
+              </div>
+              <div>
+                <h1 className="purchase-title font-serif">Purchase & Inward Bills</h1>
+                <p className="purchase-subtitle">
+                  Supplier purchase bills, bullion inward, inventory replenishment, and payables.
+                </p>
+              </div>
+            </div>
+
+            <div className="purchase-header-actions">
+              <button
+                type="button"
+                className="btn btn-outline btn-sm"
+                onClick={fetchPurchases}
+                disabled={isLoading}
+              >
+                <RefreshCw size={15} className={isLoading ? 'spin' : ''} />
+                <span>Refresh</span>
+              </button>
+
+              <button type="button" className="btn btn-primary" onClick={handleStartCreate}>
+                <Plus size={16} />
+                <span>New Purchase Inward</span>
+              </button>
+            </div>
+          </div>
+
           {/* Top Metrics Row */}
           <div className="purchase-metrics-grid">
             <div className="purchase-metric-card">
@@ -554,11 +646,12 @@ export const PurchaseBillsPage: React.FC = () => {
           </div>
 
           {/* Filter and Action Toolbar */}
-          <div className="masters-toolbar mb-4">
+          <div className="purchase-toolbar">
             <div className="search-box">
               <Search size={16} className="search-icon" />
               <input
                 type="text"
+                className="font-mono text-xs"
                 placeholder="Search by Purchase No, Supplier Invoice, or Supplier Name..."
                 value={search}
                 onChange={(e) => {
@@ -566,11 +659,16 @@ export const PurchaseBillsPage: React.FC = () => {
                   setPage(1);
                 }}
               />
+              {search && (
+                <button type="button" className="clear-search-btn" onClick={() => setSearch('')}>
+                  <XCircle size={14} />
+                </button>
+              )}
             </div>
 
             <div className="filter-group">
               <select
-                className="filter-select"
+                className="filter-select font-mono"
                 value={supplierFilter}
                 onChange={(e) => {
                   setSupplierFilter(e.target.value);
@@ -584,7 +682,7 @@ export const PurchaseBillsPage: React.FC = () => {
               </select>
 
               <select
-                className="filter-select"
+                className="filter-select font-mono"
                 value={statusFilter}
                 onChange={(e) => {
                   setStatusFilter(e.target.value);
@@ -592,153 +690,166 @@ export const PurchaseBillsPage: React.FC = () => {
                 }}
               >
                 <option value="ALL">All Statuses</option>
-                <option value="DRAFT">Draft</option>
-                <option value="FINALIZED">Finalized</option>
-                <option value="CANCELLED">Cancelled</option>
+                <option value="DRAFT">DRAFT</option>
+                <option value="FINALIZED">FINALIZED</option>
+                <option value="CANCELLED">CANCELLED</option>
               </select>
-            </div>
 
-            <button type="button" className="btn btn-primary" onClick={handleStartCreate}>
-              <Plus size={16} />
-              <span>New Purchase Inward</span>
-            </button>
+              {(search || supplierFilter !== 'ALL' || statusFilter !== 'ALL') && (
+                <button
+                  type="button"
+                  className="btn btn-outline btn-xs"
+                  onClick={() => {
+                    setSearch('');
+                    setSupplierFilter('ALL');
+                    setStatusFilter('ALL');
+                    setPage(1);
+                  }}
+                >
+                  Reset
+                </button>
+              )}
+            </div>
           </div>
 
-          {/* Purchase Bills Data Table */}
-          <div className="masters-table-wrapper">
-            <table className="masters-table">
-              <thead>
-                <tr>
-                  <th>Purchase No</th>
-                  <th>Date</th>
-                  <th>Supplier</th>
-                  <th>Supplier Invoice</th>
-                  <th className="text-right">Grand Total</th>
-                  <th className="text-right">Paid</th>
-                  <th className="text-right">Balance Payable</th>
-                  <th className="text-center">Status</th>
-                  <th className="text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {isLoading ? (
+          {/* Purchase Bills Data Table Card */}
+          <div className="purchase-table-card">
+            <div className="table-responsive">
+              <table className="purchase-table">
+                <thead>
                   <tr>
-                    <td colSpan={9} className="table-empty font-mono">
-                      Loading purchase inward records...
-                    </td>
+                    <th>Purchase No</th>
+                    <th>Date</th>
+                    <th>Supplier</th>
+                    <th>Supplier Invoice</th>
+                    <th className="text-right">Grand Total (₹)</th>
+                    <th className="text-right">Paid (₹)</th>
+                    <th className="text-right">Balance Payable (₹)</th>
+                    <th className="text-center">Status</th>
+                    <th className="text-right">Actions</th>
                   </tr>
-                ) : purchases.length === 0 ? (
-                  <tr>
-                    <td colSpan={9} className="table-empty py-12">
-                      <div className="flex flex-col items-center justify-center">
-                        <Truck size={48} className="text-muted mb-3 opacity-40" />
-                        <p className="text-secondary font-medium">No purchase bills found.</p>
-                        <p className="text-muted text-xs mt-1">
-                          Create an inward purchase bill to restock physical jewellery inventory and log supplier bills.
-                        </p>
-                        <button type="button" className="btn btn-primary btn-sm mt-4" onClick={handleStartCreate}>
-                          <Plus size={14} />
-                          <span>Create Purchase Bill</span>
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ) : (
-                  purchases.map((bill) => (
-                    <tr key={bill.id}>
-                      <td>
-                        <span className="tag-pill font-mono">{bill.purchase_number}</span>
+                </thead>
+                <tbody>
+                  {isLoading ? (
+                    <tr>
+                      <td colSpan={9} className="table-empty py-12 text-center text-muted font-mono">
+                        <RefreshCw size={24} className="spin text-gold mx-auto mb-2" />
+                        <span>Loading purchase inward records from SQLite...</span>
                       </td>
-                      <td className="font-mono text-sm">{bill.purchase_date}</td>
-                      <td>
-                        <div className="font-medium text-primary">{bill.supplier_name}</div>
-                        <div className="text-xs text-muted font-mono">{bill.supplier_code}</div>
-                      </td>
-                      <td className="font-mono text-sm">
-                        {bill.supplier_invoice_number || <span className="text-muted">N/A</span>}
-                      </td>
-                      <td className="text-right font-mono font-bold text-emerald">
-                        ₹{bill.grand_total.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                      </td>
-                      <td className="text-right font-mono">
-                        ₹{bill.amount_paid.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                      </td>
-                      <td className="text-right font-mono font-bold text-amber">
-                        ₹{bill.balance_amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                      </td>
-                      <td className="text-center">
-                        <span className={`purchase-badge ${bill.status.toLowerCase()}`}>
-                          {bill.status}
-                        </span>
-                      </td>
-                      <td className="text-right">
-                        <div className="table-actions">
-                          <button
-                            type="button"
-                            className="btn-icon"
-                            title="View / Print Tax Invoice"
-                            onClick={() => handleOpenPrint(bill.id)}
-                          >
-                            <Eye size={15} />
+                    </tr>
+                  ) : purchases.length === 0 ? (
+                    <tr>
+                      <td colSpan={9} className="table-empty py-12">
+                        <div className="empty-registry-state">
+                          <Truck size={44} className="text-muted mb-3 opacity-40 mx-auto" />
+                          <h4 className="text-base font-serif text-gold font-semibold">No Purchase Bills Found</h4>
+                          <p className="text-xs text-muted max-w-md mx-auto mt-1 mb-4">
+                            Create an inward purchase bill to restock physical jewellery inventory and log supplier bills.
+                          </p>
+                          <button type="button" className="btn btn-primary btn-sm" onClick={handleStartCreate}>
+                            <Plus size={14} />
+                            <span>Create Purchase Bill</span>
                           </button>
-                          {bill.status === 'DRAFT' && (
-                            <>
-                              <button
-                                type="button"
-                                className="btn-icon"
-                                title="Edit Draft Items"
-                                onClick={() => handleEditBill(bill.id)}
-                              >
-                                <Edit2 size={15} />
-                              </button>
-                              <button
-                                type="button"
-                                className="btn-icon text-emerald"
-                                title="Finalize and Inward to Inventory"
-                                onClick={() => handleEditBill(bill.id)}
-                              >
-                                <CheckCircle size={15} />
-                              </button>
-                            </>
-                          )}
                         </div>
                       </td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <div className="masters-pagination">
-              <span className="pagination-info font-mono">
-                Showing {(page - 1) * pageSize + 1} to {Math.min(page * pageSize, total)} of {total} bills
-              </span>
-              <div className="pagination-controls">
-                <button
-                  type="button"
-                  className="btn btn-secondary btn-sm"
-                  disabled={page <= 1}
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                >
-                  Previous
-                </button>
-                <span className="pagination-pages font-mono">
-                  Page {page} of {totalPages}
-                </span>
-                <button
-                  type="button"
-                  className="btn btn-secondary btn-sm"
-                  disabled={page >= totalPages}
-                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                >
-                  Next
-                </button>
-              </div>
+                  ) : (
+                    purchases.map((bill) => (
+                      <tr key={bill.id} className="purchase-row">
+                        <td>
+                          <span className="tag-pill font-mono">{bill.purchase_number}</span>
+                        </td>
+                        <td className="font-mono text-sm">{bill.purchase_date}</td>
+                        <td>
+                          <div className="font-medium text-main">{bill.supplier_name}</div>
+                          <div className="text-xs text-muted font-mono">{bill.supplier_code}</div>
+                        </td>
+                        <td className="font-mono text-sm">
+                          {bill.supplier_invoice_number || <span className="text-muted">-</span>}
+                        </td>
+                        <td className="text-right font-mono font-bold text-emerald">
+                          ₹{bill.grand_total.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        </td>
+                        <td className="text-right font-mono text-muted">
+                          ₹{bill.amount_paid.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        </td>
+                        <td className="text-right font-mono font-bold text-amber">
+                          ₹{bill.balance_amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        </td>
+                        <td className="text-center">
+                          <span className={`purchase-badge ${bill.status.toLowerCase()}`}>
+                            {bill.status}
+                          </span>
+                        </td>
+                        <td className="text-right">
+                          <div className="table-actions">
+                            <button
+                              type="button"
+                              className="btn-icon"
+                              title="View / Print Tax Invoice"
+                              onClick={() => handleOpenPrint(bill.id)}
+                            >
+                              <Eye size={15} />
+                            </button>
+                            {bill.status === 'DRAFT' && (
+                              <>
+                                <button
+                                  type="button"
+                                  className="btn-icon"
+                                  title="Edit Draft Items"
+                                  onClick={() => handleEditBill(bill.id)}
+                                >
+                                  <Edit2 size={15} />
+                                </button>
+                                <button
+                                  type="button"
+                                  className="btn-icon text-emerald"
+                                  title="Finalize and Inward to Inventory"
+                                  onClick={() => handleEditBill(bill.id)}
+                                >
+                                  <CheckCircle size={15} />
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
             </div>
-          )}
+
+            {/* Pagination */}
+            <div className="purchase-pagination">
+              <span className="pagination-info font-mono text-xs text-muted">
+                Showing {total > 0 ? (page - 1) * pageSize + 1 : 0} to {Math.min(page * pageSize, total)} of {total} bill(s)
+              </span>
+              {totalPages > 1 && (
+                <div className="pagination-controls">
+                  <button
+                    type="button"
+                    className="btn btn-outline btn-xs"
+                    disabled={page <= 1}
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  >
+                    Previous
+                  </button>
+                  <span className="pagination-pages font-mono text-xs text-gold px-2">
+                    Page {page} of {totalPages}
+                  </span>
+                  <button
+                    type="button"
+                    className="btn btn-outline btn-xs"
+                    disabled={page >= totalPages}
+                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  >
+                    Next
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
         </>
       ) : (
         /* Create / Edit Purchase Inward Screen */
@@ -917,82 +1028,101 @@ export const PurchaseBillsPage: React.FC = () => {
                   <div className="form-group">
                     <label className="form-label">Gross Weight (g) <span className="text-gold">*</span></label>
                     <input
-                      type="number"
-                      step="0.001"
-                      min="0.001"
+                      type="text"
+                      inputMode="decimal"
                       className="form-input font-mono"
                       required
                       placeholder="0.000"
                       value={itemForm.gross_weight}
-                      onChange={(e) => setItemForm({ ...itemForm, gross_weight: e.target.value })}
+                      onChange={(e) => setItemForm({ ...itemForm, gross_weight: parseDecimalInput(e.target.value, 4) })}
                     />
                   </div>
 
                   <div className="form-group">
                     <label className="form-label">Less Weight (g)</label>
                     <input
-                      type="number"
-                      step="0.001"
-                      min="0"
+                      type="text"
+                      inputMode="decimal"
                       className="form-input font-mono"
                       placeholder="0.000"
                       value={itemForm.less_weight}
-                      onChange={(e) => setItemForm({ ...itemForm, less_weight: e.target.value })}
+                      onChange={(e) => setItemForm({ ...itemForm, less_weight: parseDecimalInput(e.target.value, 4) })}
                     />
                   </div>
 
                   <div className="form-group">
                     <label className="form-label">Tunch % <span className="text-gold">*</span></label>
                     <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      max="100"
+                      type="text"
+                      inputMode="decimal"
                       className="form-input font-mono"
                       required
                       placeholder="91.67"
                       value={itemForm.tunch_percent}
-                      onChange={(e) => setItemForm({ ...itemForm, tunch_percent: e.target.value })}
+                      onChange={(e) => setItemForm({ ...itemForm, tunch_percent: parseDecimalInput(e.target.value, 4) })}
                     />
                   </div>
 
                   <div className="form-group">
                     <label className="form-label">Purchase Rate/g (₹) <span className="text-gold">*</span></label>
                     <input
-                      type="number"
-                      step="0.01"
-                      min="0.01"
+                      type="text"
+                      inputMode="decimal"
                       className="form-input font-mono font-bold"
                       required
                       placeholder="7000.00"
                       value={itemForm.rate_per_gram}
-                      onChange={(e) => setItemForm({ ...itemForm, rate_per_gram: e.target.value })}
+                      onChange={(e) => setItemForm({ ...itemForm, rate_per_gram: parseDecimalInput(e.target.value, 2) })}
                     />
                   </div>
 
                   <div className="form-group">
-                    <label className="form-label">Making Charge (₹)</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      className="form-input font-mono"
-                      placeholder="0.00"
-                      value={itemForm.making_charge}
-                      onChange={(e) => setItemForm({ ...itemForm, making_charge: e.target.value })}
-                    />
+                    <label className="form-label flex items-center justify-between">
+                      <span>Making Charge</span>
+                      <span className="text-xs text-gold font-mono">
+                        ₹{liveItemCalc.making.toFixed(2)}
+                      </span>
+                    </label>
+                    <div className="flex gap-2">
+                      <select
+                        className="form-select font-mono text-xs w-28"
+                        value={itemForm.making_charge_type}
+                        onChange={(e) => handleMakingChange(itemForm.making_rate, e.target.value as any)}
+                        title="Making Charge Mode: /g (Per Gram), /pc (Per Piece), Fix (Fixed Amount), or % (Percentage)"
+                      >
+                        <option value="PER_GRAM">/g (Per Gram)</option>
+                        <option value="PER_PIECE">/pc (Per Piece)</option>
+                        <option value="FIXED">Fix (Fixed)</option>
+                        <option value="PERCENTAGE">% (Percent)</option>
+                      </select>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        className="form-input font-mono flex-1"
+                        placeholder={
+                          itemForm.making_charge_type === 'PER_PIECE'
+                            ? '₹/pc'
+                            : itemForm.making_charge_type === 'FIXED'
+                            ? '₹ Fix'
+                            : itemForm.making_charge_type === 'PERCENTAGE'
+                            ? '%'
+                            : '₹/g'
+                        }
+                        value={itemForm.making_rate}
+                        onChange={(e) => handleMakingChange(parseDecimalInput(e.target.value, 2), itemForm.making_charge_type)}
+                      />
+                    </div>
                   </div>
 
                   <div className="form-group">
                     <label className="form-label">Wastage %</label>
                     <input
-                      type="number"
-                      step="0.1"
-                      min="0"
+                      type="text"
+                      inputMode="decimal"
                       className="form-input font-mono"
                       placeholder="0.0"
                       value={itemForm.wastage_percent}
-                      onChange={(e) => setItemForm({ ...itemForm, wastage_percent: e.target.value })}
+                      onChange={(e) => setItemForm({ ...itemForm, wastage_percent: parseDecimalInput(e.target.value, 2) })}
                     />
                   </div>
 
@@ -1023,16 +1153,16 @@ export const PurchaseBillsPage: React.FC = () => {
                 <div className="calc-preview-bar">
                   <div className="calc-box">
                     <span className="calc-box-label">Net Weight</span>
-                    <span className="calc-box-val net">{liveItemCalc.net.toFixed(3)} g</span>
+                    <span className="calc-box-val net">{formatWeight(liveItemCalc.net, 3)} g</span>
                   </div>
                   <div className="calc-box">
                     <span className="calc-box-label">Fine Bullion Wt</span>
-                    <span className="calc-box-val fine">{liveItemCalc.fine.toFixed(4)} g</span>
+                    <span className="calc-box-val fine">{formatFineWeight(liveItemCalc.fine, 4)} g</span>
                   </div>
                   <div className="calc-box">
                     <span className="calc-box-label">Total Item Inward Cost</span>
                     <span className="calc-box-val value">
-                      ₹{liveItemCalc.itemAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      {formatCurrency(liveItemCalc.itemAmount)}
                     </span>
                   </div>
                 </div>
@@ -1053,8 +1183,8 @@ export const PurchaseBillsPage: React.FC = () => {
               <span>3. Purchase Bill Items ({activeBill?.items.length || 0})</span>
             </div>
 
-            <div className="masters-table-wrapper">
-              <table className="masters-table">
+            <div className="purchase-table-card">
+              <table className="purchase-table">
                 <thead>
                   <tr>
                     <th>Tag No</th>
@@ -1064,6 +1194,7 @@ export const PurchaseBillsPage: React.FC = () => {
                     <th className="text-right">Net Wt</th>
                     <th className="text-right">Tunch %</th>
                     <th className="text-right">Fine Wt</th>
+                    <th className="text-right">Wastage</th>
                     <th className="text-right">Rate/g</th>
                     <th className="text-right">Making</th>
                     <th className="text-right">Amount</th>
@@ -1073,33 +1204,45 @@ export const PurchaseBillsPage: React.FC = () => {
                 <tbody>
                   {!activeBill || activeBill.items.length === 0 ? (
                     <tr>
-                      <td colSpan={11} className="table-empty py-6 text-xs font-mono">
+                      <td colSpan={12} className="table-empty py-6 text-xs font-mono">
                         No items added to this purchase bill yet. Add item above.
                       </td>
                     </tr>
                   ) : (
-                    activeBill.items.map((it) => (
-                      <tr key={it.id}>
-                        <td>
-                          <span className="tag-pill">{it.tag_no}</span>
-                          {it.huid && <div className="text-xs text-muted font-mono">HUID: {it.huid}</div>}
-                        </td>
-                        <td>
-                          <div className="font-medium text-primary">{it.product_name}</div>
-                          <div className="text-xs text-muted">{it.category_name}</div>
-                        </td>
-                        <td className="font-mono text-sm text-gold">
-                          {it.metal_code} • {it.purity_code}
-                        </td>
-                        <td className="text-right font-mono">{it.gross_weight.toFixed(3)}g</td>
-                        <td className="text-right font-mono font-medium">{it.net_weight.toFixed(3)}g</td>
-                        <td className="text-right font-mono text-muted">{it.tunch_percent.toFixed(2)}%</td>
-                        <td className="text-right font-mono font-bold text-gold">{it.fine_weight.toFixed(4)}g</td>
-                        <td className="text-right font-mono text-xs">₹{it.rate_per_gram.toLocaleString('en-IN')}</td>
-                        <td className="text-right font-mono text-xs">₹{it.making_charge.toLocaleString('en-IN')}</td>
-                        <td className="text-right font-mono font-bold text-emerald">
-                          ₹{it.item_amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                        </td>
+                    activeBill.items.map((it) => {
+                      const wastagePercent = Number(it.wastage_percent || 0);
+                      const wastageWeight = Number(it.wastage_weight ?? (wastagePercent > 0 ? (Number(it.net_weight || 0) * wastagePercent) / 100 : 0));
+                      return (
+                        <tr key={it.id}>
+                          <td>
+                            <span className="tag-pill">{it.tag_no}</span>
+                            {it.huid && <div className="text-xs text-muted font-mono">HUID: {it.huid}</div>}
+                          </td>
+                          <td>
+                            <div className="font-medium text-primary">{it.product_name}</div>
+                            <div className="text-xs text-muted">{it.category_name}</div>
+                          </td>
+                          <td className="font-mono text-sm text-gold">
+                            {it.metal_code} • {it.purity_code}
+                          </td>
+                          <td className="text-right font-mono">{formatWeight(it.gross_weight, 3)}g</td>
+                          <td className="text-right font-mono font-medium">{formatWeight(it.net_weight, 3)}g</td>
+                          <td className="text-right font-mono text-muted">{formatPercentage(it.tunch_percent)}</td>
+                          <td className="text-right font-mono font-bold text-gold">{formatFineWeight(it.fine_weight, 4)}g</td>
+                          <td className="text-right font-mono text-xs">
+                            {wastagePercent > 0 ? (
+                              <span>
+                                {formatWeight(wastageWeight, 4)}g ({wastagePercent}%)
+                              </span>
+                            ) : (
+                              <span className="text-muted">-</span>
+                            )}
+                          </td>
+                          <td className="text-right font-mono text-xs">{formatMetalRate(it.rate_per_gram, true)}</td>
+                          <td className="text-right font-mono text-xs">{formatCurrency(it.making_charge)}</td>
+                          <td className="text-right font-mono font-bold text-emerald">
+                            {formatCurrency(it.item_amount)}
+                          </td>
                         {activeBill.status === 'DRAFT' && (
                           <td className="text-center">
                             <button
@@ -1113,9 +1256,10 @@ export const PurchaseBillsPage: React.FC = () => {
                           </td>
                         )}
                       </tr>
-                    ))
-                  )}
-                </tbody>
+                    );
+                  })
+                )}
+              </tbody>
               </table>
             </div>
           </div>
@@ -1170,8 +1314,8 @@ export const PurchaseBillsPage: React.FC = () => {
                 )}
 
                 {/* Payments Table */}
-                <div className="masters-table-wrapper">
-                  <table className="masters-table">
+                <div className="purchase-table-card">
+                  <table className="purchase-table">
                     <thead>
                       <tr>
                         <th>Mode</th>
@@ -1386,27 +1530,41 @@ export const PurchaseBillsPage: React.FC = () => {
                       <th className="text-right">Net Wt</th>
                       <th className="text-right">Tunch</th>
                       <th className="text-right">Fine Wt</th>
+                      <th className="text-right">Wastage</th>
                       <th className="text-right">Rate/g</th>
                       <th className="text-right">Amount</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {printBill.items.map((it, idx) => (
-                      <tr key={it.id}>
-                        <td>{idx + 1}</td>
-                        <td className="font-bold">{it.tag_no}</td>
-                        <td>{it.product_name}</td>
-                        <td>{it.metal_code} {it.purity_code}</td>
-                        <td className="text-right">{it.gross_weight.toFixed(3)}g</td>
-                        <td className="text-right">{it.net_weight.toFixed(3)}g</td>
-                        <td className="text-right">{it.tunch_percent.toFixed(2)}%</td>
-                        <td className="text-right">{it.fine_weight.toFixed(4)}g</td>
-                        <td className="text-right">₹{it.rate_per_gram.toLocaleString('en-IN')}</td>
-                        <td className="text-right font-bold">
-                          ₹{it.item_amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                        </td>
-                      </tr>
-                    ))}
+                    {printBill.items.map((it, idx) => {
+                      const wastagePercent = Number(it.wastage_percent || 0);
+                      const wastageWeight = Number(it.wastage_weight ?? (wastagePercent > 0 ? (Number(it.net_weight || 0) * wastagePercent) / 100 : 0));
+                      return (
+                        <tr key={it.id}>
+                          <td>{idx + 1}</td>
+                          <td className="font-bold">{it.tag_no}</td>
+                          <td>{it.product_name}</td>
+                          <td>{it.metal_code} {it.purity_code}</td>
+                          <td className="text-right">{formatWeight(it.gross_weight, 3)}g</td>
+                          <td className="text-right">{formatWeight(it.net_weight, 3)}g</td>
+                          <td className="text-right">{formatPercentage(it.tunch_percent)}</td>
+                          <td className="text-right">{formatFineWeight(it.fine_weight, 4)}g</td>
+                          <td className="text-right">
+                            {wastagePercent > 0 ? (
+                              <span>
+                                {formatWeight(wastageWeight, 4)}g ({wastagePercent}%)
+                              </span>
+                            ) : (
+                              <span className="text-muted">-</span>
+                            )}
+                          </td>
+                          <td className="text-right">{formatMetalRate(it.rate_per_gram, true)}</td>
+                          <td className="text-right font-bold">
+                            {formatCurrency(it.item_amount)}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
 
@@ -1416,42 +1574,42 @@ export const PurchaseBillsPage: React.FC = () => {
                     <tbody>
                       <tr>
                         <td className="text-gray-600">Subtotal:</td>
-                        <td className="text-right">₹{printBill.subtotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                        <td className="text-right">{formatCurrency(printBill.subtotal)}</td>
                       </tr>
                       {printBill.discount_amount > 0 && (
                         <tr>
                           <td className="text-gray-600">Discount:</td>
-                          <td className="text-right">- ₹{printBill.discount_amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                          <td className="text-right">− {formatCurrency(printBill.discount_amount)}</td>
                         </tr>
                       )}
                       <tr>
                         <td className="text-gray-600">Taxable Amount:</td>
-                        <td className="text-right">₹{printBill.taxable_amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                        <td className="text-right">{formatCurrency(printBill.taxable_amount)}</td>
                       </tr>
                       <tr>
                         <td className="text-gray-600">GST ({printBill.gst_rate}%):</td>
-                        <td className="text-right">+ ₹{printBill.gst_amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                        <td className="text-right">+ {formatCurrency(printBill.gst_amount)}</td>
                       </tr>
                       {printBill.round_off !== 0 && (
                         <tr>
                           <td className="text-gray-600">Round Off:</td>
-                          <td className="text-right">₹{printBill.round_off.toFixed(2)}</td>
+                          <td className="text-right">{formatCurrency(printBill.round_off)}</td>
                         </tr>
                       )}
                       <tr className="total-bold">
                         <td>Grand Total:</td>
-                        <td className="text-right">₹{printBill.grand_total.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                        <td className="text-right">{formatCurrency(printBill.grand_total)}</td>
                       </tr>
                       <tr>
                         <td className="text-emerald font-bold">Amount Paid:</td>
                         <td className="text-right text-emerald font-bold">
-                          ₹{printBill.amount_paid.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                          {formatCurrency(printBill.amount_paid)}
                         </td>
                       </tr>
                       <tr>
                         <td className="text-amber-700 font-bold">Balance Payable:</td>
                         <td className="text-right text-amber-700 font-bold">
-                          ₹{printBill.balance_amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                          {formatCurrency(printBill.balance_amount)}
                         </td>
                       </tr>
                     </tbody>

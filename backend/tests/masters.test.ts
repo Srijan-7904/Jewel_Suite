@@ -235,7 +235,7 @@ describe('Jewel Suite Part 2: Masters & Core Business Data Tests', () => {
         purity_id: gold22.id,
         rate: 7350.0,
         unit: 'gram',
-        effective_from: '2026-10-05T00:00:00.000Z',
+        effective_from: new Date().toISOString(),
       });
 
       expect(newRateRecord.rate).toBe(7350.0);

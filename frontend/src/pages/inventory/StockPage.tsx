@@ -21,11 +21,82 @@ import {
   ArrowRightLeft,
   History,
   AlertCircle,
+  LayoutGrid,
+  List,
 } from 'lucide-react';
+import {
+  formatWeight,
+  formatFineWeight,
+  formatMetalRate,
+  formatPercentage,
+  formatCurrency,
+  toDecimal,
+  parseDecimalInput,
+} from '../../utils/precision';
+import Decimal from 'decimal.js';
 import '../../styles/masters.css';
 import './StockPage.css';
 
+// Metal Color & Showcase Styling Helper
+export const getMetalTheme = (metalCode?: string) => {
+  const code = (metalCode || '').toUpperCase();
+  if (code.includes('GOLD') || code.includes('AU')) {
+    return {
+      type: 'gold' as const,
+      label: 'Gold',
+      iconText: 'Au',
+      accentColor: '#B8860B',
+      badgeClass: 'metal-pill gold',
+      pillClass: 'tag-pill gold',
+      cardClass: 'showcase-card gold',
+    };
+  }
+  if (code.includes('SILVER') || code.includes('AG')) {
+    return {
+      type: 'silver' as const,
+      label: 'Silver',
+      iconText: 'Ag',
+      accentColor: '#475569',
+      badgeClass: 'metal-pill silver',
+      pillClass: 'tag-pill silver',
+      cardClass: 'showcase-card silver',
+    };
+  }
+  if (code.includes('PLATINUM') || code.includes('PT')) {
+    return {
+      type: 'platinum' as const,
+      label: 'Platinum',
+      iconText: 'Pt',
+      accentColor: '#4338CA',
+      badgeClass: 'metal-pill platinum',
+      pillClass: 'tag-pill platinum',
+      cardClass: 'showcase-card platinum',
+    };
+  }
+  if (code.includes('DIAMOND') || code.includes('GEM')) {
+    return {
+      type: 'diamond' as const,
+      label: 'Diamond',
+      iconText: 'Dia',
+      accentColor: '#0F766E',
+      badgeClass: 'metal-pill diamond',
+      pillClass: 'tag-pill diamond',
+      cardClass: 'showcase-card diamond',
+    };
+  }
+  return {
+    type: 'other' as const,
+    label: metalCode || 'Metal',
+    iconText: 'Mt',
+    accentColor: '#C2410C',
+    badgeClass: 'metal-pill other',
+    pillClass: 'tag-pill other',
+    cardClass: 'showcase-card other',
+  };
+};
+
 export const StockPage: React.FC = () => {
+  const [viewMode, setViewMode] = useState<'showcase' | 'table'>('showcase');
   const [stockItems, setStockItems] = useState<StockItem[]>([]);
   const [valuation, setValuation] = useState<StockValuationResponse | null>(null);
 
@@ -68,6 +139,8 @@ export const StockPage: React.FC = () => {
     tunch_percent: '',
     wastage_percent: '0',
     making_charge: '0',
+    making_charge_type: 'FIXED' as 'FIXED' | 'PER_PIECE' | 'PER_GRAM' | 'PERCENTAGE',
+    making_rate: '0',
     rate_per_gram: '',
     huid: '',
     notes: '',
@@ -126,16 +199,24 @@ export const StockPage: React.FC = () => {
 
   // Real-time Jewellery Calculations for Add Stock
   const liveCalculations = useMemo(() => {
-    const gross = parseFloat(addForm.gross_weight) || 0;
-    const less = parseFloat(addForm.less_weight) || 0;
-    const tunch = parseFloat(addForm.tunch_percent) || 0;
-    const rate = parseFloat(addForm.rate_per_gram) || 0;
+    try {
+      const grossD = toDecimal(addForm.gross_weight);
+      const lessD = toDecimal(addForm.less_weight);
+      const tunchD = toDecimal(addForm.tunch_percent);
+      const rateD = toDecimal(addForm.rate_per_gram);
 
-    const net = Math.max(0, Math.round((gross - less + Number.EPSILON) * 1000) / 1000);
-    const fine = Math.round(((net * tunch) / 100 + Number.EPSILON) * 10000) / 10000;
-    const metalVal = Math.round((fine * rate + Number.EPSILON) * 100) / 100;
+      const netD = grossD.gt(lessD) ? grossD.minus(lessD) : new Decimal(0);
+      const fineD = netD.mul(tunchD).div(100);
+      const metalValD = fineD.mul(rateD);
 
-    return { net, fine, metalVal };
+      return {
+        net: netD.toDecimalPlaces(3, Decimal.ROUND_HALF_UP).toNumber(),
+        fine: fineD.toDecimalPlaces(4, Decimal.ROUND_HALF_UP).toNumber(),
+        metalVal: metalValD.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber(),
+      };
+    } catch {
+      return { net: 0, fine: 0, metalVal: 0 };
+    }
   }, [addForm.gross_weight, addForm.less_weight, addForm.tunch_percent, addForm.rate_per_gram]);
 
   // Handle Product Select in Add Form (Auto-fills defaults)
@@ -244,6 +325,8 @@ export const StockPage: React.FC = () => {
       tunch_percent: defaultPurity && defaultPurity.tunch_percent !== null ? defaultPurity.tunch_percent.toString() : '91.67',
       wastage_percent: '0',
       making_charge: '0',
+      making_charge_type: 'FIXED',
+      making_rate: '0',
       rate_per_gram: defaultRate,
       huid: '',
       notes: '',
@@ -253,6 +336,33 @@ export const StockPage: React.FC = () => {
     setShowAddModal(true);
   };
 
+  const handleMakingChange = (rateStr: string, type: 'FIXED' | 'PER_PIECE' | 'PER_GRAM' | 'PERCENTAGE') => {
+    const rateDec = toDecimal(rateStr);
+    const gross = toDecimal(addForm.gross_weight);
+    const less = toDecimal(addForm.less_weight);
+    const net = Decimal.max(0, gross.minus(less));
+    const tunch = toDecimal(addForm.tunch_percent);
+    const rate = toDecimal(addForm.rate_per_gram);
+    const fine = net.times(tunch).dividedBy(100);
+    const metalVal = fine.times(rate);
+
+    let calculatedMaking = rateDec;
+    if (type === 'PER_GRAM') {
+      calculatedMaking = net.times(rateDec);
+    } else if (type === 'PERCENTAGE') {
+      calculatedMaking = metalVal.times(rateDec).dividedBy(100);
+    } else if (type === 'PER_PIECE' || type === 'FIXED') {
+      calculatedMaking = rateDec;
+    }
+
+    setAddForm((prev) => ({
+      ...prev,
+      making_charge_type: type,
+      making_rate: rateStr,
+      making_charge: calculatedMaking.toDecimalPlaces(2).toString(),
+    }));
+  };
+
   // Submit Add Stock
   const handleSaveStock = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -260,10 +370,10 @@ export const StockPage: React.FC = () => {
     setIsSubmitting(true);
 
     try {
-      const gross = parseFloat(addForm.gross_weight);
-      const less = parseFloat(addForm.less_weight) || 0;
-      const tunch = parseFloat(addForm.tunch_percent);
-      const rate = parseFloat(addForm.rate_per_gram) || 0;
+      const grossD = toDecimal(addForm.gross_weight);
+      const lessD = toDecimal(addForm.less_weight);
+      const tunchD = toDecimal(addForm.tunch_percent);
+      const rateD = toDecimal(addForm.rate_per_gram);
 
       if (!addForm.tag_no.trim()) {
         throw new Error('Tag number is required');
@@ -271,13 +381,13 @@ export const StockPage: React.FC = () => {
       if (!addForm.product_id) {
         throw new Error('Please select a product');
       }
-      if (isNaN(gross) || gross <= 0) {
+      if (grossD.lte(0)) {
         throw new Error('Gross weight must be greater than zero');
       }
-      if (less < 0 || less > gross) {
+      if (lessD.lt(0) || lessD.gt(grossD)) {
         throw new Error('Less weight cannot exceed gross weight');
       }
-      if (isNaN(tunch) || tunch < 0 || tunch > 100) {
+      if (tunchD.lt(0) || tunchD.gt(100)) {
         throw new Error('Tunch % must be between 0 and 100');
       }
 
@@ -286,12 +396,12 @@ export const StockPage: React.FC = () => {
         product_id: addForm.product_id,
         metal_id: addForm.metal_id,
         purity_id: addForm.purity_id,
-        gross_weight: gross,
-        less_weight: less,
-        tunch_percent: tunch,
-        wastage_percent: parseFloat(addForm.wastage_percent) || 0,
-        making_charge: parseFloat(addForm.making_charge) || 0,
-        rate_per_gram: rate,
+        gross_weight: grossD.toNumber(),
+        less_weight: lessD.toNumber(),
+        tunch_percent: tunchD.toNumber(),
+        wastage_percent: toDecimal(addForm.wastage_percent).toNumber(),
+        making_charge: toDecimal(addForm.making_charge).toNumber(),
+        rate_per_gram: rateD.toNumber(),
         huid: addForm.huid.trim() || undefined,
         notes: addForm.notes.trim() || undefined,
         acquisition_type: 'OPENING_STOCK',
@@ -396,15 +506,15 @@ export const StockPage: React.FC = () => {
           <div className="valuation-metric">
             <span className="valuation-label">Total Gross Weight</span>
             <span className="valuation-val font-mono">
-              {valuation?.total_gross_weight.toFixed(3) || '0.000'} <span className="text-sm font-normal">g</span>
+              {formatWeight(valuation?.total_gross_weight)} <span className="text-sm font-normal">g</span>
             </span>
-            <span className="valuation-sub font-mono">Net Wt: {valuation?.total_net_weight.toFixed(3) || '0.000'} g</span>
+            <span className="valuation-sub font-mono">Net Wt: {formatWeight(valuation?.total_net_weight)} g</span>
           </div>
 
           <div className="valuation-metric">
             <span className="valuation-label">Total Fine Bullion Wt</span>
             <span className="valuation-val gold font-mono">
-              {valuation?.total_fine_weight.toFixed(4) || '0.0000'} <span className="text-sm font-normal">g</span>
+              {formatFineWeight(valuation?.total_fine_weight)} <span className="text-sm font-normal">g</span>
             </span>
             <span className="valuation-sub">Calculated via Tunch %</span>
           </div>
@@ -413,15 +523,81 @@ export const StockPage: React.FC = () => {
         {/* Metal & Purity Breakdown Pills */}
         {valuation && valuation.groups.length > 0 && (
           <div className="valuation-groups">
-            {valuation.groups.map((g) => (
-              <div key={`${g.metal_code}_${g.purity_code}`} className="group-pill font-mono">
-                <span className="group-pill-name">{g.metal_name} {g.purity_code}</span>
-                <span className="group-pill-weight">{g.item_count} pcs • {g.fine_weight.toFixed(3)}g fine</span>
-                <span className="group-pill-val">₹{g.current_valuation.toLocaleString('en-IN', { minimumFractionDigits: 0 })}</span>
-              </div>
-            ))}
+            {valuation.groups.map((g) => {
+              const theme = getMetalTheme(g.metal_code);
+              return (
+                <div key={`${g.metal_code}_${g.purity_code}`} className={`group-pill ${theme.type} font-mono`}>
+                  <span className="group-pill-name">{g.metal_name} {g.purity_code}</span>
+                  <span className="group-pill-weight">{g.item_count} pcs • {formatFineWeight(g.fine_weight)}g fine</span>
+                  <span className="group-pill-val">{formatCurrency(g.current_valuation)}</span>
+                </div>
+              );
+            })}
           </div>
         )}
+      </div>
+
+      {/* Quick Metal Showcase Filter Tabs */}
+      <div className="showcase-metal-tabs">
+        <button
+          type="button"
+          className={`metal-tab-pill ${metalFilter === 'ALL' ? 'active' : ''}`}
+          onClick={() => {
+            setMetalFilter('ALL');
+            setPage(1);
+          }}
+        >
+          <span>All Showcase Items</span>
+          <span className="metal-tab-count font-mono">{valuation?.total_items || total}</span>
+        </button>
+        <button
+          type="button"
+          className={`metal-tab-pill gold ${metalFilter === 'GOLD' ? 'active' : ''}`}
+          onClick={() => {
+            setMetalFilter(metalFilter === 'GOLD' ? 'ALL' : 'GOLD');
+            setPage(1);
+          }}
+        >
+          <span className="metal-tab-dot gold"></span>
+          <span>✦ Gold Showcase</span>
+          <span className="metal-tab-count font-mono">
+            {valuation?.groups
+              ?.filter((g) => g.metal_code === 'GOLD')
+              .reduce((acc, curr) => acc + curr.item_count, 0) || 0}
+          </span>
+        </button>
+        <button
+          type="button"
+          className={`metal-tab-pill silver ${metalFilter === 'SILVER' ? 'active' : ''}`}
+          onClick={() => {
+            setMetalFilter(metalFilter === 'SILVER' ? 'ALL' : 'SILVER');
+            setPage(1);
+          }}
+        >
+          <span className="metal-tab-dot silver"></span>
+          <span>◈ Silver Showcase</span>
+          <span className="metal-tab-count font-mono">
+            {valuation?.groups
+              ?.filter((g) => g.metal_code === 'SILVER')
+              .reduce((acc, curr) => acc + curr.item_count, 0) || 0}
+          </span>
+        </button>
+        <button
+          type="button"
+          className={`metal-tab-pill platinum ${metalFilter === 'PLATINUM' ? 'active' : ''}`}
+          onClick={() => {
+            setMetalFilter(metalFilter === 'PLATINUM' ? 'ALL' : 'PLATINUM');
+            setPage(1);
+          }}
+        >
+          <span className="metal-tab-dot platinum"></span>
+          <span>❖ Platinum Showcase</span>
+          <span className="metal-tab-count font-mono">
+            {valuation?.groups
+              ?.filter((g) => g.metal_code === 'PLATINUM')
+              .reduce((acc, curr) => acc + curr.item_count, 0) || 0}
+          </span>
+        </button>
       </div>
 
       {/* Filter and Action Bar */}
@@ -504,124 +680,268 @@ export const StockPage: React.FC = () => {
           </select>
         </div>
 
-        <button type="button" className="btn btn-primary" onClick={handleOpenAdd}>
-          <Plus size={16} />
-          <span>Add Stock Item</span>
-        </button>
+        <div className="flex items-center gap-2">
+          {/* View Mode Toggle: Showcase Cards vs Table */}
+          <div className="view-mode-toggle">
+            <button
+              type="button"
+              className={`view-mode-btn ${viewMode === 'showcase' ? 'active' : ''}`}
+              onClick={() => setViewMode('showcase')}
+              title="Showcase Tray Display Grid"
+            >
+              <LayoutGrid size={15} />
+              <span>Showcase</span>
+            </button>
+            <button
+              type="button"
+              className={`view-mode-btn ${viewMode === 'table' ? 'active' : ''}`}
+              onClick={() => setViewMode('table')}
+              title="Detailed Table View"
+            >
+              <List size={15} />
+              <span>Table</span>
+            </button>
+          </div>
+
+          <button type="button" className="btn btn-primary" onClick={handleOpenAdd}>
+            <Plus size={16} />
+            <span>Add Stock Item</span>
+          </button>
+        </div>
       </div>
 
-      {/* Main Stock Table */}
-      <div className="masters-table-wrapper">
-        <table className="masters-table">
-          <thead>
-            <tr>
-              <th>Tag No</th>
-              <th>Product</th>
-              <th>Metal & Purity</th>
-              <th className="text-right">Gross Wt</th>
-              <th className="text-right">Net Wt</th>
-              <th className="text-right">Tunch %</th>
-              <th className="text-right">Fine Wt</th>
-              <th className="text-right">Rate/g</th>
-              <th className="text-right">Metal Value</th>
-              <th className="text-right">Live Valuation</th>
-              <th className="text-center">Status</th>
-              <th className="text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {isLoading ? (
-              <tr>
-                <td colSpan={12} className="table-empty font-mono">
-                  Loading jewellery stock records...
-                </td>
-              </tr>
-            ) : stockItems.length === 0 ? (
-              <tr>
-                <td colSpan={12} className="table-empty py-12">
-                  <div className="flex flex-col items-center justify-center">
-                    <Boxes size={48} className="text-muted mb-3 opacity-40" />
-                    <p className="text-secondary font-medium">No jewellery stock items found.</p>
-                    <p className="text-muted text-xs mt-1">
-                      Add your first jewellery piece with Tag, Gross, Less, and Tunch to start managing inventory.
-                    </p>
-                    <button type="button" className="btn btn-primary btn-sm mt-4" onClick={handleOpenAdd}>
-                      <Plus size={14} />
-                      <span>Add First Stock Item</span>
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ) : (
-              stockItems.map((item) => (
-                <tr key={item.id}>
-                  <td>
-                    <span className="tag-pill">{item.tag_no}</span>
-                    {item.huid && (
-                      <div className="text-xs text-muted font-mono mt-0.5">HUID: {item.huid}</div>
-                    )}
-                  </td>
-                  <td>
-                    <div className="font-medium text-primary">{item.product_name}</div>
-                    <div className="text-xs text-muted">{item.category_name}</div>
-                  </td>
-                  <td>
-                    <div className="font-mono text-sm text-gold">
-                      {item.metal_code} • {item.purity_code}
+      {/* Main Stock Content: Showcase View OR Table View */}
+      {viewMode === 'showcase' ? (
+        <div className="stock-showcase-container mb-4">
+          {isLoading ? (
+            <div className="table-empty font-mono py-12 text-center">
+              Loading jewellery showcase inventory...
+            </div>
+          ) : stockItems.length === 0 ? (
+            <div className="table-empty py-12 text-center">
+              <Boxes size={48} className="text-muted mb-3 opacity-40 mx-auto" />
+              <p className="text-secondary font-medium">No jewellery stock items found in showcase.</p>
+              <p className="text-muted text-xs mt-1">
+                Add your first jewellery piece with Tag, Gross, Less, and Tunch to start managing inventory.
+              </p>
+              <button type="button" className="btn btn-primary btn-sm mt-4" onClick={handleOpenAdd}>
+                <Plus size={14} />
+                <span>Add First Stock Item</span>
+              </button>
+            </div>
+          ) : (
+            <div className="stock-showcase-grid">
+              {stockItems.map((item) => {
+                const theme = getMetalTheme(item.metal_code);
+                return (
+                  <div key={item.id} className={`showcase-card ${theme.type}`}>
+                    <div className="showcase-header">
+                      <div className="showcase-metal-badge-group">
+                        <span className={`showcase-metal-icon ${theme.type}`}>
+                          {theme.iconText}
+                        </span>
+                        <span className={`tag-pill ${theme.type}`}>{item.tag_no}</span>
+                      </div>
+                      <span className={`status-badge ${item.status.toLowerCase()}`}>
+                        {item.status.replace('_', ' ')}
+                      </span>
                     </div>
+
+                    <div className="showcase-body">
+                      <div className="showcase-title-row">
+                        <div>
+                          <h4 className="showcase-product-name">{item.product_name}</h4>
+                          <span className="showcase-cat-name">{item.category_name}</span>
+                        </div>
+                        <span className={`metal-pill ${theme.type}`}>
+                          {item.metal_code} • {item.purity_code}
+                        </span>
+                      </div>
+
+                      <div className="showcase-specs-table">
+                        <div className="showcase-spec-item">
+                          <span className="showcase-spec-label">Gross Wt</span>
+                          <span className="showcase-spec-val">{formatWeight(item.gross_weight)}g</span>
+                        </div>
+                        <div className="showcase-spec-item">
+                          <span className="showcase-spec-label">Net Wt</span>
+                          <span className="showcase-spec-val">{formatWeight(item.net_weight)}g</span>
+                        </div>
+                        <div className="showcase-spec-item">
+                          <span className="showcase-spec-label">Tunch / Touch</span>
+                          <span className="showcase-spec-val font-mono">{formatPercentage(item.tunch_percent)}</span>
+                        </div>
+                        <div className="showcase-spec-item">
+                          <span className="showcase-spec-label">Fine Metal Wt</span>
+                          <span className={`showcase-spec-val text-fine-${theme.type}`}>
+                            {formatFineWeight(item.fine_weight)}g
+                          </span>
+                        </div>
+                      </div>
+
+                      {item.huid && (
+                        <div className="showcase-huid-row font-mono text-xs text-muted">
+                          <span>HUID:</span>
+                          <span className="font-semibold text-main">{item.huid}</span>
+                        </div>
+                      )}
+
+                      <div className="showcase-val-row">
+                        <span className="showcase-val-label">Live Valuation:</span>
+                        <span className="showcase-val-amount font-mono">
+                          {formatCurrency(item.current_valuation || item.metal_value)}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="showcase-footer">
+                      <div className="text-xs text-muted font-mono">
+                        @ {formatMetalRate(item.rate_per_gram)}
+                      </div>
+                      <div className="flex gap-1.5">
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-xs"
+                          onClick={() => handleOpenDetail(item)}
+                          title="View Full Item Details & History"
+                        >
+                          <Eye size={12} />
+                          <span>Details</span>
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-outline btn-xs"
+                          onClick={() => handleOpenStatus(item)}
+                          title="Transfer / Change Stock Status"
+                        >
+                          <ArrowRightLeft size={12} />
+                          <span>Status</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      ) : (
+        /* Main Stock Table */
+        <div className="masters-table-wrapper">
+          <table className="masters-table">
+            <thead>
+              <tr>
+                <th>Tag No</th>
+                <th>Product</th>
+                <th>Metal & Purity</th>
+                <th className="text-right">Gross Wt</th>
+                <th className="text-right">Net Wt</th>
+                <th className="text-right">Tunch %</th>
+                <th className="text-right">Fine Wt</th>
+                <th className="text-right">Rate/g</th>
+                <th className="text-right">Metal Value</th>
+                <th className="text-right">Live Valuation</th>
+                <th className="text-center">Status</th>
+                <th className="text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {isLoading ? (
+                <tr>
+                  <td colSpan={12} className="table-empty font-mono">
+                    Loading jewellery stock records...
                   </td>
-                  <td className="text-right font-mono font-medium">
-                    {item.gross_weight.toFixed(3)}g
-                  </td>
-                  <td className="text-right font-mono">
-                    {item.net_weight.toFixed(3)}g
-                  </td>
-                  <td className="text-right font-mono text-muted">
-                    {item.tunch_percent.toFixed(2)}%
-                  </td>
-                  <td className="text-right font-mono font-bold text-gold">
-                    {item.fine_weight.toFixed(4)}g
-                  </td>
-                  <td className="text-right font-mono text-muted text-xs">
-                    ₹{item.rate_per_gram.toLocaleString('en-IN')}
-                  </td>
-                  <td className="text-right font-mono">
-                    ₹{item.metal_value.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                  </td>
-                  <td className="text-right font-mono font-bold text-emerald">
-                    ₹{(item.current_valuation || item.metal_value).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                  </td>
-                  <td className="text-center">
-                    <span className={`status-badge ${item.status.toLowerCase()}`}>
-                      {item.status.replace('_', ' ')}
-                    </span>
-                  </td>
-                  <td className="text-right">
-                    <div className="table-actions">
-                      <button
-                        type="button"
-                        className="btn-icon"
-                        title="View Full Item Details & History"
-                        onClick={() => handleOpenDetail(item)}
-                      >
-                        <Eye size={15} />
-                      </button>
-                      <button
-                        type="button"
-                        className="btn-icon"
-                        title="Change Status / Send to Karigar or Repair"
-                        onClick={() => handleOpenStatus(item)}
-                      >
-                        <ArrowRightLeft size={15} />
+                </tr>
+              ) : stockItems.length === 0 ? (
+                <tr>
+                  <td colSpan={12} className="table-empty py-12">
+                    <div className="flex flex-col items-center justify-center">
+                      <Boxes size={48} className="text-muted mb-3 opacity-40" />
+                      <p className="text-secondary font-medium">No jewellery stock items found.</p>
+                      <p className="text-muted text-xs mt-1">
+                        Add your first jewellery piece with Tag, Gross, Less, and Tunch to start managing inventory.
+                      </p>
+                      <button type="button" className="btn btn-primary btn-sm mt-4" onClick={handleOpenAdd}>
+                        <Plus size={14} />
+                        <span>Add First Stock Item</span>
                       </button>
                     </div>
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+              ) : (
+                stockItems.map((item) => {
+                  const theme = getMetalTheme(item.metal_code);
+                  return (
+                    <tr key={item.id} className={`stock-row metal-${theme.type}`}>
+                      <td>
+                        <span className={`tag-pill ${theme.type}`}>{item.tag_no}</span>
+                        {item.huid && (
+                          <div className="text-xs text-muted font-mono mt-0.5">HUID: {item.huid}</div>
+                        )}
+                      </td>
+                      <td>
+                        <div className="font-medium text-main">{item.product_name}</div>
+                        <div className="text-xs text-muted">{item.category_name}</div>
+                      </td>
+                      <td>
+                        <span className={`metal-pill ${theme.type}`}>
+                          {item.metal_code} • {item.purity_code}
+                        </span>
+                      </td>
+                      <td className="text-right font-mono font-medium">
+                        {formatWeight(item.gross_weight)}g
+                      </td>
+                      <td className="text-right font-mono">
+                        {formatWeight(item.net_weight)}g
+                      </td>
+                      <td className="text-right font-mono text-muted">
+                        {formatPercentage(item.tunch_percent)}
+                      </td>
+                      <td className={`text-right font-mono font-bold text-fine-${theme.type}`}>
+                        {formatFineWeight(item.fine_weight)}g
+                      </td>
+                      <td className="text-right font-mono text-muted text-xs">
+                        {formatMetalRate(item.rate_per_gram)}
+                      </td>
+                      <td className="text-right font-mono">
+                        {formatCurrency(item.metal_value)}
+                      </td>
+                      <td className="text-right font-mono font-bold text-emerald">
+                        {formatCurrency(item.current_valuation || item.metal_value)}
+                      </td>
+                      <td className="text-center">
+                        <span className={`status-badge ${item.status.toLowerCase()}`}>
+                          {item.status.replace('_', ' ')}
+                        </span>
+                      </td>
+                      <td className="text-right">
+                        <div className="table-actions">
+                          <button
+                            type="button"
+                            className="btn-icon"
+                            title="View Full Item Details & History"
+                            onClick={() => handleOpenDetail(item)}
+                          >
+                            <Eye size={15} />
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-icon"
+                            title="Transfer / Change Stock Status"
+                            onClick={() => handleOpenStatus(item)}
+                          >
+                            <ArrowRightLeft size={15} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* Pagination Bar */}
       {totalPages > 1 && (
@@ -754,14 +1074,13 @@ export const StockPage: React.FC = () => {
                       Gross Weight (g) <span className="text-gold">*</span>
                     </label>
                     <input
-                      type="number"
-                      step="0.001"
-                      min="0.001"
+                      type="text"
+                      inputMode="decimal"
                       className="form-input font-mono font-medium"
                       required
                       placeholder="0.000"
                       value={addForm.gross_weight}
-                      onChange={(e) => setAddForm({ ...addForm, gross_weight: e.target.value })}
+                      onChange={(e) => setAddForm({ ...addForm, gross_weight: parseDecimalInput(e.target.value, 3) })}
                     />
                   </div>
 
@@ -769,13 +1088,12 @@ export const StockPage: React.FC = () => {
                   <div className="form-group">
                     <label className="form-label">Less Weight / Stones (g)</label>
                     <input
-                      type="number"
-                      step="0.001"
-                      min="0"
+                      type="text"
+                      inputMode="decimal"
                       className="form-input font-mono"
                       placeholder="0.000"
                       value={addForm.less_weight}
-                      onChange={(e) => setAddForm({ ...addForm, less_weight: e.target.value })}
+                      onChange={(e) => setAddForm({ ...addForm, less_weight: parseDecimalInput(e.target.value, 3) })}
                     />
                   </div>
 
@@ -785,15 +1103,13 @@ export const StockPage: React.FC = () => {
                       Purity Tunch % <span className="text-gold">*</span>
                     </label>
                     <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      max="100"
+                      type="text"
+                      inputMode="decimal"
                       className="form-input font-mono"
                       required
                       placeholder="e.g. 91.67"
                       value={addForm.tunch_percent}
-                      onChange={(e) => setAddForm({ ...addForm, tunch_percent: e.target.value })}
+                      onChange={(e) => setAddForm({ ...addForm, tunch_percent: parseDecimalInput(e.target.value, 2) })}
                     />
                   </div>
 
@@ -801,41 +1117,64 @@ export const StockPage: React.FC = () => {
                   <div className="form-group">
                     <label className="form-label">Acquisition Rate / gram (₹)</label>
                     <input
-                      type="number"
-                      step="0.01"
-                      min="0"
+                      type="text"
+                      inputMode="decimal"
                       className="form-input font-mono"
                       placeholder="7250.00"
                       value={addForm.rate_per_gram}
-                      onChange={(e) => setAddForm({ ...addForm, rate_per_gram: e.target.value })}
+                      onChange={(e) => setAddForm({ ...addForm, rate_per_gram: parseDecimalInput(e.target.value, 2) })}
                     />
                   </div>
 
                   {/* Making Charge */}
                   <div className="form-group">
-                    <label className="form-label">Making Charge (₹)</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      className="form-input font-mono"
-                      placeholder="0.00"
-                      value={addForm.making_charge}
-                      onChange={(e) => setAddForm({ ...addForm, making_charge: e.target.value })}
-                    />
+                    <label className="form-label flex items-center justify-between">
+                      <span>Making Charge</span>
+                      <span className="text-xs text-gold font-mono">
+                        ₹{toDecimal(addForm.making_charge).toFixed(2)}
+                      </span>
+                    </label>
+                    <div className="flex gap-2">
+                      <select
+                        className="form-select font-mono text-xs w-28"
+                        value={addForm.making_charge_type}
+                        onChange={(e) => handleMakingChange(addForm.making_rate, e.target.value as any)}
+                        title="Making Charge Mode: /g (Per Gram), /pc (Per Piece), Fix (Fixed Amount), or % (Percentage)"
+                      >
+                        <option value="PER_GRAM">/g (Per Gram)</option>
+                        <option value="PER_PIECE">/pc (Per Piece)</option>
+                        <option value="FIXED">Fix (Fixed)</option>
+                        <option value="PERCENTAGE">% (Percent)</option>
+                      </select>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        className="form-input font-mono flex-1"
+                        placeholder={
+                          addForm.making_charge_type === 'PER_PIECE'
+                            ? '₹/pc'
+                            : addForm.making_charge_type === 'FIXED'
+                            ? '₹ Fix'
+                            : addForm.making_charge_type === 'PERCENTAGE'
+                            ? '%'
+                            : '₹/g'
+                        }
+                        value={addForm.making_rate}
+                        onChange={(e) => handleMakingChange(parseDecimalInput(e.target.value, 2), addForm.making_charge_type)}
+                      />
+                    </div>
                   </div>
 
                   {/* Wastage % */}
                   <div className="form-group">
                     <label className="form-label">Wastage %</label>
                     <input
-                      type="number"
-                      step="0.1"
-                      min="0"
+                      type="text"
+                      inputMode="decimal"
                       className="form-input font-mono"
                       placeholder="0.0"
                       value={addForm.wastage_percent}
-                      onChange={(e) => setAddForm({ ...addForm, wastage_percent: e.target.value })}
+                      onChange={(e) => setAddForm({ ...addForm, wastage_percent: parseDecimalInput(e.target.value, 2) })}
                     />
                   </div>
 
@@ -868,16 +1207,16 @@ export const StockPage: React.FC = () => {
                 <div className="calc-preview-bar">
                   <div className="calc-box">
                     <span className="calc-box-label">Calculated Net Weight</span>
-                    <span className="calc-box-val net">{liveCalculations.net.toFixed(3)} g</span>
+                    <span className="calc-box-val net">{formatWeight(liveCalculations.net)} g</span>
                   </div>
                   <div className="calc-box">
                     <span className="calc-box-label">Calculated Fine Weight</span>
-                    <span className="calc-box-val fine">{liveCalculations.fine.toFixed(4)} g</span>
+                    <span className="calc-box-val fine">{formatFineWeight(liveCalculations.fine)} g</span>
                   </div>
                   <div className="calc-box">
                     <span className="calc-box-label">Calculated Metal Value</span>
                     <span className="calc-box-val value">
-                      ₹{liveCalculations.metalVal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      {formatCurrency(liveCalculations.metalVal)}
                     </span>
                   </div>
                 </div>
@@ -902,7 +1241,9 @@ export const StockPage: React.FC = () => {
           <div className="modal-content modal-lg">
             <div className="modal-header">
               <div className="flex items-center gap-3">
-                <span className="tag-pill font-mono">{selectedItem.tag_no}</span>
+                <span className={`tag-pill ${getMetalTheme(selectedItem.metal_code).type} font-mono`}>
+                  {selectedItem.tag_no}
+                </span>
                 <h3 className="modal-title font-serif">{selectedItem.product_name}</h3>
                 <span className={`status-badge ${selectedItem.status.toLowerCase()}`}>
                   {selectedItem.status.replace('_', ' ')}
@@ -928,7 +1269,9 @@ export const StockPage: React.FC = () => {
                   </div>
                   <div className="detail-row">
                     <span className="detail-row-label">Purity</span>
-                    <span className="detail-row-value text-gold">{selectedItem.purity_name}</span>
+                    <span className={`detail-row-value font-bold text-fine-${getMetalTheme(selectedItem.metal_code).type}`}>
+                      {selectedItem.purity_name}
+                    </span>
                   </div>
                   <div className="detail-row">
                     <span className="detail-row-label">HUID</span>
@@ -946,26 +1289,26 @@ export const StockPage: React.FC = () => {
                   <div className="detail-card-title">Weight Accounting</div>
                   <div className="detail-row">
                     <span className="detail-row-label">Gross Weight</span>
-                    <span className="detail-row-value font-mono">{selectedItem.gross_weight.toFixed(3)}g</span>
+                    <span className="detail-row-value font-mono">{formatWeight(selectedItem.gross_weight)}g</span>
                   </div>
                   <div className="detail-row">
                     <span className="detail-row-label">Less Weight</span>
-                    <span className="detail-row-value font-mono">{selectedItem.less_weight.toFixed(3)}g</span>
+                    <span className="detail-row-value font-mono">{formatWeight(selectedItem.less_weight)}g</span>
                   </div>
                   <div className="detail-row">
                     <span className="detail-row-label">Net Weight</span>
                     <span className="detail-row-value font-mono text-primary font-bold">
-                      {selectedItem.net_weight.toFixed(3)}g
+                      {formatWeight(selectedItem.net_weight)}g
                     </span>
                   </div>
                   <div className="detail-row">
                     <span className="detail-row-label">Tunch %</span>
-                    <span className="detail-row-value font-mono">{selectedItem.tunch_percent.toFixed(2)}%</span>
+                    <span className="detail-row-value font-mono">{formatPercentage(selectedItem.tunch_percent)}</span>
                   </div>
                   <div className="detail-row">
                     <span className="detail-row-label">Fine Weight</span>
                     <span className="detail-row-value font-mono text-gold font-bold">
-                      {selectedItem.fine_weight.toFixed(4)}g
+                      {formatFineWeight(selectedItem.fine_weight)}g
                     </span>
                   </div>
                 </div>
@@ -1034,8 +1377,8 @@ export const StockPage: React.FC = () => {
                           </div>
                           <div className="movement-details font-mono">
                             <span>Status: {mov.from_status || 'INITIAL'} → <strong className="text-gold">{mov.to_status}</strong></span>
-                            <span>Net: {mov.net_weight.toFixed(3)}g</span>
-                            <span>Fine: {mov.fine_weight.toFixed(4)}g</span>
+                            <span>Net: {formatWeight(mov.net_weight)}g</span>
+                            <span>Fine: {formatFineWeight(mov.fine_weight)}g</span>
                             {mov.created_by_username && <span>By: {mov.created_by_username}</span>}
                           </div>
                           {mov.notes && (
@@ -1083,7 +1426,7 @@ export const StockPage: React.FC = () => {
 
                 <div className="p-3 bg-secondary rounded mb-4 text-xs font-mono">
                   <div>Current Status: <strong className="text-gold">{selectedItem.status}</strong></div>
-                  <div>Product: {selectedItem.product_name} ({selectedItem.net_weight.toFixed(3)}g net)</div>
+                  <div>Product: {selectedItem.product_name} ({formatWeight(selectedItem.net_weight)}g net)</div>
                 </div>
 
                 <div className="form-group mb-3">

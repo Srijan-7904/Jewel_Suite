@@ -1,0 +1,629 @@
+/* frontend/src/pages/billing/KarigarBillsPage.css */
+
+.karigar-bills-container {
+  padding: 1.5rem;
+  max-width: 1750px;
+  margin: 0 auto;
+}
+
+/* Toast */
+.karigar-toast {
+  position: fixed;
+  top: 1.5rem;
+  right: 1.5rem;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1.25rem;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+  animation: slideInDown 0.3s ease-out;
+}
+
+.karigar-toast.success {
+  background: #064e3b;
+  color: #a7f3d0;
+  border: 1px solid #059669;
+}
+
+.karigar-toast.error {
+  background: #7f1d1d;
+  color: #fecaca;
+  border: 1px solid #dc2626;
+}
+
+@keyframes slideInDown {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Header */
+.karigar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+}
+
+.karigar-header-left {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.karigar-icon-box {
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  background: rgba(212, 175, 55, 0.1);
+  border: 1px solid rgba(212, 175, 55, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.karigar-icon-box .gold {
+  color: var(--color-gold, #d4af37);
+}
+
+.karigar-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--color-gold, #d4af37);
+  letter-spacing: 0.5px;
+}
+
+.karigar-subtitle {
+  font-size: 0.82rem;
+  color: var(--color-text-muted, #94a3b8);
+  margin-top: 0.2rem;
+}
+
+.karigar-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+/* Metrics Banner */
+.karigar-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1.25rem;
+  margin-bottom: 1.5rem;
+}
+
+.karigar-metric-card {
+  background: linear-gradient(135deg, #FFFDF8 0%, #F5EEDC 100%);
+  border: 1px solid var(--gold-border);
+  border-radius: 10px;
+  padding: 1.1rem 1.25rem;
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.2s, border-color 0.2s;
+}
+
+.karigar-metric-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--gold-primary);
+}
+
+.karigar-metric-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 0.35rem;
+}
+
+.karigar-metric-val {
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.karigar-metric-val.emerald {
+  color: var(--success);
+}
+
+.karigar-metric-val.amber {
+  color: var(--warning);
+}
+
+.karigar-metric-sub {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  margin-top: 0.3rem;
+}
+
+/* Toolbar */
+.karigar-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  padding: 0.85rem 1.1rem;
+  margin-bottom: 1.25rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.karigar-toolbar .search-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 280px;
+}
+
+.karigar-toolbar .search-icon {
+  position: absolute;
+  left: 0.85rem;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.karigar-toolbar .search-box input {
+  width: 100%;
+  padding: 0.55rem 2.2rem 0.55rem 2.4rem;
+  background: var(--bg-input);
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  color: var(--text-main);
+  font-size: 0.82rem;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.karigar-toolbar .search-box input:focus {
+  border-color: var(--gold-primary);
+  box-shadow: 0 0 0 2px var(--gold-subtle);
+}
+
+.clear-search-btn {
+  position: absolute;
+  right: 0.75rem;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.karigar-toolbar .filter-group {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.karigar-toolbar .filter-select {
+  background: var(--bg-input);
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  color: var(--text-main);
+  font-size: 0.82rem;
+  padding: 0.55rem 0.85rem;
+  outline: none;
+  cursor: pointer;
+}
+
+.karigar-toolbar .filter-select option {
+  background: var(--bg-surface);
+  color: var(--text-main);
+}
+
+.date-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.date-input {
+  background: var(--bg-input);
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  color: var(--text-main);
+  font-size: 0.8rem;
+  padding: 0.45rem 0.65rem;
+  outline: none;
+}
+
+/* Table Card */
+.karigar-table-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+
+.table-responsive {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.karigar-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+
+.karigar-table thead {
+  background: var(--bg-surface-hover);
+  border-bottom: 1px solid var(--border-default);
+}
+
+.karigar-table th {
+  padding: 0.85rem 0.85rem;
+  text-align: left;
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.72rem;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.karigar-table td {
+  padding: 0.75rem 0.85rem;
+  border-bottom: 1px solid var(--border-subtle);
+  vertical-align: middle;
+  color: var(--text-main);
+}
+
+.karigar-row:hover {
+  background: var(--bg-surface-hover);
+}
+
+/* Badges */
+.tag-pill {
+  display: inline-block;
+  padding: 0.2rem 0.55rem;
+  border-radius: 4px;
+  background: var(--gold-subtle);
+  border: 1px solid var(--gold-border);
+  color: var(--gold-primary);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.job-type-badge {
+  display: inline-block;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  background: var(--bg-surface-hover);
+  border: 1px solid var(--border-default);
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+/* Status Pill */
+.status-pill {
+  display: inline-block;
+  padding: 0.2rem 0.6rem;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.status-pill.completed {
+  background: var(--success-bg);
+  color: var(--success);
+  border: 1px solid rgba(13, 130, 82, 0.3);
+}
+
+.status-pill.returned {
+  background: var(--info-bg);
+  color: var(--info);
+  border: 1px solid rgba(29, 111, 184, 0.3);
+}
+
+.status-pill.in_progress {
+  background: var(--warning-bg);
+  color: var(--warning);
+  border: 1px solid rgba(194, 120, 3, 0.3);
+}
+
+.status-pill.issued {
+  background: rgba(124, 58, 237, 0.12);
+  color: #7C3AED;
+  border: 1px solid rgba(124, 58, 237, 0.3);
+}
+
+.status-pill.draft {
+  background: var(--gold-subtle);
+  color: var(--text-muted);
+  border: 1px solid var(--border-default);
+}
+
+.status-pill.cancelled {
+  background: var(--danger-bg);
+  color: var(--danger);
+  border: 1px solid rgba(220, 38, 38, 0.3);
+}
+
+/* Action Icons */
+.table-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.35rem;
+}
+
+.btn-icon {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: 4px;
+  color: var(--text-muted);
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-icon:hover {
+  background: var(--bg-surface-hover);
+  color: var(--text-main);
+  border-color: var(--gold-primary);
+}
+
+.btn-icon.text-gold {
+  color: var(--gold-primary);
+}
+
+.btn-icon.text-gold:hover {
+  background: var(--gold-subtle);
+  border-color: var(--gold-primary);
+}
+
+/* Empty State */
+.empty-registry-state {
+  text-align: center;
+  padding: 3rem 1.5rem;
+}
+
+.empty-registry-state h4 {
+  color: var(--gold-primary);
+  font-size: 1.15rem;
+  margin-top: 0.5rem;
+}
+
+.empty-registry-state p {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  max-width: 480px;
+  margin: 0.5rem auto 1.25rem;
+  line-height: 1.5;
+}
+
+/* Pagination */
+.karigar-pagination {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.85rem 1.25rem;
+  background: var(--bg-surface-hover);
+  border-top: 1px solid var(--border-subtle);
+}
+
+/* Modals */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(33, 29, 23, 0.45);
+  backdrop-filter: blur(4px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+}
+
+.modal-dialog {
+  background: var(--bg-surface);
+  border: 1px solid var(--gold-border);
+  border-radius: 12px;
+  width: 100%;
+  max-width: 600px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: var(--shadow-lg), var(--shadow-gold);
+}
+
+.modal-dialog.print-modal-dialog {
+  max-width: 860px;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-surface-hover);
+}
+
+.modal-title {
+  font-size: 1.1rem;
+  color: var(--gold-primary);
+  margin: 0;
+}
+
+.close-btn {
+  background: transparent;
+  border: none;
+  font-size: 1.5rem;
+  line-height: 1;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.close-btn:hover {
+  color: var(--text-main);
+}
+
+.modal-body {
+  padding: 1.5rem;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+}
+
+/* Form Styles */
+.form-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.form-group {
+  margin-bottom: 1rem;
+}
+
+.form-group label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  margin-bottom: 0.4rem;
+}
+
+.form-control {
+  width: 100%;
+  padding: 0.55rem 0.75rem;
+  background: var(--bg-input);
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  color: var(--text-main);
+  font-size: 0.85rem;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.form-control:focus {
+  border-color: var(--gold-primary);
+  box-shadow: 0 0 0 2px var(--gold-subtle);
+}
+
+/* Printable Labour Voucher */
+.printable-labour-voucher {
+  background: #ffffff;
+  color: #111827;
+  padding: 2.25rem;
+  border-radius: 0 0 12px 12px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.voucher-shop-header {
+  border-bottom: 2px solid #e5e7eb;
+}
+
+.voucher-shop-header h2 {
+  color: #b45309;
+  margin-bottom: 0.25rem;
+}
+
+.voucher-meta-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.print-items-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+  margin-top: 0.5rem;
+}
+
+.print-items-table th {
+  background: #f3f4f6;
+  color: #374151;
+  padding: 0.6rem 0.5rem;
+  border: 1px solid #e5e7eb;
+  font-weight: 600;
+  text-align: left;
+}
+
+.print-items-table td {
+  padding: 0.5rem;
+  border: 1px solid #e5e7eb;
+  color: #1f2937;
+}
+
+.voucher-totals-grid {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 2rem;
+  border-top: 2px solid #e5e7eb;
+}
+
+.voucher-signatures .sig-line {
+  height: 1px;
+  background: #374151;
+  width: 80%;
+  margin: 0 auto;
+}
+
+/* Print Media Query */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .print-modal-backdrop,
+  .print-modal-dialog,
+  .printable-labour-voucher,
+  .printable-labour-voucher * {
+    visibility: visible;
+  }
+  .print-modal-backdrop {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    background: transparent !important;
+  }
+  .print-modal-dialog {
+    border: none !important;
+    box-shadow: none !important;
+    max-width: 100% !important;
+    width: 100% !important;
+  }
+  .printable-labour-voucher {
+    padding: 0 !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+}

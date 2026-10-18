@@ -4,7 +4,9 @@ import { stockMovementRepository, StockMovementRecord, MovementQueryParams } fro
 import { productRepository } from '../repositories/product.repository.js';
 import { metalRepository } from '../repositories/metal.repository.js';
 import { auditRepository } from '../repositories/audit.repository.js';
+import Decimal from 'decimal.js';
 import { withTransaction, getDb } from '../database/connection/db.js';
+import { toDecimal } from '../utils/precision.js';
 import {
   calculateNetWeight,
   calculateFineWeight,
@@ -23,37 +25,42 @@ import {
 import { BadRequestError, NotFoundError, ConflictError } from '../utils/errors.js';
 import { PaginatedResult } from '../repositories/customer.repository.js';
 
-export const createStockSchema = z.object({
-  tag_no: z.string().min(1, 'Tag number is required').trim().toUpperCase(),
-  product_id: z.string().min(1, 'Product is required'),
-  metal_id: z.string().min(1, 'Metal is required'),
-  purity_id: z.string().min(1, 'Purity is required'),
+export const createStockSchema = z
+  .object({
+    tag_no: z.string().min(1, 'Tag number is required').trim().toUpperCase(),
+    product_id: z.string().min(1, 'Product is required'),
+    metal_id: z.string().min(1, 'Metal is required'),
+    purity_id: z.string().min(1, 'Purity is required'),
 
-  gross_weight: z.number().nonnegative('Gross weight cannot be negative'),
-  less_weight: z.number().nonnegative('Less weight cannot be negative').default(0),
+    gross_weight: z.number().nonnegative('Gross weight cannot be negative'),
+    less_weight: z.number().nonnegative('Less weight cannot be negative').default(0),
 
-  tunch_percent: z
-    .number()
-    .min(0, 'Tunch percent cannot be negative')
-    .max(100, 'Tunch percent cannot exceed 100'),
+    tunch_percent: z
+      .number()
+      .min(0, 'Tunch percent cannot be negative')
+      .max(100, 'Tunch percent cannot exceed 100'),
 
-  wastage_percent: z.number().min(0, 'Wastage percent cannot be negative').default(0),
-  making_charge: z.number().min(0, 'Making charge cannot be negative').default(0),
-  rate_per_gram: z.number().min(0, 'Rate per gram cannot be negative').default(0),
+    wastage_percent: z.number().min(0, 'Wastage percent cannot be negative').default(0),
+    making_charge: z.number().min(0, 'Making charge cannot be negative').default(0),
+    rate_per_gram: z.number().min(0, 'Rate per gram cannot be negative').default(0),
 
-  acquisition_type: z.string().default('OPENING_STOCK'),
-  acquisition_reference: z.string().trim().nullable().optional(),
+    acquisition_type: z.string().default('OPENING_STOCK'),
+    acquisition_reference: z.string().trim().nullable().optional(),
 
-  status: z.enum([
-    StockStatus.IN_STOCK,
-    StockStatus.RESERVED,
-    StockStatus.WITH_KARIGAR,
-    StockStatus.REPAIR,
-  ]).default(StockStatus.IN_STOCK),
+    status: z.enum([
+      StockStatus.IN_STOCK,
+      StockStatus.RESERVED,
+      StockStatus.WITH_KARIGAR,
+      StockStatus.REPAIR,
+    ]).default(StockStatus.IN_STOCK),
 
-  huid: z.string().trim().nullable().optional(),
-  notes: z.string().trim().nullable().optional(),
-});
+    huid: z.string().trim().nullable().optional(),
+    notes: z.string().trim().nullable().optional(),
+  })
+  .refine((data) => data.less_weight <= data.gross_weight, {
+    message: 'Less weight cannot exceed gross weight',
+    path: ['less_weight'],
+  });
 
 export const updateStockSchema = z.object({
   notes: z.string().trim().nullable().optional(),
@@ -365,12 +372,12 @@ export class InventoryService {
     const rows = db.prepare(sql).all() as any[];
 
     let grandItems = 0;
-    let grandGross = 0;
-    let grandLess = 0;
-    let grandNet = 0;
-    let grandFine = 0;
-    let grandAcquisition = 0;
-    let grandValuation = 0;
+    let grandGross = new Decimal(0);
+    let grandLess = new Decimal(0);
+    let grandNet = new Decimal(0);
+    let grandFine = new Decimal(0);
+    let grandAcquisition = new Decimal(0);
+    let grandValuation = new Decimal(0);
 
     const groups: ValuationSummaryGroup[] = rows.map((r) => {
       const itemCount = Number(r.item_count || 0);
@@ -380,15 +387,15 @@ export class InventoryService {
       const fine = roundFineWeight(Number(r.total_fine || 0));
       const acqVal = roundCurrency(Number(r.total_acq_value || 0));
       const currentRate = Number(r.current_rate || 0);
-      const currentVal = roundCurrency(fine * currentRate);
+      const currentVal = roundCurrency(toDecimal(fine).mul(toDecimal(currentRate)));
 
       grandItems += itemCount;
-      grandGross += gross;
-      grandLess += less;
-      grandNet += net;
-      grandFine += fine;
-      grandAcquisition += acqVal;
-      grandValuation += currentVal > 0 ? currentVal : acqVal;
+      grandGross = grandGross.plus(gross);
+      grandLess = grandLess.plus(less);
+      grandNet = grandNet.plus(net);
+      grandFine = grandFine.plus(fine);
+      grandAcquisition = grandAcquisition.plus(acqVal);
+      grandValuation = grandValuation.plus(currentVal > 0 ? currentVal : acqVal);
 
       return {
         metal_id: r.metal_id,

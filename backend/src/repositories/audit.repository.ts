@@ -26,12 +26,20 @@ export class AuditRepository {
       ? JSON.stringify(data.metadata)
       : (data.metadata || null);
 
+    let validUserId = data.user_id || null;
+    if (validUserId) {
+      const userRow = db.prepare('SELECT 1 FROM users WHERE id = ?').get(validUserId);
+      if (!userRow) {
+        validUserId = null;
+      }
+    }
+
     db.prepare(`
       INSERT INTO audit_logs (id, user_id, action, entity_type, entity_id, metadata, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?)
     `).run(
       id,
-      data.user_id || null,
+      validUserId,
       data.action,
       data.entity_type,
       data.entity_id || null,

@@ -14,6 +14,8 @@ import { auditRepository } from '../repositories/audit.repository.js';
 import { withTransaction } from '../database/connection/db.js';
 import { calculatePurchaseItem, calculatePurchaseTotals } from '../utils/purchaseMath.js';
 import { MovementType, StockStatus } from '../domain/stockStatus.js';
+import { financeRepository } from '../repositories/finance.repository.js';
+import { PartyType, EntryType, DebitCredit, PaymentType } from '../domain/finance.js';
 import { BadRequestError, NotFoundError, ConflictError } from '../utils/errors.js';
 import { PaginatedResult } from '../repositories/customer.repository.js';
 
@@ -112,7 +114,9 @@ export class PurchaseService {
             net_weight: calc.net_weight,
             tunch_percent: itemInput.tunch_percent,
             fine_weight: calc.fine_weight,
-            wastage_percent: itemInput.wastage_percent,
+            wastage_percent: calc.wastage_percent,
+            wastage_weight: calc.wastage_weight,
+            wastage_amount: calc.wastage_amount,
             making_charge: itemInput.making_charge,
             rate_per_gram: itemInput.rate_per_gram,
             metal_value: calc.metal_value,
@@ -253,7 +257,9 @@ export class PurchaseService {
       net_weight: calc.net_weight,
       tunch_percent: validated.tunch_percent,
       fine_weight: calc.fine_weight,
-      wastage_percent: validated.wastage_percent,
+      wastage_percent: calc.wastage_percent,
+      wastage_weight: calc.wastage_weight,
+      wastage_amount: calc.wastage_amount,
       making_charge: validated.making_charge,
       rate_per_gram: validated.rate_per_gram,
       metal_value: calc.metal_value,
@@ -396,7 +402,60 @@ export class PurchaseService {
       this.recalculateBillTotals(bill.id);
       purchaseRepository.updateStatus(bill.id, 'FINALIZED');
 
-      return purchaseRepository.findById(bill.id)!;
+      const updated = purchaseRepository.findById(bill.id)!;
+
+      // 4. Part 8 Finance Integration: Post to Central Ledger & Payments
+      if (updated.grand_total > 0) {
+        // Supplier is credited for purchase total (increases supplier payable)
+        financeRepository.createLedgerEntry({
+          party_type: PartyType.SUPPLIER,
+          party_id: updated.supplier_id,
+          entry_type: EntryType.PURCHASE,
+          debit_credit: DebitCredit.CREDIT,
+          amount: updated.grand_total,
+          reference_type: 'PURCHASE_BILL',
+          reference_id: updated.id,
+          reference_number: updated.purchase_number,
+          description: `Purchase Bill ${updated.purchase_number} (Supplier Inv: ${updated.supplier_invoice_number || 'N/A'})`,
+          payment_method: null,
+          created_by: userId || null,
+        });
+
+        // Debit supplier for any payments recorded on the purchase
+        if (updated.payments && updated.payments.length > 0) {
+          for (const pay of updated.payments) {
+            const pmtRecord = financeRepository.createPayment({
+              party_type: PartyType.SUPPLIER,
+              party_id: updated.supplier_id,
+              payment_type: PaymentType.PAYMENT,
+              payment_mode: pay.payment_mode as any,
+              amount: pay.amount,
+              reference_number: pay.reference_number || null,
+              payment_date: updated.purchase_date,
+              reference_type: 'PURCHASE_BILL',
+              reference_id: updated.id,
+              notes: pay.notes || `Upfront payment on purchase ${updated.purchase_number}`,
+              created_by: userId || null,
+            });
+
+            financeRepository.createLedgerEntry({
+              party_type: PartyType.SUPPLIER,
+              party_id: updated.supplier_id,
+              entry_type: EntryType.PURCHASE_PAYMENT,
+              debit_credit: DebitCredit.DEBIT,
+              amount: pay.amount,
+              reference_type: 'PURCHASE_BILL',
+              reference_id: updated.id,
+              reference_number: pmtRecord.payment_number,
+              description: `Payment to supplier (${pay.payment_mode}) - ${pmtRecord.payment_number}`,
+              payment_method: pay.payment_mode as any,
+              created_by: userId || null,
+            });
+          }
+        }
+      }
+
+      return updated;
     });
 
     auditRepository.log({

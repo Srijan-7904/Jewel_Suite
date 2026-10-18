@@ -22,7 +22,7 @@
   width: 38px;
   height: 38px;
   border-radius: 8px;
-  background: radial-gradient(circle, #2a200a 0%, #151005 100%);
+  background: linear-gradient(135deg, #FFF9ED 0%, #F5E6BE 100%);
   border: 1px solid var(--gold-border);
   display: flex;
   align-items: center;
@@ -126,7 +126,7 @@
 
 .nav-item:hover {
   color: var(--text-main);
-  background-color: var(--bg-surface);
+  background-color: var(--bg-surface-hover);
 }
 
 .nav-item.active {

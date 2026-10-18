@@ -30,7 +30,7 @@ export const Sidebar: React.FC = () => {
     Inventory: false,
     Reports: false,
     Masters: false,
-    System: false,
+    Settings: false,
   });
 
   const toggleSection = (section: string) => {
@@ -75,8 +75,12 @@ export const Sidebar: React.FC = () => {
       title: 'Finance',
       icon: <Wallet size={18} />,
       items: [
+        { label: 'Customer Ledger', path: '/finance/ledger/customer' },
+        { label: 'Supplier Ledger', path: '/finance/ledger/supplier' },
+        { label: 'Karigar Ledger', path: '/finance/ledger/karigar' },
+        { label: 'Payments', path: '/finance/payments' },
+        { label: 'Cash Book', path: '/finance/cash-book' },
         { label: 'Girvi Loans', path: '/finance/girvi' },
-        { label: 'Cr/Dr Ledger', path: '/finance/ledger' },
         { label: 'Saving Schemes', path: '/finance/saving-schemes' },
       ],
     },
@@ -84,7 +88,7 @@ export const Sidebar: React.FC = () => {
       title: 'Inventory',
       icon: <Boxes size={18} />,
       items: [
-        { label: 'Stock', path: '/inventory/stock' },
+        { label: 'Stock & Showcase', path: '/inventory/stock' },
       ],
     },
     {
@@ -106,12 +110,10 @@ export const Sidebar: React.FC = () => {
       ],
     },
     {
-      title: 'System',
+      title: 'Settings',
       icon: <Settings size={18} />,
       items: [
-        { label: 'Settings & AMC', path: '/system/settings' },
-        { label: 'AMC', path: '/system/amc' },
-        { label: 'Super Admin', path: '/system/super-admin' },
+        { label: 'Store Configuration', path: '/system/settings' },
       ],
     },
   ];

@@ -1,3 +1,4 @@
+// backend/src/repositories/setting.repository.ts
 import { v4 as uuidv4 } from 'uuid';
 import { getDb } from '../database/connection/db.js';
 
@@ -26,6 +27,33 @@ export class SettingRepository {
         value = excluded.value,
         updated_at = excluded.updated_at
     `).run(uuidv4(), key, value, now, now);
+  }
+
+  getJson<T>(key: string, defaultValue: T): T {
+    const val = this.get(key);
+    if (!val) return defaultValue;
+    try {
+      return JSON.parse(val) as T;
+    } catch {
+      return defaultValue;
+    }
+  }
+
+  setJson<T>(key: string, value: T): void {
+    this.set(key, JSON.stringify(value));
+  }
+
+  getNumber(key: string, defaultValue: number): number {
+    const val = this.get(key);
+    if (val === null || val === undefined) return defaultValue;
+    const num = Number(val);
+    return isNaN(num) ? defaultValue : num;
+  }
+
+  getBoolean(key: string, defaultValue: boolean): boolean {
+    const val = this.get(key);
+    if (val === null || val === undefined) return defaultValue;
+    return val === 'true' || val === '1';
   }
 
   getAll(): Record<string, string> {

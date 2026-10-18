@@ -1,25 +1,34 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { rateApi } from '../services/masters';
 import { inventoryApi } from '../services/inventory';
-import { CurrentRate, StockValuationResponse } from '../types';
+import { financeApi } from '../services/finance';
+import { reportsApi, DashboardMetricsData } from '../services/reports';
+import { CurrentRate, StockValuationResponse, FinanceSummary } from '../types';
 import {
   TrendingUp,
   Receipt,
   Scale,
-  Gem,
-  CircleDollarSign,
   ShieldCheck,
   Database,
   Layers,
   Sparkles,
+  Wallet,
+  ArrowDownLeft,
+  ArrowUpRight,
+  Coins,
+  BadgePercent,
 } from 'lucide-react';
 import './DashboardPage.css';
 
 export const DashboardPage: React.FC = () => {
+  const navigate = useNavigate();
   const { user, health } = useAuth();
   const [rates, setRates] = useState<CurrentRate[]>([]);
   const [valuation, setValuation] = useState<StockValuationResponse | null>(null);
+  const [finance, setFinance] = useState<FinanceSummary | null>(null);
+  const [reportMetrics, setReportMetrics] = useState<DashboardMetricsData | null>(null);
 
   useEffect(() => {
     rateApi.getCurrentRates()
@@ -29,6 +38,14 @@ export const DashboardPage: React.FC = () => {
     inventoryApi.getValuation()
       .then(setValuation)
       .catch((err) => console.error('Failed to load dashboard stock valuation:', err));
+
+    financeApi.getSummary()
+      .then(setFinance)
+      .catch((err) => console.error('Failed to load dashboard finance summary:', err));
+
+    reportsApi.getDashboardMetrics()
+      .then(setReportMetrics)
+      .catch((err) => console.error('Failed to load reporting dashboard metrics:', err));
   }, []);
 
   const gold24 = rates.find((r) => r.metal_code === 'GOLD' && r.purity_code === '24K');
@@ -80,20 +97,53 @@ export const DashboardPage: React.FC = () => {
 
       {/* Metrics Row */}
       <div className="metrics-grid">
-        <div className="metric-card">
+        <div
+          className="metric-card metric-card-clickable"
+          onClick={() => navigate('/reports?category=SALES&report=sales-summary&preset=today')}
+          title="Click to view Today's Sales in Daybook"
+        >
           <div className="metric-header">
             <span className="metric-title">Today's Sales</span>
             <div className="metric-icon-box gold">
               <Receipt size={18} />
             </div>
           </div>
-          <div className="metric-value font-mono">₹0.00</div>
+          <div className="metric-value font-mono">
+            ₹{(reportMetrics?.todaySales ?? finance?.today_sales ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+          </div>
           <div className="metric-footer">
-            <span className="metric-phase">Module: Retail Billing (Part 4)</span>
+            <span className="metric-phase">
+              Today's Collections: ₹{finance ? finance.today_collections.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '0.00'}
+            </span>
+            <span className="metric-link-text">Daybook →</span>
           </div>
         </div>
 
-        <div className="metric-card">
+        <div
+          className="metric-card metric-card-clickable"
+          onClick={() => navigate('/reports?category=SALES&report=sales-summary&preset=this_month')}
+          title="Click to view Monthly Turnover in Daybook"
+        >
+          <div className="metric-header">
+            <span className="metric-title">Monthly Turnover</span>
+            <div className="metric-icon-box gold">
+              <TrendingUp size={18} />
+            </div>
+          </div>
+          <div className="metric-value font-mono">
+            ₹{(reportMetrics?.monthlySales ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+          </div>
+          <div className="metric-footer">
+            <span className="metric-phase">Finalized sales this month</span>
+            <span className="metric-link-text">Daybook →</span>
+          </div>
+        </div>
+
+        <div
+          className="metric-card metric-card-clickable"
+          onClick={() => navigate('/reports?category=INVENTORY&report=stock-valuation')}
+          title="Click to view Stock Valuation in Daybook"
+        >
           <div className="metric-header">
             <span className="metric-title">Stock Valuation</span>
             <div className="metric-icon-box emerald">
@@ -101,40 +151,119 @@ export const DashboardPage: React.FC = () => {
             </div>
           </div>
           <div className="metric-value font-mono">
-            {valuation ? `₹${valuation.total_current_valuation.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '₹0.00'}
+            ₹{(reportMetrics?.stockValuation ?? valuation?.total_current_valuation ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
           </div>
           <div className="metric-footer">
             <span className="metric-phase">
               {valuation && valuation.total_items > 0
                 ? `${valuation.total_items} items in stock • ${valuation.total_fine_weight.toFixed(3)}g fine wt`
-                : '0 items in inventory'}
+                : 'Live market valuation'}
             </span>
+            <span className="metric-link-text">Daybook →</span>
           </div>
         </div>
 
-        <div className="metric-card">
+        <div
+          className="metric-card metric-card-clickable"
+          onClick={() => navigate('/reports?category=FINANCE&report=receivables')}
+          title="Click to view Customer Receivables in Daybook"
+        >
+          <div className="metric-header">
+            <span className="metric-title">Customer Receivables</span>
+            <div className="metric-icon-box amber">
+              <ArrowDownLeft size={18} />
+            </div>
+          </div>
+          <div className="metric-value font-mono">
+            ₹{(reportMetrics?.receivables ?? finance?.total_receivables ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+          </div>
+          <div className="metric-footer">
+            <span className="metric-phase">Due from credit sale customers</span>
+            <span className="metric-link-text">Daybook →</span>
+          </div>
+        </div>
+
+        <div
+          className="metric-card metric-card-clickable"
+          onClick={() => navigate('/reports?category=FINANCE&report=payables')}
+          title="Click to view Total Payables in Daybook"
+        >
+          <div className="metric-header">
+            <span className="metric-title">Total Payables</span>
+            <div className="metric-icon-box rose">
+              <ArrowUpRight size={18} />
+            </div>
+          </div>
+          <div className="metric-value font-mono">
+            ₹{(reportMetrics?.payables ?? finance?.total_payables ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+          </div>
+          <div className="metric-footer">
+            <span className="metric-phase">
+              Suppliers: ₹{finance ? finance.supplier_payables.toLocaleString('en-IN') : '0'} • Karigars: ₹{finance ? finance.karigar_payables.toLocaleString('en-IN') : '0'}
+            </span>
+            <span className="metric-link-text">Daybook →</span>
+          </div>
+        </div>
+
+        <div
+          className="metric-card metric-card-clickable"
+          onClick={() => navigate('/reports?category=GIRVI&report=active-loans')}
+          title="Click to view Active Girvi Loans in Daybook"
+        >
           <div className="metric-header">
             <span className="metric-title">Active Girvi Loans</span>
-            <div className="metric-icon-box indigo">
-              <CircleDollarSign size={18} />
+            <div className="metric-icon-box amber">
+              <Coins size={18} />
             </div>
           </div>
-          <div className="metric-value font-mono">0 Pledges</div>
+          <div className="metric-value font-mono">
+            ₹{(reportMetrics?.activeLoansAmount ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+          </div>
           <div className="metric-footer">
-            <span className="metric-phase">Module: Finance & Girvi (Part 7)</span>
+            <span className="metric-phase">
+              {reportMetrics?.activeLoansCount || 0} active / overdue loans
+            </span>
+            <span className="metric-link-text">Daybook →</span>
           </div>
         </div>
 
-        <div className="metric-card">
+        <div
+          className="metric-card metric-card-clickable"
+          onClick={() => navigate('/reports?category=GST&report=gst-sales&preset=this_month')}
+          title="Click to view GST Collected in Daybook"
+        >
           <div className="metric-header">
-            <span className="metric-title">Karigar Workshop</span>
-            <div className="metric-icon-box amber">
-              <Gem size={18} />
+            <span className="metric-title">GST Collected (Mo)</span>
+            <div className="metric-icon-box purple">
+              <BadgePercent size={18} />
             </div>
           </div>
-          <div className="metric-value font-mono">0 Open Jobs</div>
+          <div className="metric-value font-mono">
+            ₹{(reportMetrics?.monthlyGstCollected ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+          </div>
           <div className="metric-footer">
-            <span className="metric-phase">Module: Workshop (Part 6)</span>
+            <span className="metric-phase">3% GST on sales finalized this month</span>
+            <span className="metric-link-text">Daybook →</span>
+          </div>
+        </div>
+
+        <div
+          className="metric-card metric-card-clickable"
+          onClick={() => navigate('/reports?category=FINANCE&report=cash-book&preset=today')}
+          title="Click to view Cash in Drawer in Daybook"
+        >
+          <div className="metric-header">
+            <span className="metric-title">Cash in Drawer</span>
+            <div className="metric-icon-box indigo">
+              <Wallet size={18} />
+            </div>
+          </div>
+          <div className="metric-value font-mono">
+            ₹{finance ? finance.cash_balance.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '0.00'}
+          </div>
+          <div className="metric-footer">
+            <span className="metric-phase">Physical counter cash balance</span>
+            <span className="metric-link-text">Daybook →</span>
           </div>
         </div>
       </div>

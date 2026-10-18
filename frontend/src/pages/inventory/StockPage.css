@@ -8,19 +8,19 @@
 
 /* Valuation Header Banner */
 .stock-valuation-banner {
-  background: linear-gradient(135deg, rgba(212, 175, 55, 0.08) 0%, rgba(20, 20, 24, 0.95) 100%);
-  border: 1px solid rgba(212, 175, 55, 0.25);
+  background: linear-gradient(135deg, #FFFDF8 0%, #F5EEDC 60%, #ECE2CA 100%);
+  border: 1px solid var(--gold-border);
   border-radius: 12px;
   padding: 1.25rem 1.5rem;
   margin-bottom: 1.5rem;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  box-shadow: var(--shadow-sm);
 }
 
 .valuation-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  border-bottom: 1px solid var(--border-subtle);
   padding-bottom: 0.75rem;
   margin-bottom: 1rem;
 }
@@ -34,7 +34,7 @@
 .valuation-title {
   font-size: 1.1rem;
   font-weight: 600;
-  color: var(--color-gold);
+  color: var(--gold-primary);
   letter-spacing: 0.5px;
 }
 
@@ -42,9 +42,9 @@
   font-size: 0.7rem;
   padding: 0.2rem 0.5rem;
   border-radius: 4px;
-  background: rgba(16, 185, 129, 0.15);
-  color: #10b981;
-  border: 1px solid rgba(16, 185, 129, 0.3);
+  background: var(--success-bg);
+  color: var(--success);
+  border: 1px solid rgba(13, 130, 82, 0.3);
   font-weight: 600;
   text-transform: uppercase;
 }
@@ -62,7 +62,7 @@
 
 .valuation-label {
   font-size: 0.75rem;
-  color: var(--color-text-muted);
+  color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.5px;
   margin-bottom: 0.25rem;
@@ -71,20 +71,20 @@
 .valuation-val {
   font-size: 1.4rem;
   font-weight: 700;
-  color: var(--color-text-primary);
+  color: var(--text-main);
 }
 
 .valuation-val.gold {
-  color: var(--color-gold);
+  color: var(--gold-primary);
 }
 
 .valuation-val.emerald {
-  color: #10b981;
+  color: var(--success);
 }
 
 .valuation-sub {
   font-size: 0.75rem;
-  color: var(--color-text-muted);
+  color: var(--text-dim);
   margin-top: 0.2rem;
 }
 
@@ -95,32 +95,75 @@
   gap: 0.5rem;
   margin-top: 1rem;
   padding-top: 0.75rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  border-top: 1px solid var(--border-subtle);
 }
 
 .group-pill {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  padding: 0.3rem 0.75rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  padding: 0.35rem 0.85rem;
   border-radius: 20px;
   font-size: 0.75rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  transition: all var(--transition-fast);
 }
 
-.group-pill-name {
-  color: var(--color-gold);
-  font-weight: 600;
+.group-pill.gold {
+  border-color: #E6C254;
+  background: #FFFDF8;
+}
+.group-pill.gold .group-pill-name {
+  color: #8C6511;
+  font-weight: 700;
+}
+
+.group-pill.silver {
+  border-color: #CBD5E1;
+  background: #F8FAFC;
+}
+.group-pill.silver .group-pill-name {
+  color: #475569;
+  font-weight: 700;
+}
+
+.group-pill.platinum {
+  border-color: #C7D2FE;
+  background: #F5F7FF;
+}
+.group-pill.platinum .group-pill-name {
+  color: #4338CA;
+  font-weight: 700;
+}
+
+.group-pill.diamond {
+  border-color: #99F6E4;
+  background: #F0FDFA;
+}
+.group-pill.diamond .group-pill-name {
+  color: #0F766E;
+  font-weight: 700;
+}
+
+.group-pill.other {
+  border-color: #FED7AA;
+  background: #FFFBF5;
+}
+.group-pill.other .group-pill-name {
+  color: #C2410C;
+  font-weight: 700;
 }
 
 .group-pill-weight {
-  color: var(--color-text-primary);
+  color: var(--text-main);
+  font-weight: 500;
 }
 
 .group-pill-val {
-  color: #10b981;
-  font-weight: 500;
+  color: var(--success);
+  font-weight: 600;
 }
 
 /* Status Badges */
@@ -136,53 +179,180 @@
 }
 
 .status-badge.in_stock {
-  background: rgba(16, 185, 129, 0.15);
-  color: #10b981;
-  border: 1px solid rgba(16, 185, 129, 0.3);
+  background: var(--success-bg);
+  color: var(--success);
+  border: 1px solid rgba(13, 130, 82, 0.3);
 }
 
 .status-badge.sold {
-  background: rgba(100, 116, 139, 0.2);
-  color: #94a3b8;
-  border: 1px solid rgba(100, 116, 139, 0.3);
+  background: var(--bg-surface-hover);
+  color: var(--text-muted);
+  border: 1px solid var(--border-default);
 }
 
 .status-badge.with_karigar {
-  background: rgba(245, 158, 11, 0.15);
-  color: #f59e0b;
-  border: 1px solid rgba(245, 158, 11, 0.3);
+  background: var(--warning-bg);
+  color: var(--warning);
+  border: 1px solid rgba(194, 120, 3, 0.3);
 }
 
 .status-badge.repair {
-  background: rgba(59, 130, 246, 0.15);
-  color: #60a5fa;
-  border: 1px solid rgba(59, 130, 246, 0.3);
+  background: var(--info-bg);
+  color: var(--info);
+  border: 1px solid rgba(29, 111, 184, 0.3);
 }
 
 .status-badge.reserved {
-  background: rgba(168, 85, 247, 0.15);
-  color: #c084fc;
-  border: 1px solid rgba(168, 85, 247, 0.3);
+  background: rgba(124, 58, 237, 0.12);
+  color: #7C3AED;
+  border: 1px solid rgba(124, 58, 237, 0.3);
 }
 
 .status-badge.adjusted,
 .status-badge.damaged {
-  background: rgba(239, 68, 68, 0.15);
-  color: #f87171;
-  border: 1px solid rgba(239, 68, 68, 0.3);
+  background: var(--danger-bg);
+  color: var(--danger);
+  border: 1px solid rgba(220, 38, 38, 0.3);
 }
 
-/* Tag Pill */
+/* Tag Pills with Dedicated Metal Tints */
 .tag-pill {
   font-family: var(--font-mono);
   font-weight: 700;
   font-size: 0.8rem;
-  color: var(--color-gold);
-  background: rgba(212, 175, 55, 0.1);
-  padding: 0.2rem 0.5rem;
-  border-radius: 4px;
-  border: 1px solid rgba(212, 175, 55, 0.2);
-  display: inline-block;
+  padding: 0.2rem 0.55rem;
+  border-radius: 5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  letter-spacing: 0.02em;
+  transition: all var(--transition-fast);
+}
+
+/* Default / Gold Tag */
+.tag-pill,
+.tag-pill.gold {
+  color: #8C6511;
+  background: #FFF8E6;
+  border: 1px solid #E6C254;
+  box-shadow: 0 1px 2px rgba(184, 134, 11, 0.08);
+}
+
+/* Silver Tag: Cool Refined Metallic */
+.tag-pill.silver {
+  color: #334155;
+  background: #F1F5F9;
+  border: 1px solid #CBD5E1;
+  box-shadow: 0 1px 2px rgba(100, 116, 139, 0.08);
+}
+
+/* Platinum Tag: Noble Icy Indigo */
+.tag-pill.platinum {
+  color: #312E81;
+  background: #EEF2FF;
+  border: 1px solid #C7D2FE;
+  box-shadow: 0 1px 2px rgba(79, 70, 229, 0.08);
+}
+
+/* Diamond Tag: Sparkling Emerald/Teal */
+.tag-pill.diamond {
+  color: #0F766E;
+  background: #F0FDFA;
+  border: 1px solid #99F6E4;
+  box-shadow: 0 1px 2px rgba(13, 148, 136, 0.08);
+}
+
+/* Other Metal Tag (Rose Gold / Copper / Bronze) */
+.tag-pill.other {
+  color: #9A3412;
+  background: #FFF7ED;
+  border: 1px solid #FED7AA;
+  box-shadow: 0 1px 2px rgba(194, 65, 12, 0.08);
+}
+
+/* Metal Specification Badges */
+.metal-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.2rem 0.6rem;
+  border-radius: 20px;
+  letter-spacing: 0.02em;
+}
+
+.metal-pill.gold {
+  color: #8C6511;
+  background: #FFF8E6;
+  border: 1px solid #E6C254;
+}
+
+.metal-pill.silver {
+  color: #334155;
+  background: #F1F5F9;
+  border: 1px solid #CBD5E1;
+}
+
+.metal-pill.platinum {
+  color: #312E81;
+  background: #EEF2FF;
+  border: 1px solid #C7D2FE;
+}
+
+.metal-pill.diamond {
+  color: #0F766E;
+  background: #F0FDFA;
+  border: 1px solid #99F6E4;
+}
+
+.metal-pill.other {
+  color: #9A3412;
+  background: #FFF7ED;
+  border: 1px solid #FED7AA;
+}
+
+/* Fine Weight Typography by Metal */
+.text-fine-gold {
+  color: #8C6511 !important;
+}
+
+.text-fine-silver {
+  color: #475569 !important;
+}
+
+.text-fine-platinum {
+  color: #4338CA !important;
+}
+
+.text-fine-diamond {
+  color: #0D9488 !important;
+}
+
+.text-fine-other {
+  color: #C2410C !important;
+}
+
+/* Table Row Left Indicator Stripe by Metal */
+.stock-row.metal-gold td:first-child {
+  border-left: 3.5px solid #DFB742;
+}
+
+.stock-row.metal-silver td:first-child {
+  border-left: 3.5px solid #94A3B8;
+}
+
+.stock-row.metal-platinum td:first-child {
+  border-left: 3.5px solid #818CF8;
+}
+
+.stock-row.metal-diamond td:first-child {
+  border-left: 3.5px solid #2DD4BF;
+}
+
+.stock-row.metal-other td:first-child {
+  border-left: 3.5px solid #FB923C;
 }
 
 /* Modal Live Calculations Banner */
@@ -190,8 +360,8 @@
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 1rem;
-  background: rgba(20, 20, 24, 0.8);
-  border: 1px solid rgba(212, 175, 55, 0.3);
+  background: var(--bg-surface-hover);
+  border: 1px solid var(--gold-border);
   border-radius: 8px;
   padding: 0.85rem 1rem;
   margin: 1rem 0;
@@ -204,7 +374,7 @@
 
 .calc-box-label {
   font-size: 0.7rem;
-  color: var(--color-text-muted);
+  color: var(--text-muted);
   text-transform: uppercase;
   margin-bottom: 0.2rem;
 }
@@ -216,15 +386,15 @@
 }
 
 .calc-box-val.net {
-  color: #60a5fa;
+  color: var(--info);
 }
 
 .calc-box-val.fine {
-  color: var(--color-gold);
+  color: var(--gold-primary);
 }
 
 .calc-box-val.value {
-  color: #10b981;
+  color: var(--success);
 }
 
 /* Stock Detail Modal Sections */
@@ -236,8 +406,8 @@
 }
 
 .detail-card {
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-default);
   border-radius: 8px;
   padding: 1rem;
 }
@@ -245,10 +415,10 @@
 .detail-card-title {
   font-size: 0.8rem;
   font-weight: 600;
-  color: var(--color-gold);
+  color: var(--gold-primary);
   text-transform: uppercase;
   margin-bottom: 0.75rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid var(--border-subtle);
   padding-bottom: 0.35rem;
 }
 
@@ -261,12 +431,12 @@
 }
 
 .detail-row-label {
-  color: var(--color-text-muted);
+  color: var(--text-muted);
 }
 
 .detail-row-value {
   font-weight: 500;
-  color: var(--color-text-primary);
+  color: var(--text-main);
 }
 
 /* Movement History Timeline */
@@ -282,8 +452,8 @@
 .movement-item {
   display: flex;
   gap: 1rem;
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
   border-radius: 6px;
   padding: 0.75rem;
   position: relative;
@@ -299,8 +469,8 @@
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: var(--color-gold);
-  box-shadow: 0 0 8px rgba(212, 175, 55, 0.6);
+  background: var(--gold-primary);
+  box-shadow: 0 0 8px rgba(184, 134, 11, 0.4);
 }
 
 .movement-body {
@@ -317,17 +487,17 @@
 .movement-title {
   font-weight: 600;
   font-size: 0.82rem;
-  color: var(--color-gold);
+  color: var(--gold-primary);
 }
 
 .movement-date {
   font-size: 0.72rem;
-  color: var(--color-text-muted);
+  color: var(--text-dim);
 }
 
 .movement-details {
   font-size: 0.78rem;
-  color: var(--color-text-secondary);
+  color: var(--text-muted);
   display: flex;
   gap: 1.25rem;
   margin-bottom: 0.25rem;
@@ -335,6 +505,355 @@
 
 .movement-notes {
   font-size: 0.75rem;
-  color: var(--color-text-muted);
+  color: var(--text-dim);
   font-style: italic;
 }
+
+/* ==========================================================================
+   SHOWCASE DISPLAY SYSTEM (Showroom Tray Cards & Metal Themes)
+   ========================================================================== */
+
+/* Metal Filter Pills Bar */
+.showcase-metal-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.metal-tab-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 0.95rem;
+  border-radius: 8px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+}
+
+.metal-tab-pill:hover {
+  background: var(--bg-surface-hover);
+  color: var(--text-main);
+  border-color: var(--border-active);
+}
+
+.metal-tab-pill.active {
+  background: var(--bg-surface-elevated);
+  color: var(--text-main);
+  border-color: var(--gold-primary);
+  box-shadow: 0 2px 6px rgba(184, 134, 11, 0.15);
+}
+
+.metal-tab-pill.gold.active {
+  background: #FFFDF5;
+  color: #8C6511;
+  border-color: #E6C254;
+  box-shadow: 0 2px 8px rgba(184, 134, 11, 0.2);
+}
+
+.metal-tab-pill.silver.active {
+  background: #F8FAFC;
+  color: #334155;
+  border-color: #94A3B8;
+  box-shadow: 0 2px 8px rgba(100, 116, 139, 0.2);
+}
+
+.metal-tab-pill.platinum.active {
+  background: #F5F7FF;
+  color: #312E81;
+  border-color: #818CF8;
+  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.2);
+}
+
+.metal-tab-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+.metal-tab-dot.gold { background: #DFB742; }
+.metal-tab-dot.silver { background: #94A3B8; }
+.metal-tab-dot.platinum { background: #818CF8; }
+
+.metal-tab-count {
+  background: var(--bg-app);
+  padding: 0.1rem 0.45rem;
+  border-radius: 12px;
+  font-size: 0.72rem;
+  border: 1px solid var(--border-subtle);
+}
+
+/* View Mode Switcher (Showcase vs Table) */
+.view-mode-toggle {
+  display: inline-flex;
+  align-items: center;
+  background: var(--bg-app);
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  padding: 2px;
+  gap: 2px;
+}
+
+.view-mode-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.75rem;
+  border-radius: 4px;
+  font-size: 0.775rem;
+  font-weight: 600;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.view-mode-btn:hover {
+  color: var(--text-main);
+}
+
+.view-mode-btn.active {
+  background: var(--bg-surface);
+  color: var(--gold-primary);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+/* Showcase / Display Tray Grid */
+.stock-showcase-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(295px, 1fr));
+  gap: 1.25rem;
+  margin-top: 1rem;
+}
+
+.showcase-card {
+  background: var(--bg-surface);
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(33, 29, 23, 0.05);
+  border: 1px solid var(--border-default);
+  display: flex;
+  flex-direction: column;
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast), border-color var(--transition-fast);
+  position: relative;
+}
+
+.showcase-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 24px rgba(33, 29, 23, 0.1);
+}
+
+/* Gold Showcase Card */
+.showcase-card.gold {
+  border-color: #E6C254;
+  background: linear-gradient(180deg, #FFFDF8 0%, #FFFFFF 100%);
+}
+.showcase-card.gold:hover {
+  border-color: #B8860B;
+  box-shadow: 0 10px 28px rgba(184, 134, 11, 0.22);
+}
+.showcase-card.gold .showcase-header {
+  background: linear-gradient(135deg, rgba(223, 183, 66, 0.2) 0%, rgba(184, 134, 11, 0.08) 100%);
+  border-bottom: 1px solid rgba(184, 134, 11, 0.25);
+}
+.showcase-card.gold .showcase-metal-icon {
+  color: #8C6511;
+  background: rgba(223, 183, 66, 0.25);
+  border: 1px solid #E6C254;
+}
+
+/* Silver Showcase Card */
+.showcase-card.silver {
+  border-color: #CBD5E1;
+  background: linear-gradient(180deg, #F8FAFC 0%, #FFFFFF 100%);
+}
+.showcase-card.silver:hover {
+  border-color: #64748B;
+  box-shadow: 0 10px 28px rgba(100, 116, 139, 0.22);
+}
+.showcase-card.silver .showcase-header {
+  background: linear-gradient(135deg, rgba(148, 163, 184, 0.2) 0%, rgba(100, 116, 139, 0.08) 100%);
+  border-bottom: 1px solid rgba(100, 116, 139, 0.25);
+}
+.showcase-card.silver .showcase-metal-icon {
+  color: #334155;
+  background: rgba(148, 163, 184, 0.25);
+  border: 1px solid #CBD5E1;
+}
+
+/* Platinum Showcase Card */
+.showcase-card.platinum {
+  border-color: #C7D2FE;
+  background: linear-gradient(180deg, #F5F7FF 0%, #FFFFFF 100%);
+}
+.showcase-card.platinum:hover {
+  border-color: #4F46E5;
+  box-shadow: 0 10px 28px rgba(79, 70, 229, 0.22);
+}
+.showcase-card.platinum .showcase-header {
+  background: linear-gradient(135deg, rgba(129, 140, 248, 0.2) 0%, rgba(79, 70, 229, 0.08) 100%);
+  border-bottom: 1px solid rgba(79, 70, 229, 0.25);
+}
+.showcase-card.platinum .showcase-metal-icon {
+  color: #312E81;
+  background: rgba(129, 140, 248, 0.25);
+  border: 1px solid #C7D2FE;
+}
+
+/* Diamond / Other Metal Showcase Cards */
+.showcase-card.diamond {
+  border-color: #99F6E4;
+  background: linear-gradient(180deg, #F0FDFA 0%, #FFFFFF 100%);
+}
+.showcase-card.diamond .showcase-header {
+  background: linear-gradient(135deg, rgba(45, 212, 191, 0.2) 0%, rgba(13, 148, 136, 0.08) 100%);
+  border-bottom: 1px solid rgba(13, 148, 136, 0.25);
+}
+.showcase-card.diamond .showcase-metal-icon {
+  color: #0F766E;
+  background: rgba(45, 212, 191, 0.25);
+  border: 1px solid #99F6E4;
+}
+
+.showcase-card.other {
+  border-color: #FED7AA;
+  background: linear-gradient(180deg, #FFF7ED 0%, #FFFFFF 100%);
+}
+.showcase-card.other .showcase-header {
+  background: linear-gradient(135deg, rgba(251, 146, 60, 0.2) 0%, rgba(194, 65, 12, 0.08) 100%);
+  border-bottom: 1px solid rgba(194, 65, 12, 0.25);
+}
+.showcase-card.other .showcase-metal-icon {
+  color: #9A3412;
+  background: rgba(251, 146, 60, 0.25);
+  border: 1px solid #FED7AA;
+}
+
+.showcase-header {
+  padding: 0.75rem 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.showcase-metal-badge-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.showcase-metal-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-weight: 800;
+  font-size: 0.75rem;
+}
+
+.showcase-body {
+  padding: 1rem;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.showcase-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.showcase-product-name {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-main);
+  line-height: 1.3;
+}
+
+.showcase-cat-name {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.showcase-specs-table {
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  padding: 0.6rem 0.75rem;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.5rem;
+}
+
+.showcase-spec-item {
+  display: flex;
+  flex-direction: column;
+}
+
+.showcase-spec-label {
+  font-size: 0.65rem;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+.showcase-spec-val {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.showcase-huid-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--bg-app);
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  border: 1px dashed var(--border-default);
+}
+
+.showcase-val-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding-top: 0.5rem;
+  border-top: 1px dashed var(--border-subtle);
+  margin-top: auto;
+}
+
+.showcase-val-label {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.showcase-val-amount {
+  font-family: var(--font-mono);
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: var(--success);
+}
+
+.showcase-footer {
+  padding: 0.65rem 1rem;
+  background: var(--bg-surface-elevated);
+  border-top: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+

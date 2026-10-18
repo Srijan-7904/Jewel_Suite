@@ -41,6 +41,8 @@ export class AuthService {
       role: user.role,
     });
 
+    userRepository.recordLogin(user.id);
+
     auditRepository.log({
       user_id: user.id,
       action: 'USER_LOGIN',

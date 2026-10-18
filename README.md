@@ -147,9 +147,17 @@ npm run test
 
 ---
 
-## 7. Next Roadmap: Part 2 — Inventory & Stock Model
-Following the completion and verification of Part 1, Part 2 will implement:
-- Jewellery category & product catalogue.
-- Tag-level stock items (Gross, Less, Net, Tunch %, Fine Weight, Wastage %, Making Charges).
-- Immutable stock movement audit trail.
-- Real-time stock valuation based on daily metal rates.
+---
+
+## 7. Implementation Roadmap Status
+- ✅ **Part 1 — Foundation, Auth, SQLite, Migrations, Audit Logs**
+- ✅ **Part 2 — Masters & Reference Data** (Customers, Suppliers, Karigars, Metals, Purities, Rates, Products)
+- ✅ **Part 3 — Inventory** (Tags, Weight Breakdown, Stock Movements, Valuation, Statuses)
+- ✅ **Part 4 — Retail Billing & Sales** (Invoicing, Multi-mode Payments, Stock Outward)
+- ✅ **Part 5 — Purchase Billing** (Purchases, Stock Inward, Supplier Payables)
+- ✅ **Part 6 — Exchange & Old Metal Return** (Tunch Valuation, Net Payable Adjustment)
+- ✅ **Part 7 — Workshop, Repair & Karigar Jobs** (Issue/Receipt, Loss/Wastage Tracking, Labour)
+- ✅ **Part 8 — Finance: Cr/Dr Ledger & Payments** (Central Ledger, Party Statements, Cash Book, Atomic Vouchers)
+- ✅ **Part 9 — Girvi Loans + Saving Schemes** (Gold Pledge Loans, LTV, Interest, Custody, Chit Funds, Maturity)
+- ⏳ *Upcoming:* **Part 10 — Reports + GST Reports**
+
