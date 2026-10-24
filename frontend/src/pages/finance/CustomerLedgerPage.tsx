@@ -1,14 +1,14 @@
-// frontend/src/pages/finance/CustomerLedgerPage.tsx
 import React, { useState, useEffect } from 'react';
 import { financeApi, CreatePaymentInput, CreateAdjustmentInput } from '../../services/finance';
 import { customerApi } from '../../services/masters';
-import { Customer, LedgerEntry, PartyStatementSummary } from '../../types';
+import { Customer, LedgerEntry, PartyStatementSummary, PartyMetalLedgerRecord, PartyMetalBalanceSummary } from '../../types';
 import {
   Users,
   SlidersHorizontal,
   ArrowDownLeft,
   Receipt,
   Scale,
+  Coins,
 } from 'lucide-react';
 import './Finance.css';
 import '../workshop/Workshop.css';
@@ -18,6 +18,10 @@ export const CustomerLedgerPage: React.FC = () => {
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>('');
   const [entries, setEntries] = useState<LedgerEntry[]>([]);
   const [statement, setStatement] = useState<PartyStatementSummary | null>(null);
+  const [metalBalances, setMetalBalances] = useState<PartyMetalBalanceSummary[]>([]);
+  const [metalEntries, setMetalEntries] = useState<PartyMetalLedgerRecord[]>([]);
+  const [activeLedgerTab, setActiveLedgerTab] = useState<'CURRENCY' | 'METAL'>('CURRENCY');
+  const [selectedMetalFilter, setSelectedMetalFilter] = useState<string>('ALL');
   const [loading, setLoading] = useState(false);
 
   // Filters
@@ -55,13 +59,24 @@ export const CustomerLedgerPage: React.FC = () => {
     if (!selectedCustomerId) return;
     setLoading(true);
     try {
-      const res = await financeApi.getCustomerLedger(selectedCustomerId, {
-        from_date: fromDate || undefined,
-        to_date: toDate || undefined,
-        pageSize: 100,
-      });
-      setEntries(res.items);
-      setStatement(res.statement);
+      const [currencyRes, metalBalRes, metalLedgerRes] = await Promise.all([
+        financeApi.getCustomerLedger(selectedCustomerId, {
+          from_date: fromDate || undefined,
+          to_date: toDate || undefined,
+          pageSize: 100,
+        }),
+        financeApi.getCustomerMetalBalances(selectedCustomerId).catch(() => []),
+        financeApi.getCustomerMetalLedger(selectedCustomerId, {
+          from_date: fromDate || undefined,
+          to_date: toDate || undefined,
+          pageSize: 100,
+        }).catch(() => ({ items: [], total: 0, page: 1, pageSize: 100, totalPages: 1 })),
+      ]);
+
+      setEntries(currencyRes.items);
+      setStatement(currencyRes.statement);
+      setMetalBalances(metalBalRes || []);
+      setMetalEntries(metalLedgerRes.items || []);
     } catch (err) {
       console.error('Failed to load customer ledger:', err);
     } finally {
@@ -250,71 +265,246 @@ export const CustomerLedgerPage: React.FC = () => {
                 : 'Account fully settled'}
             </div>
           </div>
+
+          {/* Gold Metal Balance Card */}
+          <div className="finance-card" style={{ borderLeft: '3px solid #dfb742' }}>
+            <div className="finance-card-title">
+              <span>Gold Metal Due</span>
+              <Coins size={16} className="text-gold" />
+            </div>
+            <div className="finance-card-value text-gold">
+              {(metalBalances.find((m) => m.metal_code === 'GOLD')?.balance_grams ?? 0).toFixed(4)} g
+            </div>
+            <div className="finance-card-sub">
+              {(metalBalances.find((m) => m.metal_code === 'GOLD')?.balance_grams ?? 0) > 0
+                ? 'Customer owes gold'
+                : (metalBalances.find((m) => m.metal_code === 'GOLD')?.balance_grams ?? 0) < 0
+                ? 'Shop owes gold'
+                : 'Zero gold dues'}
+            </div>
+          </div>
+
+          {/* Silver Metal Balance Card */}
+          <div className="finance-card" style={{ borderLeft: '3px solid #94a3b8' }}>
+            <div className="finance-card-title">
+              <span>Silver Metal Due</span>
+              <Scale size={16} style={{ color: '#cbd5e1' }} />
+            </div>
+            <div className="finance-card-value" style={{ color: '#cbd5e1' }}>
+              {(metalBalances.find((m) => m.metal_code === 'SILVER')?.balance_grams ?? 0).toFixed(3)} g
+            </div>
+            <div className="finance-card-sub">
+              {(metalBalances.find((m) => m.metal_code === 'SILVER')?.balance_grams ?? 0) > 0
+                ? 'Customer owes silver'
+                : (metalBalances.find((m) => m.metal_code === 'SILVER')?.balance_grams ?? 0) < 0
+                ? 'Shop owes silver'
+                : 'Zero silver dues'}
+            </div>
+          </div>
         </div>
       )}
 
+      {/* Ledger Mode Tabs */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '1.25rem', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <button
+            type="button"
+            className="btn-secondary"
+            style={{
+              background: activeLedgerTab === 'CURRENCY' ? 'linear-gradient(135deg, #dfb742 0%, #b8860b 100%)' : undefined,
+              color: activeLedgerTab === 'CURRENCY' ? '#1a160f' : undefined,
+              fontWeight: 700,
+            }}
+            onClick={() => setActiveLedgerTab('CURRENCY')}
+          >
+            <Receipt size={15} /> Currency Ledger (₹)
+          </button>
+          <button
+            type="button"
+            className="btn-secondary"
+            style={{
+              background: activeLedgerTab === 'METAL' ? 'linear-gradient(135deg, #dfb742 0%, #b8860b 100%)' : undefined,
+              color: activeLedgerTab === 'METAL' ? '#1a160f' : undefined,
+              fontWeight: 700,
+            }}
+            onClick={() => setActiveLedgerTab('METAL')}
+          >
+            <Coins size={15} /> Metal Ledger (Gold & Silver)
+          </button>
+        </div>
+
+        {activeLedgerTab === 'METAL' && (
+          <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.75rem', color: '#9da4b3' }}>Filter Metal:</span>
+            <button
+              type="button"
+              className={`btn-secondary ${selectedMetalFilter === 'ALL' ? 'active-tab' : ''}`}
+              style={{ padding: '0.25rem 0.6rem', fontSize: '0.75rem' }}
+              onClick={() => setSelectedMetalFilter('ALL')}
+            >
+              All Metals
+            </button>
+            <button
+              type="button"
+              className={`btn-secondary ${selectedMetalFilter === 'GOLD' ? 'active-tab' : ''}`}
+              style={{ padding: '0.25rem 0.6rem', fontSize: '0.75rem', color: '#dfb742' }}
+              onClick={() => setSelectedMetalFilter('GOLD')}
+            >
+              Gold Only
+            </button>
+            <button
+              type="button"
+              className={`btn-secondary ${selectedMetalFilter === 'SILVER' ? 'active-tab' : ''}`}
+              style={{ padding: '0.25rem 0.6rem', fontSize: '0.75rem', color: '#cbd5e1' }}
+              onClick={() => setSelectedMetalFilter('SILVER')}
+            >
+              Silver Only
+            </button>
+          </div>
+        )}
+      </div>
+
       {/* Ledger Table */}
-      <div className="workshop-table-container">
-        <table className="workshop-table">
-          <thead>
-            <tr>
-              <th>Date & Time</th>
-              <th>Reference</th>
-              <th>Description</th>
-              <th>Payment Mode</th>
-              <th>Debit (Dr)</th>
-              <th>Credit (Cr)</th>
-              <th>Balance</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
+      {activeLedgerTab === 'CURRENCY' ? (
+        <div className="workshop-table-container">
+          <table className="workshop-table">
+            <thead>
               <tr>
-                <td colSpan={7} style={{ textAlign: 'center', padding: '2rem' }}>
-                  Loading customer ledger entries...
-                </td>
+                <th>Date & Time</th>
+                <th>Reference</th>
+                <th>Description</th>
+                <th>Payment Mode</th>
+                <th>Debit (Dr)</th>
+                <th>Credit (Cr)</th>
+                <th>Balance</th>
               </tr>
-            ) : entries.length === 0 ? (
-              <tr>
-                <td colSpan={7} style={{ textAlign: 'center', padding: '2rem', color: '#8e95a5' }}>
-                  No transactions recorded for this customer yet.
-                </td>
-              </tr>
-            ) : (
-              entries.map((row) => (
-                <tr key={row.id}>
-                  <td>{row.created_at}</td>
-                  <td style={{ fontWeight: 600, color: '#d4af37' }}>{row.reference_number || '-'}</td>
-                  <td>
-                    <div>{row.description}</div>
-                    <span style={{ fontSize: '0.75rem', color: '#8e95a5' }}>
-                      Type: {row.entry_type}
-                    </span>
-                  </td>
-                  <td>
-                    {row.payment_method ? (
-                      <span className={`badge-mode badge-mode-${row.payment_method.toLowerCase()}`}>
-                        {row.payment_method}
-                      </span>
-                    ) : (
-                      <span style={{ color: '#6b7280' }}>-</span>
-                    )}
-                  </td>
-                  <td className="debit-text">
-                    {row.debit_credit === 'DEBIT' ? `₹${row.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '-'}
-                  </td>
-                  <td className="credit-text">
-                    {row.debit_credit === 'CREDIT' ? `₹${row.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '-'}
-                  </td>
-                  <td className="balance-text">
-                    ₹{row.balance_after.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr>
+                  <td colSpan={7} style={{ textAlign: 'center', padding: '2rem' }}>
+                    Loading customer ledger entries...
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+              ) : entries.length === 0 ? (
+                <tr>
+                  <td colSpan={7} style={{ textAlign: 'center', padding: '2rem', color: '#8e95a5' }}>
+                    No currency transactions recorded for this customer yet.
+                  </td>
+                </tr>
+              ) : (
+                entries.map((row) => (
+                  <tr key={row.id}>
+                    <td>{row.created_at}</td>
+                    <td style={{ fontWeight: 600, color: '#d4af37' }}>{row.reference_number || '-'}</td>
+                    <td>
+                      <div>{row.description}</div>
+                      <span style={{ fontSize: '0.75rem', color: '#8e95a5' }}>
+                        Type: {row.entry_type}
+                      </span>
+                    </td>
+                    <td>
+                      {row.payment_method ? (
+                        <span className={`badge-mode badge-mode-${row.payment_method.toLowerCase()}`}>
+                          {row.payment_method}
+                        </span>
+                      ) : (
+                        <span style={{ color: '#6b7280' }}>-</span>
+                      )}
+                    </td>
+                    <td className="debit-text">
+                      {row.debit_credit === 'DEBIT' ? `₹${row.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '-'}
+                    </td>
+                    <td className="credit-text">
+                      {row.debit_credit === 'CREDIT' ? `₹${row.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '-'}
+                    </td>
+                    <td className="balance-text">
+                      ₹{row.balance_after.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        /* Metal Ledger Table */
+        <div className="workshop-table-container">
+          <table className="workshop-table">
+            <thead>
+              <tr>
+                <th>Date & Time</th>
+                <th>Reference</th>
+                <th>Metal & Purity</th>
+                <th>Description</th>
+                <th>Debit / Given (Dr g)</th>
+                <th>Credit / Received (Cr g)</th>
+                <th>Balance (g)</th>
+                <th>Valuation Rate & Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr>
+                  <td colSpan={8} style={{ textAlign: 'center', padding: '2rem' }}>
+                    Loading customer metal ledger entries...
+                  </td>
+                </tr>
+              ) : metalEntries.filter((e) => selectedMetalFilter === 'ALL' || e.metal_code === selectedMetalFilter).length === 0 ? (
+                <tr>
+                  <td colSpan={8} style={{ textAlign: 'center', padding: '2rem', color: '#8e95a5' }}>
+                    No metal ledger entries found for this customer.
+                  </td>
+                </tr>
+              ) : (
+                metalEntries
+                  .filter((e) => selectedMetalFilter === 'ALL' || e.metal_code === selectedMetalFilter)
+                  .map((row) => (
+                    <tr key={row.id}>
+                      <td>{row.created_at}</td>
+                      <td style={{ fontWeight: 600, color: '#d4af37' }}>{row.reference_number || '-'}</td>
+                      <td>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                          <span className={`metal-badge ${row.metal_code === 'GOLD' ? 'metal-badge-gold' : 'metal-badge-silver'}`}>
+                            {row.metal_name || row.metal_code}
+                          </span>
+                          <span style={{ fontSize: '0.8rem', color: '#cbd5e1' }}>
+                            {row.purity_name || 'Standard'}
+                          </span>
+                        </div>
+                      </td>
+                      <td>
+                        <div>{row.description}</div>
+                        <span style={{ fontSize: '0.75rem', color: '#8e95a5' }}>
+                          Type: {row.entry_type} • Fine Wt: {row.fine_weight.toFixed(4)}g
+                        </span>
+                      </td>
+                      <td className="debit-text" style={{ fontFamily: 'monospace', fontWeight: 600 }}>
+                        {row.debit_credit === 'DEBIT' ? `${row.weight.toFixed(4)} g` : '-'}
+                      </td>
+                      <td className="credit-text" style={{ fontFamily: 'monospace', fontWeight: 600 }}>
+                        {row.debit_credit === 'CREDIT' ? `${row.weight.toFixed(4)} g` : '-'}
+                      </td>
+                      <td className="balance-text" style={{ fontFamily: 'monospace', fontWeight: 700 }}>
+                        {row.balance_after > 0 ? `+${row.balance_after.toFixed(4)} g (Dr)` : row.balance_after < 0 ? `${row.balance_after.toFixed(4)} g (Cr)` : '0.0000 g'}
+                      </td>
+                      <td>
+                        {row.valuation_rate > 0 ? (
+                          <div style={{ fontSize: '0.8rem' }}>
+                            <div>₹{row.valuation_rate}/g</div>
+                            <small className="text-gold">₹{row.valuation_amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</small>
+                          </div>
+                        ) : (
+                          <span style={{ color: '#6b7280' }}>—</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* RECORD PAYMENT (RECEIPT) MODAL */}
       {showReceiptModal && (

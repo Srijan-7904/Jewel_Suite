@@ -37,6 +37,10 @@ settingsRoutes.put('/gst', requireRole('ADMIN'), (req, res, next) => settingsCon
 settingsRoutes.get('/payment-modes', (req, res, next) => settingsController.getPaymentModes(req, res, next));
 settingsRoutes.put('/payment-modes/:code/toggle', requireRole('ADMIN'), (req, res, next) => settingsController.togglePaymentMode(req, res, next));
 
+// Shop Receiving Accounts
+settingsRoutes.get('/receiving-accounts', (req, res, next) => settingsController.getReceivingAccounts(req, res, next));
+settingsRoutes.put('/receiving-accounts', requireRole('ADMIN'), (req, res, next) => settingsController.updateReceivingAccounts(req, res, next));
+
 // Printing Settings
 settingsRoutes.get('/printing', (req, res, next) => settingsController.getPrintSettings(req, res, next));
 settingsRoutes.put('/printing', requireRole('ADMIN'), (req, res, next) => settingsController.updatePrintSettings(req, res, next));

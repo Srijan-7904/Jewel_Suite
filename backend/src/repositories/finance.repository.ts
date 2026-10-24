@@ -3,7 +3,7 @@
 
 import { v4 as uuidv4 } from 'uuid';
 import { getDb } from '../database/connection/db.js';
-import { PartyType, EntryType, DebitCredit, PaymentType, PaymentMode, calculateNextBalance } from '../domain/finance.js';
+import { PartyType, EntryType, DebitCredit, PaymentType, PaymentMode, calculateNextBalance, MetalEntryType, calculateNextMetalBalance } from '../domain/finance.js';
 import { PaginatedResult } from './customer.repository.js';
 
 export interface LedgerEntryRecord {
@@ -57,6 +57,9 @@ export interface PaymentRecord {
   payment_date: string;
   reference_type: string | null;
   reference_id: string | null;
+  payer_name?: string | null;
+  payer_bank?: string | null;
+  received_in?: string | null;
   notes: string | null;
   created_by: string | null;
   creator_name?: string | null;
@@ -75,6 +78,9 @@ export interface CreatePaymentData {
   payment_date?: string;
   reference_type?: string | null;
   reference_id?: string | null;
+  payer_name?: string | null;
+  payer_bank?: string | null;
+  received_in?: string | null;
   notes?: string | null;
   created_by?: string | null;
 }
@@ -123,6 +129,76 @@ export interface CashBookRow {
   cash_in: number;
   cash_out: number;
   running_balance: number;
+}
+
+export interface PartyMetalLedgerRecord {
+  id: string;
+  party_type: PartyType | string;
+  party_id: string;
+  party_name?: string;
+  party_code?: string;
+  metal_id: string;
+  metal_name?: string;
+  metal_code?: string;
+  purity_id: string | null;
+  purity_name?: string | null;
+  entry_type: MetalEntryType | string;
+  debit_credit: DebitCredit | string;
+  weight: number;
+  purity_percent: number | null;
+  fine_weight: number;
+  balance_before: number;
+  balance_after: number;
+  valuation_rate: number;
+  valuation_amount: number;
+  reference_type: string | null;
+  reference_id: string | null;
+  reference_number: string | null;
+  description: string | null;
+  created_by: string | null;
+  creator_name?: string | null;
+  created_at: string;
+}
+
+export interface CreatePartyMetalLedgerData {
+  id?: string;
+  party_type: PartyType | string;
+  party_id: string;
+  metal_id: string;
+  purity_id?: string | null;
+  entry_type: MetalEntryType | string;
+  debit_credit: DebitCredit | string;
+  weight: number;
+  purity_percent?: number | null;
+  fine_weight?: number;
+  valuation_rate?: number;
+  valuation_amount?: number;
+  reference_type?: string | null;
+  reference_id?: string | null;
+  reference_number?: string | null;
+  description?: string | null;
+  created_by?: string | null;
+  created_at?: string;
+}
+
+export interface PartyMetalBalanceSummary {
+  metal_id: string;
+  metal_name: string;
+  metal_code: string;
+  balance_grams: number;
+}
+
+export interface MetalLedgerQueryParams {
+  page?: number;
+  pageSize?: number;
+  party_type?: string;
+  party_id?: string;
+  metal_id?: string;
+  entry_type?: string;
+  debit_credit?: string;
+  from_date?: string;
+  to_date?: string;
+  search?: string;
 }
 
 export class FinanceRepository {
@@ -402,8 +478,8 @@ export class FinanceRepository {
         id, payment_number, party_type, party_id,
         payment_type, payment_mode, amount,
         reference_number, payment_date, reference_type,
-        reference_id, notes, created_by, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        reference_id, payer_name, payer_bank, received_in, notes, created_by, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
       id,
       paymentNumber,
@@ -416,6 +492,9 @@ export class FinanceRepository {
       paymentDate,
       data.reference_type || null,
       data.reference_id || null,
+      data.payer_name ? data.payer_name.trim() : null,
+      data.payer_bank ? data.payer_bank.trim() : null,
+      data.received_in ? data.received_in.trim() : null,
       data.notes || null,
       data.created_by || null,
       createdAt
@@ -833,6 +912,232 @@ export class FinanceRepository {
       today_collections: todayCollections,
       today_payments: todayPayments,
       today_sales: todaySales,
+    };
+  }
+
+  /**
+   * Returns current latest physical metal balance in grams for a party and metal.
+   * If no entries exist, returns 0.0.
+   */
+  getLatestPartyMetalBalance(partyType: string, partyId: string, metalId: string): number {
+    const db = getDb();
+    const row = db
+      .prepare(
+        `SELECT balance_after FROM party_metal_ledger_entries 
+         WHERE party_type = ? AND party_id = ? AND metal_id = ? 
+         ORDER BY created_at DESC, rowid DESC LIMIT 1`
+      )
+      .get(partyType, partyId, metalId) as { balance_after: number } | undefined;
+
+    return row ? Number(row.balance_after) : 0.0;
+  }
+
+  /**
+   * Returns party metal ledger entry by ID with metal and purity details.
+   */
+  getPartyMetalLedgerEntryById(id: string): PartyMetalLedgerRecord | null {
+    const db = getDb();
+    const row = db
+      .prepare(
+        `SELECT 
+           pmle.*,
+           m.name AS metal_name,
+           m.code AS metal_code,
+           mp.name AS purity_name,
+           u.full_name AS creator_name
+         FROM party_metal_ledger_entries pmle
+         JOIN metals m ON m.id = pmle.metal_id
+         LEFT JOIN metal_purities mp ON mp.id = pmle.purity_id
+         LEFT JOIN users u ON u.id = pmle.created_by
+         WHERE pmle.id = ?`
+      )
+      .get(id) as PartyMetalLedgerRecord | undefined;
+
+    return row || null;
+  }
+
+  /**
+   * Creates an immutable party metal ledger entry.
+   * Automatically calculates balance_before and balance_after in physical grams.
+   */
+  createPartyMetalLedgerEntry(data: CreatePartyMetalLedgerData): PartyMetalLedgerRecord {
+    const db = getDb();
+    const id = data.id || uuidv4();
+    const balanceBefore = this.getLatestPartyMetalBalance(data.party_type, data.party_id, data.metal_id);
+    const balanceAfter = calculateNextMetalBalance(
+      data.party_type,
+      balanceBefore,
+      data.debit_credit,
+      data.weight
+    );
+
+    let purityPercent = data.purity_percent ?? null;
+    if (purityPercent === null && data.purity_id) {
+      const purityRow = db.prepare(`SELECT tunch_percent FROM metal_purities WHERE id = ?`).get(data.purity_id) as { tunch_percent: number | null } | undefined;
+      if (purityRow?.tunch_percent != null) {
+        purityPercent = Number(purityRow.tunch_percent);
+      }
+    }
+
+    const fineWeight = data.fine_weight !== undefined
+      ? data.fine_weight
+      : (purityPercent != null ? Number((data.weight * (purityPercent / 100)).toFixed(4)) : data.weight);
+
+    const valuationRate = data.valuation_rate ?? 0.0;
+    const valuationAmount = data.valuation_amount !== undefined
+      ? data.valuation_amount
+      : (valuationRate > 0 ? Number((data.weight * valuationRate).toFixed(2)) : 0.0);
+
+    const createdAt = data.created_at || new Date().toISOString().replace('T', ' ').substring(0, 19);
+
+    db.prepare(
+      `INSERT INTO party_metal_ledger_entries (
+        id, party_type, party_id, metal_id, purity_id,
+        entry_type, debit_credit, weight, purity_percent, fine_weight,
+        balance_before, balance_after, valuation_rate, valuation_amount,
+        reference_type, reference_id, reference_number,
+        description, created_by, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      id,
+      data.party_type,
+      data.party_id,
+      data.metal_id,
+      data.purity_id || null,
+      data.entry_type,
+      data.debit_credit,
+      data.weight,
+      purityPercent,
+      fineWeight,
+      balanceBefore,
+      balanceAfter,
+      valuationRate,
+      valuationAmount,
+      data.reference_type || null,
+      data.reference_id || null,
+      data.reference_number || null,
+      data.description || null,
+      data.created_by || null,
+      createdAt
+    );
+
+    return this.getPartyMetalLedgerEntryById(id)!;
+  }
+
+  /**
+   * Returns current physical metal balances for all active metals for a party.
+   */
+  getPartyMetalBalances(partyType: string, partyId: string): PartyMetalBalanceSummary[] {
+    const db = getDb();
+    const rows = db
+      .prepare(
+        `SELECT 
+           m.id as metal_id,
+           m.name as metal_name,
+           m.code as metal_code,
+           COALESCE(
+             (SELECT balance_after FROM party_metal_ledger_entries 
+              WHERE party_type = ? AND party_id = ? AND metal_id = m.id 
+              ORDER BY created_at DESC, rowid DESC LIMIT 1),
+             0.0
+           ) as balance_grams
+         FROM metals m
+         WHERE m.is_active = 1
+         ORDER BY m.code ASC`
+      )
+      .all(partyType, partyId) as PartyMetalBalanceSummary[];
+
+    return rows.map((r) => ({
+      metal_id: r.metal_id,
+      metal_name: r.metal_name,
+      metal_code: r.metal_code,
+      balance_grams: Number(Number(r.balance_grams).toFixed(4)),
+    }));
+  }
+
+  /**
+   * Queries party metal ledger entries with pagination, metal, and date filtering.
+   */
+  findPartyMetalLedgerEntries(params: MetalLedgerQueryParams): PaginatedResult<PartyMetalLedgerRecord> {
+    const db = getDb();
+    const page = Math.max(1, params.page || 1);
+    const pageSize = Math.min(100, Math.max(1, params.pageSize || 20));
+    const offset = (page - 1) * pageSize;
+
+    const conditions: string[] = [];
+    const values: (string | number)[] = [];
+
+    if (params.party_type) {
+      conditions.push('pmle.party_type = ?');
+      values.push(params.party_type);
+    }
+
+    if (params.party_id) {
+      conditions.push('pmle.party_id = ?');
+      values.push(params.party_id);
+    }
+
+    if (params.metal_id) {
+      conditions.push('pmle.metal_id = ?');
+      values.push(params.metal_id);
+    }
+
+    if (params.entry_type) {
+      conditions.push('pmle.entry_type = ?');
+      values.push(params.entry_type);
+    }
+
+    if (params.debit_credit) {
+      conditions.push('pmle.debit_credit = ?');
+      values.push(params.debit_credit);
+    }
+
+    if (params.from_date) {
+      conditions.push('date(pmle.created_at) >= date(?)');
+      values.push(params.from_date);
+    }
+
+    if (params.to_date) {
+      conditions.push('date(pmle.created_at) <= date(?)');
+      values.push(params.to_date);
+    }
+
+    if (params.search) {
+      conditions.push('(pmle.reference_number LIKE ? OR pmle.description LIKE ?)');
+      const term = `%${params.search}%`;
+      values.push(term, term);
+    }
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    const countStmt = db.prepare(`SELECT COUNT(*) as total FROM party_metal_ledger_entries pmle ${whereClause}`);
+    const totalRow = countStmt.get(...values) as { total: number };
+    const total = totalRow.total;
+
+    const dataStmt = db.prepare(`
+      SELECT 
+        pmle.*,
+        m.name AS metal_name,
+        m.code AS metal_code,
+        mp.name AS purity_name,
+        u.full_name AS creator_name
+      FROM party_metal_ledger_entries pmle
+      JOIN metals m ON m.id = pmle.metal_id
+      LEFT JOIN metal_purities mp ON mp.id = pmle.purity_id
+      LEFT JOIN users u ON u.id = pmle.created_by
+      ${whereClause}
+      ORDER BY pmle.created_at DESC, pmle.rowid DESC
+      LIMIT ? OFFSET ?
+    `);
+
+    const items = dataStmt.all(...values, pageSize, offset) as PartyMetalLedgerRecord[];
+
+    return {
+      items,
+      total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize) || 1,
     };
   }
 }

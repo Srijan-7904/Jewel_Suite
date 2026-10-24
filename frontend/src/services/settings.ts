@@ -85,6 +85,19 @@ export interface PaymentModeConfig {
   sort_order: number;
 }
 
+export interface ShopReceivingAccount {
+  id: string;
+  account_name: string;
+  account_type: 'BANK' | 'UPI' | 'CASH' | 'CARD_POS' | 'OTHER';
+  bank_name?: string | null;
+  account_number?: string | null;
+  ifsc?: string | null;
+  upi_id?: string | null;
+  is_default?: boolean;
+  is_active: boolean;
+  display_order?: number;
+}
+
 export interface PrintSettings {
   show_logo: boolean;
   show_shop_name: boolean;
@@ -242,6 +255,18 @@ export const settingsApi = {
     return request<PaymentModeConfig>(`/api/settings/payment-modes/${code}/toggle`, {
       method: 'PUT',
       body: JSON.stringify({ is_active }),
+    });
+  },
+
+  // Shop Receiving Accounts
+  getReceivingAccounts(): Promise<ShopReceivingAccount[]> {
+    return request<ShopReceivingAccount[]>('/api/settings/receiving-accounts');
+  },
+
+  updateReceivingAccounts(accounts: ShopReceivingAccount[]): Promise<ShopReceivingAccount[]> {
+    return request<ShopReceivingAccount[]>('/api/settings/receiving-accounts', {
+      method: 'PUT',
+      body: JSON.stringify(accounts),
     });
   },
 

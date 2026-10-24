@@ -68,6 +68,37 @@ export interface Customer {
   customer_type: 'RETAIL' | 'WHOLESALE' | 'GIRVI_CLIENT';
   opening_balance: number;
   opening_balance_type: 'DEBIT' | 'CREDIT';
+
+  // Granular Multi-Type Opening Balances
+  opening_balance_date?: string | null;
+  opening_balance_ref?: string | null;
+  opening_balance_notes?: string | null;
+
+  opening_cash_balance?: number;
+  opening_cash_type?: 'DEBIT' | 'CREDIT';
+
+  opening_bank_balance?: number;
+  opening_bank_type?: 'DEBIT' | 'CREDIT';
+
+  opening_gold_weight?: number;
+  opening_gold_type?: 'DEBIT' | 'CREDIT';
+  opening_gold_purity_id?: string | null;
+  opening_gold_purity_name?: string | null;
+  opening_gold_rate?: number;
+  opening_gold_value?: number;
+
+  opening_silver_weight?: number;
+  opening_silver_type?: 'DEBIT' | 'CREDIT';
+  opening_silver_purity_id?: string | null;
+  opening_silver_purity_name?: string | null;
+  opening_silver_rate?: number;
+  opening_silver_value?: number;
+
+  // Live Balances
+  current_balance?: number;
+  gold_balance_grams?: number;
+  silver_balance_grams?: number;
+
   notes: string | null;
   is_active: number;
   created_at: string;
@@ -298,6 +329,9 @@ export interface PurchaseBillItem {
   net_weight: number;
   tunch_percent: number;
   fine_weight: number;
+  effective_fine_weight?: number;
+  adjusted_fine_weight?: number;
+  billable_weight?: number;
   wastage_percent: number;
   wastage_weight?: number;
   wastage_amount?: number;
@@ -313,8 +347,12 @@ export interface PurchaseBillItem {
 export interface PurchaseBillPayment {
   id: string;
   purchase_bill_id: string;
-  payment_mode: 'CASH' | 'CARD' | 'UPI' | 'BANK' | 'CREDIT';
+  payment_mode: 'CASH' | 'CARD' | 'UPI' | 'BANK' | 'CREDIT' | 'GOLD' | 'SILVER' | 'OTHER';
   amount: number;
+  metal_weight?: number;
+  metal_rate?: number;
+  metal_id?: string;
+  purity_id?: string;
   reference_number: string | null;
   notes: string | null;
   created_at: string;
@@ -379,8 +417,12 @@ export interface AddPurchaseItemInput {
 }
 
 export interface AddPurchasePaymentInput {
-  payment_mode: 'CASH' | 'CARD' | 'UPI' | 'BANK' | 'CREDIT';
+  payment_mode: 'CASH' | 'CARD' | 'UPI' | 'BANK' | 'CREDIT' | 'GOLD' | 'SILVER' | 'OTHER';
   amount: number;
+  metal_weight?: number;
+  metal_rate?: number;
+  metal_id?: string;
+  purity_id?: string;
   reference_number?: string;
   notes?: string;
 }
@@ -517,6 +559,42 @@ export interface LedgerEntry {
   created_by: string | null;
   creator_name?: string | null;
   created_at: string;
+}
+
+export interface PartyMetalLedgerRecord {
+  id: string;
+  party_type: PartyType | string;
+  party_id: string;
+  party_name?: string;
+  party_code?: string;
+  metal_id: string;
+  metal_name?: string;
+  metal_code?: string;
+  purity_id: string | null;
+  purity_name?: string | null;
+  entry_type: string;
+  debit_credit: DebitCredit;
+  weight: number;
+  purity_percent: number | null;
+  fine_weight: number;
+  balance_before: number;
+  balance_after: number;
+  valuation_rate: number;
+  valuation_amount: number;
+  reference_type: string | null;
+  reference_id: string | null;
+  reference_number: string | null;
+  description: string | null;
+  created_by: string | null;
+  creator_name?: string | null;
+  created_at: string;
+}
+
+export interface PartyMetalBalanceSummary {
+  metal_id: string;
+  metal_name: string;
+  metal_code: string;
+  balance_grams: number;
 }
 
 export interface Payment {

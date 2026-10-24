@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Customer } from '../../types';
-import { customerApi } from '../../services/masters';
+import { Customer, Metal, MetalPurity } from '../../types';
+import { customerApi, rateApi } from '../../services/masters';
 import {
   Users,
   Plus,
@@ -14,11 +14,15 @@ import {
   Mail,
   MapPin,
   Building,
+  Coins,
 } from 'lucide-react';
 import '../../styles/masters.css';
 
 export const CustomersPage: React.FC = () => {
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [metals, setMetals] = useState<Metal[]>([]);
+  const [purities, setPurities] = useState<MetalPurity[]>([]);
+  const [primaryDirection, setPrimaryDirection] = useState<'DEBIT' | 'CREDIT'>('DEBIT');
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [pageSize] = useState(15);
@@ -59,13 +63,37 @@ export const CustomersPage: React.FC = () => {
     fetchCustomers();
   }, [fetchCustomers]);
 
+  useEffect(() => {
+    rateApi.getMetals().then(setMetals).catch(console.error);
+    rateApi.getAllPurities().then(setPurities).catch(console.error);
+  }, []);
+
   const handleOpenCreate = () => {
+    const today = new Date().toISOString().split('T')[0];
     setSelectedCustomer({
       customer_type: 'RETAIL',
       opening_balance: 0,
       opening_balance_type: 'DEBIT',
+      opening_balance_date: today,
+      opening_balance_ref: '',
+      opening_balance_notes: '',
+      opening_cash_balance: 0,
+      opening_cash_type: 'DEBIT',
+      opening_bank_balance: 0,
+      opening_bank_type: 'DEBIT',
+      opening_gold_weight: 0,
+      opening_gold_type: 'DEBIT',
+      opening_gold_purity_id: '',
+      opening_gold_rate: 0,
+      opening_gold_value: 0,
+      opening_silver_weight: 0,
+      opening_silver_type: 'DEBIT',
+      opening_silver_purity_id: '',
+      opening_silver_rate: 0,
+      opening_silver_value: 0,
       is_active: 1,
     });
+    setPrimaryDirection('DEBIT');
     setFormError(null);
     setModalMode('create');
     setShowModal(true);
@@ -196,7 +224,7 @@ export const CustomersPage: React.FC = () => {
                 <th>Phone</th>
                 <th>City</th>
                 <th>Type</th>
-                <th>Opening Bal</th>
+                <th>Balance / Metal Dues</th>
                 <th>Status</th>
                 <th>Actions</th>
               </tr>
@@ -224,9 +252,29 @@ export const CustomersPage: React.FC = () => {
                     <td>
                       <span className="badge badge-gold">{c.customer_type}</span>
                     </td>
-                    <td className="font-mono">
-                      ₹{c.opening_balance.toFixed(2)}{' '}
-                      <small className="text-muted-cell">{c.opening_balance_type}</small>
+                    <td>
+                      <div className="font-mono" style={{ fontWeight: 600 }}>
+                        <span style={{ color: (c.current_balance ?? c.opening_balance) > 0 ? '#f43f5e' : (c.current_balance ?? c.opening_balance) < 0 ? '#10b981' : '#9ca3af' }}>
+                          ₹{Math.abs(c.current_balance ?? c.opening_balance).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        </span>{' '}
+                        <small className="text-muted-cell">
+                          {(c.current_balance ?? c.opening_balance) > 0 ? 'Dr' : (c.current_balance ?? c.opening_balance) < 0 ? 'Cr' : 'Nil'}
+                        </small>
+                      </div>
+                      {(Boolean(c.gold_balance_grams && c.gold_balance_grams !== 0) || Boolean(c.silver_balance_grams && c.silver_balance_grams !== 0)) && (
+                        <div style={{ display: 'flex', gap: '0.35rem', marginTop: '0.2rem', flexWrap: 'wrap' }}>
+                          {Boolean(c.gold_balance_grams && c.gold_balance_grams !== 0) && (
+                            <span className="metal-badge metal-badge-gold" title="Customer Gold Balance">
+                              Au: {c.gold_balance_grams! > 0 ? '+' : ''}{c.gold_balance_grams}g
+                            </span>
+                          )}
+                          {Boolean(c.silver_balance_grams && c.silver_balance_grams !== 0) && (
+                            <span className="metal-badge metal-badge-silver" title="Customer Silver Balance">
+                              Ag: {c.silver_balance_grams! > 0 ? '+' : ''}{c.silver_balance_grams}g
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </td>
                     <td>
                       {c.is_active === 1 ? (
@@ -299,7 +347,7 @@ export const CustomersPage: React.FC = () => {
       {/* Modal Dialog */}
       {showModal && (
         <div className="modal-overlay">
-          <div className="modal-content">
+          <div className="modal-content modal-lg">
             <div className="modal-header">
               <h3>
                 {modalMode === 'create' && 'Add New Customer'}
@@ -317,6 +365,60 @@ export const CustomersPage: React.FC = () => {
 
             {modalMode === 'view' ? (
               <div className="modal-body">
+                {/* Live Balance Summary Cards */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.75rem', marginBottom: '0.5rem' }}>
+                  <div className="opening-ledger-card" style={{ borderLeft: '3px solid #d4af37' }}>
+                    <div className="card-heading">
+                      <span>Monetary Outstanding</span>
+                      <Coins size={14} className="text-gold" />
+                    </div>
+                    <div style={{ fontSize: '1.2rem', fontWeight: 700, color: (selectedCustomer.current_balance ?? selectedCustomer.opening_balance ?? 0) > 0 ? '#f43f5e' : (selectedCustomer.current_balance ?? selectedCustomer.opening_balance ?? 0) < 0 ? '#10b981' : '#9ca3af' }}>
+                      ₹{Math.abs(selectedCustomer.current_balance ?? selectedCustomer.opening_balance ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </div>
+                    <div style={{ fontSize: '0.7rem', color: '#9da4b3' }}>
+                      {(selectedCustomer.current_balance ?? selectedCustomer.opening_balance ?? 0) > 0
+                        ? 'Customer owes shop (Receivable)'
+                        : (selectedCustomer.current_balance ?? selectedCustomer.opening_balance ?? 0) < 0
+                        ? 'Shop owes customer (Store Credit)'
+                        : 'Account fully settled'}
+                    </div>
+                  </div>
+
+                  <div className="opening-ledger-card card-gold">
+                    <div className="card-heading">
+                      <span>Gold Metal Balance</span>
+                      <span className="metal-badge metal-badge-gold">Au</span>
+                    </div>
+                    <div style={{ fontSize: '1.2rem', fontWeight: 700, color: '#dfb742' }}>
+                      {Number(selectedCustomer.gold_balance_grams || 0).toFixed(4)} g
+                    </div>
+                    <div style={{ fontSize: '0.7rem', color: '#9da4b3' }}>
+                      {(selectedCustomer.gold_balance_grams || 0) > 0
+                        ? 'Customer owes gold to shop'
+                        : (selectedCustomer.gold_balance_grams || 0) < 0
+                        ? 'Shop owes gold to customer'
+                        : 'No gold dues'}
+                    </div>
+                  </div>
+
+                  <div className="opening-ledger-card card-silver">
+                    <div className="card-heading">
+                      <span>Silver Metal Balance</span>
+                      <span className="metal-badge metal-badge-silver">Ag</span>
+                    </div>
+                    <div style={{ fontSize: '1.2rem', fontWeight: 700, color: '#cbd5e1' }}>
+                      {Number(selectedCustomer.silver_balance_grams || 0).toFixed(3)} g
+                    </div>
+                    <div style={{ fontSize: '0.7rem', color: '#9da4b3' }}>
+                      {(selectedCustomer.silver_balance_grams || 0) > 0
+                        ? 'Customer owes silver to shop'
+                        : (selectedCustomer.silver_balance_grams || 0) < 0
+                        ? 'Shop owes silver to customer'
+                        : 'No silver dues'}
+                    </div>
+                  </div>
+                </div>
+
                 <div className="modal-form-grid">
                   <div className="form-field">
                     <label>Customer Code</label>
@@ -346,16 +448,65 @@ export const CustomersPage: React.FC = () => {
                     <label>Address</label>
                     <div className="flex items-center gap-1"><MapPin size={13} /> {selectedCustomer.address || '—'}, {selectedCustomer.city || ''} {selectedCustomer.state || ''} {selectedCustomer.pincode || ''}</div>
                   </div>
-                  <div className="form-field">
+                  <div className="form-field col-span-2">
                     <label>GSTIN</label>
                     <div className="font-mono flex items-center gap-1"><Building size={13} /> {selectedCustomer.gstin || 'Unregistered'}</div>
                   </div>
-                  <div className="form-field">
-                    <label>Opening Balance</label>
-                    <div className="font-mono">₹{selectedCustomer.opening_balance?.toFixed(2)} ({selectedCustomer.opening_balance_type})</div>
+
+                  {/* Recorded Opening Balance Breakdown */}
+                  <div className="col-span-2 opening-balance-container" style={{ padding: '0.85rem' }}>
+                    <div className="opening-balance-title" style={{ fontSize: '0.8rem', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '0.4rem' }}>
+                      <Coins size={14} /> Registered Opening Balances Record
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.6rem', marginTop: '0.4rem', fontSize: '0.8rem' }}>
+                      <div>
+                        <span className="text-muted">Opening Date: </span>
+                        <strong>{selectedCustomer.opening_balance_date || 'At Creation'}</strong>
+                      </div>
+                      <div>
+                        <span className="text-muted">Reference: </span>
+                        <strong>{selectedCustomer.opening_balance_ref || 'None'}</strong>
+                      </div>
+                      <div>
+                        <span className="text-muted">Opening Cash: </span>
+                        <strong>₹{(selectedCustomer.opening_cash_balance || 0).toFixed(2)} ({selectedCustomer.opening_cash_type || 'DEBIT'})</strong>
+                      </div>
+                      <div>
+                        <span className="text-muted">Opening Bank: </span>
+                        <strong>₹{(selectedCustomer.opening_bank_balance || 0).toFixed(2)} ({selectedCustomer.opening_bank_type || 'DEBIT'})</strong>
+                      </div>
+                      <div>
+                        <span className="text-muted">Opening Gold: </span>
+                        <strong className="text-gold">
+                          {(selectedCustomer.opening_gold_weight || 0)}g {selectedCustomer.opening_gold_purity_name ? `(${selectedCustomer.opening_gold_purity_name})` : ''} - {selectedCustomer.opening_gold_type || 'DEBIT'}
+                        </strong>
+                        {Boolean(selectedCustomer.opening_gold_rate && selectedCustomer.opening_gold_rate > 0) && (
+                          <span style={{ fontSize: '0.7rem', color: '#9da4b3', marginLeft: '0.3rem' }}>
+                            (@ ₹{selectedCustomer.opening_gold_rate}/g = ₹{(selectedCustomer.opening_gold_value || 0).toFixed(2)})
+                          </span>
+                        )}
+                      </div>
+                      <div>
+                        <span className="text-muted">Opening Silver: </span>
+                        <strong style={{ color: '#cbd5e1' }}>
+                          {(selectedCustomer.opening_silver_weight || 0)}g {selectedCustomer.opening_silver_purity_name ? `(${selectedCustomer.opening_silver_purity_name})` : ''} - {selectedCustomer.opening_silver_type || 'DEBIT'}
+                        </strong>
+                        {Boolean(selectedCustomer.opening_silver_rate && selectedCustomer.opening_silver_rate > 0) && (
+                          <span style={{ fontSize: '0.7rem', color: '#9da4b3', marginLeft: '0.3rem' }}>
+                            (@ ₹{selectedCustomer.opening_silver_rate}/g = ₹{(selectedCustomer.opening_silver_value || 0).toFixed(2)})
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    {selectedCustomer.opening_balance_notes && (
+                      <div style={{ marginTop: '0.4rem', fontSize: '0.75rem', color: '#9da4b3' }}>
+                        Note: {selectedCustomer.opening_balance_notes}
+                      </div>
+                    )}
                   </div>
+
                   <div className="form-field col-span-2">
-                    <label>Notes</label>
+                    <label>General Notes</label>
                     <div className="text-muted">{selectedCustomer.notes || 'No notes added'}</div>
                   </div>
                 </div>
@@ -472,26 +623,336 @@ export const CustomersPage: React.FC = () => {
                       />
                     </div>
 
-                    <div className="form-field">
-                      <label>Opening Balance (₹)</label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={selectedCustomer.opening_balance ?? 0}
-                        onChange={(e) => setSelectedCustomer({ ...selectedCustomer, opening_balance: parseFloat(e.target.value) || 0 })}
-                      />
-                    </div>
+                    {modalMode === 'create' ? (
+                      /* Multi-Type Opening Balance Section */
+                      <div className="opening-balance-container">
+                        <div className="opening-balance-header">
+                          <div className="opening-balance-title">
+                            <Coins size={16} /> Opening Balance (Monetary & Metal Ledgers)
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <span style={{ fontSize: '0.75rem', color: '#9da4b3' }}>Default Direction:</span>
+                            <select
+                              style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', borderRadius: '4px', background: 'var(--bg-app)', color: 'var(--text-main)', border: '1px solid var(--border-default)' }}
+                              value={primaryDirection}
+                              onChange={(e) => {
+                                const dir = e.target.value as 'DEBIT' | 'CREDIT';
+                                setPrimaryDirection(dir);
+                                setSelectedCustomer((prev) => ({
+                                  ...prev,
+                                  opening_cash_type: dir,
+                                  opening_bank_type: dir,
+                                  opening_gold_type: dir,
+                                  opening_silver_type: dir,
+                                  opening_balance_type: dir,
+                                }));
+                              }}
+                            >
+                              <option value="DEBIT">Customer Owes Us (Dr)</option>
+                              <option value="CREDIT">We Owe Customer (Cr)</option>
+                            </select>
+                          </div>
+                        </div>
 
-                    <div className="form-field">
-                      <label>Balance Type</label>
-                      <select
-                        value={selectedCustomer.opening_balance_type || 'DEBIT'}
-                        onChange={(e) => setSelectedCustomer({ ...selectedCustomer, opening_balance_type: e.target.value as any })}
-                      >
-                        <option value="DEBIT">Debit (Party owes shop)</option>
-                        <option value="CREDIT">Credit (Shop owes party)</option>
-                      </select>
-                    </div>
+                        {/* Date, Ref, Notes row */}
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.75rem', width: '100%' }}>
+                          <div className="form-field">
+                            <label>Opening Date</label>
+                            <input
+                              type="date"
+                              value={selectedCustomer.opening_balance_date || new Date().toISOString().split('T')[0]}
+                              onChange={(e) => setSelectedCustomer({ ...selectedCustomer, opening_balance_date: e.target.value })}
+                            />
+                          </div>
+                          <div className="form-field">
+                            <label>Reference # (Old Bill/Khata)</label>
+                            <input
+                              type="text"
+                              placeholder="e.g. KHATA-2024-45"
+                              value={selectedCustomer.opening_balance_ref || ''}
+                              onChange={(e) => setSelectedCustomer({ ...selectedCustomer, opening_balance_ref: e.target.value })}
+                            />
+                          </div>
+                          <div className="form-field">
+                            <label>Opening Balance Notes</label>
+                            <input
+                              type="text"
+                              placeholder="e.g. Carried forward balance from old register"
+                              value={selectedCustomer.opening_balance_notes || ''}
+                              onChange={(e) => setSelectedCustomer({ ...selectedCustomer, opening_balance_notes: e.target.value })}
+                            />
+                          </div>
+                        </div>
+
+                        {/* 4 Cards Grid: Cash, Bank, Gold, Silver */}
+                        <div className="opening-balance-grid">
+                          {/* 1. Cash Opening Balance */}
+                          <div className="opening-ledger-card card-cash">
+                            <div className="card-heading">
+                              <span>Cash Opening Balance</span>
+                              <span className="badge badge-success">₹ Cash</span>
+                            </div>
+                            <div className="card-inputs-row">
+                              <div>
+                                <label style={{ fontSize: '0.7rem', color: '#9da4b3' }}>Amount (₹)</label>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  value={selectedCustomer.opening_cash_balance ?? 0}
+                                  onChange={(e) => setSelectedCustomer({ ...selectedCustomer, opening_cash_balance: parseFloat(e.target.value) || 0 })}
+                                />
+                              </div>
+                              <div>
+                                <label style={{ fontSize: '0.7rem', color: '#9da4b3' }}>Direction</label>
+                                <select
+                                  value={selectedCustomer.opening_cash_type || 'DEBIT'}
+                                  onChange={(e) => setSelectedCustomer({ ...selectedCustomer, opening_cash_type: e.target.value as any })}
+                                >
+                                  <option value="DEBIT">Customer Owes Us (Dr)</option>
+                                  <option value="CREDIT">We Owe (Cr)</option>
+                                </select>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* 2. Bank / RTGS Opening Balance */}
+                          <div className="opening-ledger-card card-bank">
+                            <div className="card-heading">
+                              <span>Bank / RTGS Balance</span>
+                              <span className="badge badge-info">₹ Bank</span>
+                            </div>
+                            <div className="card-inputs-row">
+                              <div>
+                                <label style={{ fontSize: '0.7rem', color: '#9da4b3' }}>Amount (₹)</label>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  value={selectedCustomer.opening_bank_balance ?? 0}
+                                  onChange={(e) => setSelectedCustomer({ ...selectedCustomer, opening_bank_balance: parseFloat(e.target.value) || 0 })}
+                                />
+                              </div>
+                              <div>
+                                <label style={{ fontSize: '0.7rem', color: '#9da4b3' }}>Direction</label>
+                                <select
+                                  value={selectedCustomer.opening_bank_type || 'DEBIT'}
+                                  onChange={(e) => setSelectedCustomer({ ...selectedCustomer, opening_bank_type: e.target.value as any })}
+                                >
+                                  <option value="DEBIT">Customer Owes Us (Dr)</option>
+                                  <option value="CREDIT">We Owe (Cr)</option>
+                                </select>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* 3. Gold Opening Balance */}
+                          <div className="opening-ledger-card card-gold">
+                            <div className="card-heading">
+                              <span>Gold Opening Weight</span>
+                              <span className="metal-badge metal-badge-gold">Au (Grams)</span>
+                            </div>
+                            <div className="card-inputs-row">
+                              <div>
+                                <label style={{ fontSize: '0.7rem', color: '#9da4b3' }}>Physical Weight (g)</label>
+                                <input
+                                  type="number"
+                                  step="0.001"
+                                  min="0"
+                                  placeholder="0.000"
+                                  value={selectedCustomer.opening_gold_weight ?? 0}
+                                  onChange={(e) => {
+                                    const wt = parseFloat(e.target.value) || 0;
+                                    const rate = selectedCustomer.opening_gold_rate || 0;
+                                    setSelectedCustomer({
+                                      ...selectedCustomer,
+                                      opening_gold_weight: wt,
+                                      opening_gold_value: rate > 0 ? Number((wt * rate).toFixed(2)) : selectedCustomer.opening_gold_value || 0,
+                                    });
+                                  }}
+                                />
+                              </div>
+                              <div>
+                                <label style={{ fontSize: '0.7rem', color: '#9da4b3' }}>Direction</label>
+                                <select
+                                  value={selectedCustomer.opening_gold_type || 'DEBIT'}
+                                  onChange={(e) => setSelectedCustomer({ ...selectedCustomer, opening_gold_type: e.target.value as any })}
+                                >
+                                  <option value="DEBIT">Customer Owes (Dr)</option>
+                                  <option value="CREDIT">We Owe (Cr)</option>
+                                </select>
+                              </div>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '0.5rem', marginTop: '0.25rem' }}>
+                              <div>
+                                <label style={{ fontSize: '0.7rem', color: '#9da4b3' }}>Purity / Karat</label>
+                                <select
+                                  value={selectedCustomer.opening_gold_purity_id || ''}
+                                  onChange={(e) => setSelectedCustomer({ ...selectedCustomer, opening_gold_purity_id: e.target.value })}
+                                >
+                                  <option value="">Select Karat</option>
+                                  {purities
+                                    .filter((p) => p.code.includes('K') || (metals.find((m) => m.id === p.metal_id)?.code === 'GOLD'))
+                                    .map((p) => (
+                                      <option key={p.id} value={p.id}>
+                                        {p.name} ({p.code})
+                                      </option>
+                                    ))}
+                                </select>
+                              </div>
+                              <div>
+                                <label style={{ fontSize: '0.7rem', color: '#9da4b3' }}>Rate (₹/g)</label>
+                                <input
+                                  type="number"
+                                  step="1"
+                                  min="0"
+                                  placeholder="₹/g"
+                                  value={selectedCustomer.opening_gold_rate ?? 0}
+                                  onChange={(e) => {
+                                    const rate = parseFloat(e.target.value) || 0;
+                                    const wt = selectedCustomer.opening_gold_weight || 0;
+                                    setSelectedCustomer({
+                                      ...selectedCustomer,
+                                      opening_gold_rate: rate,
+                                      opening_gold_value: Number((wt * rate).toFixed(2)),
+                                    });
+                                  }}
+                                />
+                              </div>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.35rem 0.6rem', background: 'var(--bg-app)', borderRadius: '4px', border: '1px solid var(--border-subtle)', fontSize: '0.75rem', marginTop: '0.25rem' }}>
+                              <span style={{ color: '#9da4b3' }}>Rupee Valuation:</span>
+                              <strong style={{ color: '#dfb742', fontFamily: 'monospace' }}>
+                                ₹{Number(selectedCustomer.opening_gold_value || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                              </strong>
+                            </div>
+                          </div>
+
+                          {/* 4. Silver Opening Balance */}
+                          <div className="opening-ledger-card card-silver">
+                            <div className="card-heading">
+                              <span>Silver Opening Weight</span>
+                              <span className="metal-badge metal-badge-silver">Ag (Grams)</span>
+                            </div>
+                            <div className="card-inputs-row">
+                              <div>
+                                <label style={{ fontSize: '0.7rem', color: '#9da4b3' }}>Physical Weight (g)</label>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  placeholder="0.00"
+                                  value={selectedCustomer.opening_silver_weight ?? 0}
+                                  onChange={(e) => {
+                                    const wt = parseFloat(e.target.value) || 0;
+                                    const rate = selectedCustomer.opening_silver_rate || 0;
+                                    setSelectedCustomer({
+                                      ...selectedCustomer,
+                                      opening_silver_weight: wt,
+                                      opening_silver_value: rate > 0 ? Number((wt * rate).toFixed(2)) : selectedCustomer.opening_silver_value || 0,
+                                    });
+                                  }}
+                                />
+                              </div>
+                              <div>
+                                <label style={{ fontSize: '0.7rem', color: '#9da4b3' }}>Direction</label>
+                                <select
+                                  value={selectedCustomer.opening_silver_type || 'DEBIT'}
+                                  onChange={(e) => setSelectedCustomer({ ...selectedCustomer, opening_silver_type: e.target.value as any })}
+                                >
+                                  <option value="DEBIT">Customer Owes (Dr)</option>
+                                  <option value="CREDIT">We Owe (Cr)</option>
+                                </select>
+                              </div>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '0.5rem', marginTop: '0.25rem' }}>
+                              <div>
+                                <label style={{ fontSize: '0.7rem', color: '#9da4b3' }}>Purity</label>
+                                <select
+                                  value={selectedCustomer.opening_silver_purity_id || ''}
+                                  onChange={(e) => setSelectedCustomer({ ...selectedCustomer, opening_silver_purity_id: e.target.value })}
+                                >
+                                  <option value="">Select Purity</option>
+                                  {purities
+                                    .filter((p) => p.code.includes('999') || p.code.includes('925') || (metals.find((m) => m.id === p.metal_id)?.code === 'SILVER'))
+                                    .map((p) => (
+                                      <option key={p.id} value={p.id}>
+                                        {p.name} ({p.code})
+                                      </option>
+                                    ))}
+                                </select>
+                              </div>
+                              <div>
+                                <label style={{ fontSize: '0.7rem', color: '#9da4b3' }}>Rate (₹/g)</label>
+                                <input
+                                  type="number"
+                                  step="0.1"
+                                  min="0"
+                                  placeholder="₹/g"
+                                  value={selectedCustomer.opening_silver_rate ?? 0}
+                                  onChange={(e) => {
+                                    const rate = parseFloat(e.target.value) || 0;
+                                    const wt = selectedCustomer.opening_silver_weight || 0;
+                                    setSelectedCustomer({
+                                      ...selectedCustomer,
+                                      opening_silver_rate: rate,
+                                      opening_silver_value: Number((wt * rate).toFixed(2)),
+                                    });
+                                  }}
+                                />
+                              </div>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.35rem 0.6rem', background: 'var(--bg-app)', borderRadius: '4px', border: '1px solid var(--border-subtle)', fontSize: '0.75rem', marginTop: '0.25rem' }}>
+                              <span style={{ color: '#9da4b3' }}>Rupee Valuation:</span>
+                              <strong style={{ color: '#cbd5e1', fontFamily: 'monospace' }}>
+                                ₹{Number(selectedCustomer.opening_silver_value || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                              </strong>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Summary pills */}
+                        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', paddingTop: '0.4rem', borderTop: '1px dashed var(--border-subtle)' }}>
+                          <div className="summary-pill">
+                            <span style={{ color: '#9da4b3' }}>Net Currency:</span>
+                            <strong style={{ color: '#d4af37' }}>
+                              ₹{Math.abs(
+                                ((selectedCustomer.opening_cash_type === 'DEBIT' ? 1 : -1) * (selectedCustomer.opening_cash_balance || 0)) +
+                                ((selectedCustomer.opening_bank_type === 'DEBIT' ? 1 : -1) * (selectedCustomer.opening_bank_balance || 0))
+                              ).toFixed(2)}
+                              {(((selectedCustomer.opening_cash_type === 'DEBIT' ? 1 : -1) * (selectedCustomer.opening_cash_balance || 0)) +
+                                ((selectedCustomer.opening_bank_type === 'DEBIT' ? 1 : -1) * (selectedCustomer.opening_bank_balance || 0))) >= 0
+                                ? ' (Dr / Customer Owes Us)'
+                                : ' (Cr / We Owe Customer)'}
+                            </strong>
+                          </div>
+                          {Boolean(selectedCustomer.opening_gold_weight && selectedCustomer.opening_gold_weight > 0) && (
+                            <div className="summary-pill">
+                              <span style={{ color: '#9da4b3' }}>Gold Opening:</span>
+                              <span className="metal-badge metal-badge-gold">
+                                {selectedCustomer.opening_gold_weight}g ({selectedCustomer.opening_gold_type})
+                              </span>
+                            </div>
+                          )}
+                          {Boolean(selectedCustomer.opening_silver_weight && selectedCustomer.opening_silver_weight > 0) && (
+                            <div className="summary-pill">
+                              <span style={{ color: '#9da4b3' }}>Silver Opening:</span>
+                              <span className="metal-badge metal-badge-silver">
+                                {selectedCustomer.opening_silver_weight}g ({selectedCustomer.opening_silver_type})
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      /* In Edit Mode: Display opening balance note */
+                      <div className="form-field col-span-2">
+                        <label>Opening Balance (Recorded on Creation)</label>
+                        <div className="text-muted" style={{ fontSize: '0.8rem', padding: '0.5rem 0.75rem', background: 'var(--bg-app)', borderRadius: '6px' }}>
+                          Opening balance was posted to the ledger upon initial customer creation. To record new transactions or adjust balances, use the Customer Ledger page.
+                        </div>
+                      </div>
+                    )}
 
                     <div className="form-field col-span-2">
                       <label>Internal Notes</label>

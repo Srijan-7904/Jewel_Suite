@@ -16,13 +16,20 @@ export interface PurchaseItemCalculationInput {
   tunch_percent: number;
   rate_per_gram: number;
   wastage_percent?: number;
+  badla_percent?: number;
   making_charge?: number;
 }
 
 export interface PurchaseItemCalculationResult {
   net_weight: number;
   fine_weight: number;
+  billable_weight: number;
+  effective_fine_weight?: number;
+  adjusted_fine_weight?: number;
   wastage_percent: number;
+  badla_percent?: number;
+  badla_weight?: number;
+  badla_amount?: number;
   wastage_weight: number;
   wastage_amount: number;
   metal_value: number;
@@ -31,20 +38,22 @@ export interface PurchaseItemCalculationResult {
 
 /**
  * Calculates item-level weights and commercial amount for a purchase item.
- * Formula:
+ * Established jewellery wastage-addition formula:
  * - net_weight = gross_weight - less_weight
- * - fine_weight = net_weight * (tunch_percent / 100)
- * - metal_value = fine_weight * rate_per_gram
- * - wastage_weight = net_weight * (wastage_percent / 100)
- * - wastage_amount = wastage_weight * rate_per_gram
- * - item_amount = metal_value + wastage_amount + making_charge
+ * - fine_weight = net_weight * (tunch_percent / 100) (physical pure gold weight after purity)
+ * - badla_weight = fine_weight * (badla_percent / 100) (calculated from gold after purity)
+ * - wastage_weight = fine_weight * (wastage_percent / 100) (calculated from gold after purity)
+ * - total_addition_weight = badla_weight + wastage_weight
+ * - billable_weight = fine_weight + total_addition_weight (clamped >= 0)
+ * - metal_value = billable_weight * rate_per_gram
+ * - wastage_amount = total_addition_weight * rate_per_gram
+ * - item_amount = metal_value + making_charge
  */
 export function calculatePurchaseItem(
   input: PurchaseItemCalculationInput
 ): PurchaseItemCalculationResult {
   const net_weight = calculateNetWeight(input.gross_weight, input.less_weight ?? 0);
   const fine_weight = calculateFineWeight(net_weight, input.tunch_percent);
-  const metal_value = calculateMetalValue(fine_weight, input.rate_per_gram);
 
   const making_charge = input.making_charge ? roundCurrency(input.making_charge) : 0;
   if (making_charge < 0) {
@@ -52,26 +61,70 @@ export function calculatePurchaseItem(
   }
 
   const wastage_percent = input.wastage_percent !== undefined ? Number(input.wastage_percent) : 0;
+  const badla_percent = input.badla_percent !== undefined ? Number(input.badla_percent) : 0;
+
   if (wastage_percent < 0) {
-    throw new BadRequestError('Wastage percent cannot be negative');
+    throw new BadRequestError('Wastage percentage cannot be negative');
+  }
+  if (badla_percent < -100) {
+    throw new BadRequestError('Badla percentage cannot be less than -100%');
+  }
+  if (toDecimal(input.tunch_percent).plus(toDecimal(badla_percent)).plus(toDecimal(wastage_percent)).lt(0)) {
+    throw new BadRequestError('Combined effective purity (tunch + badla + wastage) cannot be negative');
   }
 
-  // Wastage calculation based on net weight
-  const wastage_weight = roundFineWeight(
-    toDecimal(net_weight).times(toDecimal(wastage_percent)).dividedBy(100)
+  const total_addition_percent = toDecimal(wastage_percent).plus(toDecimal(badla_percent)).toNumber();
+
+  // Badla and Wastage calculation based on fine weight (gold after purity)
+  const badla_weight = roundFineWeight(
+    toDecimal(fine_weight).times(toDecimal(badla_percent)).dividedBy(100)
   );
+  const badla_amount = roundCurrency(
+    toDecimal(badla_weight).times(toDecimal(input.rate_per_gram))
+  );
+
+  const pure_wastage_weight = roundFineWeight(
+    toDecimal(fine_weight).times(toDecimal(wastage_percent)).dividedBy(100)
+  );
+  const pure_wastage_amount = roundCurrency(
+    toDecimal(pure_wastage_weight).times(toDecimal(input.rate_per_gram))
+  );
+
+  // Total addition weight and combined wastage amount
+  const total_addition_weight = toDecimal(badla_weight).plus(toDecimal(pure_wastage_weight)).toNumber();
+  const wastage_weight = total_addition_weight;
   const wastage_amount = roundCurrency(
-    toDecimal(wastage_weight).times(toDecimal(input.rate_per_gram))
+    toDecimal(total_addition_weight).times(toDecimal(input.rate_per_gram))
+  );
+
+  // Billable weight = fine weight + addition weight (positive adds, negative subtracts, clamped >= 0)
+  const billable_weight = total_addition_weight !== 0
+    ? roundFineWeight(Decimal.max(0, toDecimal(fine_weight).plus(toDecimal(total_addition_weight))))
+    : fine_weight;
+
+  // Effective fine weight and adjusted fine weight aliases
+  const effective_fine_weight = billable_weight;
+  const adjusted_fine_weight = billable_weight;
+
+  // Billable metal value based on billable fine weight:
+  const metal_value = roundCurrency(
+    toDecimal(billable_weight).times(toDecimal(input.rate_per_gram))
   );
 
   const item_amount = roundCurrency(
-    toDecimal(metal_value).plus(toDecimal(wastage_amount)).plus(toDecimal(making_charge))
+    toDecimal(metal_value).plus(toDecimal(making_charge))
   );
 
   return {
     net_weight,
     fine_weight,
+    billable_weight,
+    effective_fine_weight,
+    adjusted_fine_weight,
     wastage_percent,
+    badla_percent,
+    badla_weight,
+    badla_amount,
     wastage_weight,
     wastage_amount,
     metal_value,

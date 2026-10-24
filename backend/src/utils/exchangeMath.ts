@@ -16,6 +16,11 @@ export interface ExchangeItemCalculationInput {
   less_weight?: number;
   tunch_percent: number;
   exchange_rate: number;
+  badla_percent?: number;
+  wastage_percent?: number;
+  making_charge_type?: 'PER_GRAM' | 'FIXED' | 'PER_PIECE' | 'PERCENTAGE';
+  making_rate?: number;
+  pieces?: number;
   deduction_percent?: number;
   deduction_amount?: number;
 }
@@ -23,6 +28,11 @@ export interface ExchangeItemCalculationInput {
 export interface ExchangeItemCalculationResult {
   net_weight: number;
   fine_weight: number;
+  billable_weight: number;
+  badla_percent: number;
+  badla_weight: number;
+  wastage_percent: number;
+  wastage_weight: number;
   metal_value: number;
   deduction_percent: number;
   deduction_amount: number;
@@ -37,7 +47,7 @@ export function calculateExchangeItem(
   input: ExchangeItemCalculationInput
 ): ExchangeItemCalculationResult {
   const net_weight = calculateNetWeight(input.gross_weight, input.less_weight ?? 0);
-  const fine_weight = calculateFineWeight(net_weight, input.tunch_percent);
+  const pure_fine = calculateFineWeight(net_weight, input.tunch_percent);
 
   if (typeof input.exchange_rate !== 'number' || isNaN(input.exchange_rate)) {
     throw new BadRequestError('Exchange rate must be a valid numeric value');
@@ -46,12 +56,63 @@ export function calculateExchangeItem(
     throw new BadRequestError('Exchange rate cannot be negative');
   }
 
-  const metal_value = calculateMetalValue(fine_weight, input.exchange_rate);
+  const badla_percent = input.badla_percent !== undefined ? Number(input.badla_percent) : 0;
+  const wastage_percent = input.wastage_percent !== undefined ? Number(input.wastage_percent) : 0;
+
+  if (badla_percent < -100) {
+    throw new BadRequestError('Badla percentage cannot be less than -100%');
+  }
+  if (wastage_percent < 0) {
+    throw new BadRequestError('Wastage percentage cannot be negative');
+  }
+
+  // Calculate Badla and Wastage weights from pure fine weight
+  const badla_weight = roundFineWeight(
+    toDecimal(pure_fine).times(toDecimal(badla_percent)).dividedBy(100)
+  );
+  const wastage_weight = roundFineWeight(
+    toDecimal(pure_fine).times(toDecimal(wastage_percent)).dividedBy(100)
+  );
+  const total_addition_weight = toDecimal(badla_weight).plus(toDecimal(wastage_weight)).toNumber();
+
+  const billable_weight = total_addition_weight !== 0
+    ? roundFineWeight(Decimal.max(0, toDecimal(pure_fine).plus(toDecimal(total_addition_weight))))
+    : pure_fine;
+
+  const metal_value = calculateMetalValue(billable_weight, input.exchange_rate);
 
   let deduction_percent = 0;
   let deduction_amount = 0;
 
-  if (input.deduction_percent !== undefined && input.deduction_percent !== null) {
+  if (input.making_charge_type) {
+    const rate = input.making_rate !== undefined ? Number(input.making_rate) : (input.deduction_percent !== undefined ? Number(input.deduction_percent) : 0);
+    if (rate < 0) {
+      throw new BadRequestError('Deduction rate cannot be negative');
+    }
+    if (input.making_charge_type === 'PERCENTAGE') {
+      deduction_percent = rate;
+      deduction_amount = roundCurrency(
+        toDecimal(metal_value).times(toDecimal(rate)).dividedBy(100)
+      );
+    } else if (input.making_charge_type === 'PER_PIECE') {
+      const pcs = input.pieces || 1;
+      deduction_amount = roundCurrency(toDecimal(pcs).times(toDecimal(rate)));
+      deduction_percent = metal_value > 0
+        ? roundToPrecision(toDecimal(deduction_amount).dividedBy(toDecimal(metal_value)).times(100), 2)
+        : 0;
+    } else if (input.making_charge_type === 'FIXED') {
+      deduction_amount = roundCurrency(toDecimal(rate));
+      deduction_percent = metal_value > 0
+        ? roundToPrecision(toDecimal(deduction_amount).dividedBy(toDecimal(metal_value)).times(100), 2)
+        : 0;
+    } else {
+      // PER_GRAM
+      deduction_amount = roundCurrency(toDecimal(net_weight).times(toDecimal(rate)));
+      deduction_percent = metal_value > 0
+        ? roundToPrecision(toDecimal(deduction_amount).dividedBy(toDecimal(metal_value)).times(100), 2)
+        : 0;
+    }
+  } else if (input.deduction_percent !== undefined && input.deduction_percent !== null) {
     deduction_percent = Number(input.deduction_percent);
     if (deduction_percent < 0 || deduction_percent > 100) {
       throw new BadRequestError(`Deduction percent must be between 0 and 100, received: ${deduction_percent}`);
@@ -86,7 +147,12 @@ export function calculateExchangeItem(
 
   return {
     net_weight,
-    fine_weight,
+    fine_weight: pure_fine,
+    billable_weight,
+    badla_percent,
+    badla_weight,
+    wastage_percent,
+    wastage_weight,
     metal_value,
     deduction_percent,
     deduction_amount,

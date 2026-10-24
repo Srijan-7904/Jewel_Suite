@@ -135,4 +135,93 @@ describe('Jewel Suite Part 6: Exchange Math Calculations', () => {
       expect(totals.total_exchange_value).toBe(60000.0);
     });
   });
+
+  describe('Exchange Sales Parity: Badla%, Waste%, and Making Charge Modes', () => {
+    it('calculates Badla% and Waste% based on pure fine weight', () => {
+      // Net = 10g, Tunch = 91.67% => pure fine = 9.1670g
+      // Badla = -2% => badla weight = 9.167 * -2% = -0.1833g
+      // Waste = +1% => waste weight = 9.167 * 1% = +0.0917g
+      // Net addition = -0.0916g => billable fine = 9.0754g
+      // Rate = ₹7,000/g => metal value = 9.0754 * 7000 = ₹63,527.80
+      const result = calculateExchangeItem({
+        gross_weight: 10.0,
+        less_weight: 0.0,
+        tunch_percent: 91.67,
+        badla_percent: -2.0,
+        wastage_percent: 1.0,
+        exchange_rate: 7000.0,
+      });
+
+      expect(result.net_weight).toBe(10.0);
+      expect(result.fine_weight).toBe(9.167);
+      expect(result.badla_weight).toBe(-0.1833);
+      expect(result.wastage_weight).toBe(0.0917);
+      expect(result.billable_weight).toBe(9.0754);
+      expect(result.metal_value).toBe(63527.8);
+      expect(result.exchange_value).toBe(63527.8);
+    });
+
+    it('calculates PERCENTAGE making charge deduction', () => {
+      // Net = 10g, 100% fine, rate = 7000 => metal value = ₹70,000
+      // Mode: PERCENTAGE, rate: 2% => deduction = ₹1,400 => exchange value = ₹68,600
+      const result = calculateExchangeItem({
+        gross_weight: 10.0,
+        tunch_percent: 100.0,
+        exchange_rate: 7000.0,
+        making_charge_type: 'PERCENTAGE',
+        making_rate: 2.0,
+      });
+
+      expect(result.metal_value).toBe(70000.0);
+      expect(result.deduction_percent).toBe(2.0);
+      expect(result.deduction_amount).toBe(1400.0);
+      expect(result.exchange_value).toBe(68600.0);
+    });
+
+    it('calculates PER_GRAM making charge deduction', () => {
+      // Net = 10g, 100% fine, rate = 7000 => metal value = ₹70,000
+      // Mode: PER_GRAM, rate: ₹50/g => deduction = 10 * 50 = ₹500 => exchange value = ₹69,500
+      const result = calculateExchangeItem({
+        gross_weight: 10.0,
+        tunch_percent: 100.0,
+        exchange_rate: 7000.0,
+        making_charge_type: 'PER_GRAM',
+        making_rate: 50.0,
+      });
+
+      expect(result.deduction_amount).toBe(500.0);
+      expect(result.exchange_value).toBe(69500.0);
+    });
+
+    it('calculates FIXED making charge deduction', () => {
+      // Net = 10g, 100% fine, rate = 7000 => metal value = ₹70,000
+      // Mode: FIXED, rate: ₹300 => deduction = ₹300 => exchange value = ₹69,700
+      const result = calculateExchangeItem({
+        gross_weight: 10.0,
+        tunch_percent: 100.0,
+        exchange_rate: 7000.0,
+        making_charge_type: 'FIXED',
+        making_rate: 300.0,
+      });
+
+      expect(result.deduction_amount).toBe(300.0);
+      expect(result.exchange_value).toBe(69700.0);
+    });
+
+    it('calculates PER_PIECE making charge deduction', () => {
+      // Net = 10g, 100% fine, rate = 7000 => metal value = ₹70,000
+      // Mode: PER_PIECE, pieces = 3, rate = ₹100 => deduction = 3 * 100 = ₹300 => exchange value = ₹69,700
+      const result = calculateExchangeItem({
+        gross_weight: 10.0,
+        tunch_percent: 100.0,
+        exchange_rate: 7000.0,
+        making_charge_type: 'PER_PIECE',
+        pieces: 3,
+        making_rate: 100.0,
+      });
+
+      expect(result.deduction_amount).toBe(300.0);
+      expect(result.exchange_value).toBe(69700.0);
+    });
+  });
 });

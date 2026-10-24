@@ -35,7 +35,8 @@ export const salesItemSchema = z.object({
   gross_weight: z.number().positive('Gross weight must be greater than zero'),
   less_weight: z.number().nonnegative('Less weight cannot be negative').default(0),
   tunch_percent: z.number().min(0).max(100).default(91.6),
-  wastage_percent: z.number().min(0, 'Wastage percent cannot be negative').default(0),
+  wastage_percent: z.number().default(0),
+  badla_percent: z.number().default(0).optional(),
   rate_per_gram: z.number().positive('Rate per gram must be greater than zero').optional(),
   metal_rate: z.number().positive().optional(),
   pieces: z.number().int().positive().default(1).optional(),
@@ -83,6 +84,21 @@ export const salesPaymentSchema = z.object({
   purity_id: z.string().trim().nullable().optional(),
   reference_number: z.string().trim().nullable().optional(),
   notes: z.string().trim().nullable().optional(),
+  payer_type: z.enum(['CUSTOMER', 'EXISTING_PARTY', 'SUPPLIER', 'OTHER_PARTY', 'MANUAL_EXTERNAL']).default('CUSTOMER').optional(),
+  payer_name: z.string().trim().nullable().optional(),
+  payer_bank: z.string().trim().nullable().optional(),
+  received_in: z.string().trim().nullable().optional(),
+  payer_party_id: z.string().trim().nullable().optional(),
+}).superRefine((val, ctx) => {
+  if (val.payer_type && val.payer_type !== 'CUSTOMER') {
+    if (!val.payer_name || !val.payer_name.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Payer name is required when payer differs from invoice customer',
+        path: ['payer_name'],
+      });
+    }
+  }
 });
 
 export const salesExchangeItemSchema = z.object({
@@ -95,6 +111,11 @@ export const salesExchangeItemSchema = z.object({
   gross_weight: z.number().positive('Gross weight must be positive'),
   less_weight: z.number().nonnegative('Less weight cannot be negative').default(0),
   tunch_percent: z.number().min(0).max(100),
+  badla_percent: z.number().min(-100).max(100).optional(),
+  wastage_percent: z.number().min(0).max(100).optional(),
+  making_rate: z.number().nonnegative().optional(),
+  making_charge_type: z.enum(['PER_GRAM', 'FIXED', 'PER_PIECE', 'PERCENTAGE']).optional(),
+  pieces: z.number().int().min(1).optional(),
   exchange_rate: z.number().positive('Exchange rate per gram must be positive'),
   deduction_percent: z.number().min(0).max(100).optional(),
   deduction_amount: z.number().min(0).optional(),
@@ -193,6 +214,7 @@ export class SalesService {
             tunch_percent: itemInput.tunch_percent,
             rate_per_gram: itemInput.rate_per_gram,
             wastage_percent: itemInput.wastage_percent,
+            badla_percent: itemInput.badla_percent,
             making_charge: itemInput.making_charge,
           });
 
@@ -208,7 +230,7 @@ export class SalesService {
             net_weight: calc.net_weight,
             tunch_percent: itemInput.tunch_percent,
             fine_weight: calc.fine_weight,
-            wastage_percent: calc.wastage_percent,
+            wastage_percent: toDecimal(calc.wastage_percent).plus(toDecimal(itemInput.badla_percent || 0)).toNumber(),
             wastage_weight: calc.wastage_weight,
             wastage_amount: calc.wastage_amount,
             rate_per_gram: itemInput.rate_per_gram,
@@ -247,6 +269,11 @@ export class SalesService {
             gross_weight: exInput.gross_weight,
             less_weight: exInput.less_weight,
             tunch_percent: exInput.tunch_percent,
+            badla_percent: exInput.badla_percent,
+            wastage_percent: exInput.wastage_percent,
+            making_charge_type: exInput.making_charge_type,
+            making_rate: exInput.making_rate,
+            pieces: exInput.pieces,
             exchange_rate: exInput.exchange_rate,
             deduction_percent: exInput.deduction_percent,
             deduction_amount: exInput.deduction_amount,
@@ -264,7 +291,7 @@ export class SalesService {
             less_weight: exInput.less_weight,
             net_weight: calc.net_weight,
             tunch_percent: exInput.tunch_percent,
-            fine_weight: calc.fine_weight,
+            fine_weight: calc.billable_weight ?? calc.fine_weight,
             exchange_rate: exInput.exchange_rate,
             metal_value: calc.metal_value,
             deduction_percent: calc.deduction_percent,
@@ -305,8 +332,13 @@ export class SalesService {
             amount: paymentInput.amount,
             metal_weight: paymentInput.metal_weight || null,
             metal_rate: paymentInput.metal_rate || null,
-            reference_number: paymentInput.reference_number,
+            reference_number: paymentInput.reference_number || null,
             notes: paymentNotes,
+            payer_type: paymentInput.payer_type || 'CUSTOMER',
+            payer_name: paymentInput.payer_name || (paymentInput.payer_type === 'CUSTOMER' ? customer.name : null),
+            payer_bank: paymentInput.payer_bank || null,
+            received_in: paymentInput.received_in || null,
+            payer_party_id: paymentInput.payer_party_id || null,
           });
         }
       }
@@ -380,6 +412,7 @@ export class SalesService {
           tunch_percent: itemInput.tunch_percent,
           rate_per_gram: itemInput.rate_per_gram,
           wastage_percent: itemInput.wastage_percent,
+          badla_percent: itemInput.badla_percent,
           making_charge: itemInput.making_charge,
         });
 
@@ -395,7 +428,7 @@ export class SalesService {
           net_weight: calc.net_weight,
           tunch_percent: itemInput.tunch_percent,
           fine_weight: calc.fine_weight,
-          wastage_percent: calc.wastage_percent,
+          wastage_percent: toDecimal(calc.wastage_percent).plus(toDecimal(itemInput.badla_percent || 0)).toNumber(),
           wastage_weight: calc.wastage_weight,
           wastage_amount: calc.wastage_amount,
           rate_per_gram: itemInput.rate_per_gram,
@@ -427,8 +460,13 @@ export class SalesService {
             amount: paymentInput.amount,
             metal_weight: paymentInput.metal_weight || null,
             metal_rate: paymentInput.metal_rate || null,
-            reference_number: paymentInput.reference_number,
+            reference_number: paymentInput.reference_number || null,
             notes: paymentNotes,
+            payer_type: paymentInput.payer_type || 'CUSTOMER',
+            payer_name: paymentInput.payer_name || null,
+            payer_bank: paymentInput.payer_bank || null,
+            received_in: paymentInput.received_in || null,
+            payer_party_id: paymentInput.payer_party_id || null,
           });
         }
       }
@@ -597,6 +635,16 @@ export class SalesService {
         // Credit customer for any upfront payments recorded on the invoice
         if (updated.payments && updated.payments.length > 0) {
           for (const pay of updated.payments) {
+            let voucherNotes = pay.notes || '';
+            const payerLabel = pay.payer_name && pay.payer_name !== updated.customer_name
+              ? `Paid by: ${pay.payer_name}${pay.payer_bank ? ` (${pay.payer_bank})` : ''}`
+              : '';
+            const recvLabel = pay.received_in ? `Received in: ${pay.received_in}` : '';
+            const parts = [payerLabel, recvLabel].filter(Boolean).join(' | ');
+            if (parts) {
+              voucherNotes = voucherNotes ? `${voucherNotes} [${parts}]` : parts;
+            }
+
             const pmtRecord = financeRepository.createPayment({
               party_type: PartyType.CUSTOMER,
               party_id: updated.customer_id,
@@ -607,7 +655,10 @@ export class SalesService {
               payment_date: updated.invoice_date,
               reference_type: 'SALES_INVOICE',
               reference_id: updated.id,
-              notes: pay.notes || `Upfront tender on invoice ${updated.invoice_number}`,
+              payer_name: pay.payer_name || null,
+              payer_bank: pay.payer_bank || null,
+              received_in: pay.received_in || null,
+              notes: voucherNotes || `Upfront tender on invoice ${updated.invoice_number}`,
               created_by: userId || null,
             });
 

@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import fs from 'fs';
 import path from 'path';
+import http from 'http';
 import { fileURLToPath } from 'url';
 import { config, ensureLocalDirectoriesExist } from './config/env.js';
 import { getDb, closeDb } from './database/connection/db.js';
@@ -57,6 +58,33 @@ export async function bootstrapApp(): Promise<express.Application> {
 
   // Mount API Router
   app.use('/api', apiRouter);
+
+  // In development, reverse-proxy non-API requests to Vite dev server on port 5173 for instantaneous HMR
+  if (config.isDev) {
+    app.use((req, res, next) => {
+      if (req.path.startsWith('/api') || req.path === '/health') {
+        return next();
+      }
+      const proxyReq = http.request(
+        {
+          hostname: '127.0.0.1',
+          port: 5173,
+          path: req.url,
+          method: req.method,
+          headers: { ...req.headers, host: '127.0.0.1:5173' },
+        },
+        (proxyRes) => {
+          res.writeHead(proxyRes.statusCode || 200, proxyRes.headers);
+          proxyRes.pipe(res);
+        }
+      );
+      proxyReq.on('error', () => {
+        // If Vite is not running, fall through to static dist
+        next();
+      });
+      req.pipe(proxyReq);
+    });
+  }
 
   // Serve Frontend static assets if available (Unified full-stack hosting on Render)
   const currentDir = path.dirname(fileURLToPath(import.meta.url));

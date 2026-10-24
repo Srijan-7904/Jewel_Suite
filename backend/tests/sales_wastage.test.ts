@@ -67,13 +67,13 @@ describe('Jewel Suite: Wastage Calculation & Invoice Breakdown Suite', () => {
       const metalValue = calculateMetalValue(fineWeight, rate_per_gram);
       expect(metalValue).toBe(66460.75);
 
-      // 4. Wastage Weight (basis: Net Weight) = 10.000g * 5% = 0.5000g
-      const wastageWeight = calculateWastageWeight(netWeight, wastage_percent);
-      expect(wastageWeight).toBe(0.5);
+      // 4. Wastage Weight (basis: Fine Weight after purity) = 9.1670g * 5% = 0.4584g
+      const wastageWeight = calculateWastageWeight(fineWeight, wastage_percent);
+      expect(wastageWeight).toBe(0.4584);
 
-      // 5. Wastage Monetary Amount = 0.5000g * ₹7,250 = ₹3,625.00
+      // 5. Wastage Monetary Amount = 0.4584g * ₹7,250 = ₹3,323.40
       const wastageAmount = calculateWastageAmount(wastageWeight, rate_per_gram);
-      expect(wastageAmount).toBe(3625.0);
+      expect(wastageAmount).toBe(3323.4);
 
       // 6. Complete line item calculation via calculateSalesItem
       const res = calculateSalesItem({
@@ -88,11 +88,13 @@ describe('Jewel Suite: Wastage Calculation & Invoice Breakdown Suite', () => {
       expect(res.net_weight).toBe(10.0);
       expect(res.fine_weight).toBe(9.167);
       expect(res.wastage_percent).toBe(5.0);
-      expect(res.wastage_weight).toBe(0.5);
-      expect(res.wastage_amount).toBe(3625.0);
-      expect(res.metal_value).toBe(66460.75);
-      // Item Amount = Metal Value (66,460.75) + Wastage Amount (3,625.00) + Making (0) = ₹70,085.75
-      expect(res.item_amount).toBe(70085.75);
+      expect(res.wastage_weight).toBe(0.4584);
+      expect(res.wastage_amount).toBe(3323.4);
+      // Under addition rule: billable fine = 9.167 + 0.4584 = 9.6254g
+      // Metal Value = 9.6254 * 7,250 = ₹69,784.15
+      expect(res.metal_value).toBe(69784.15);
+      // Item Amount = Metal Value (69,784.15) + Making (0) = ₹69,784.15
+      expect(res.item_amount).toBe(69784.15);
 
       // 7. Verify calculatePurchaseItem produces the exact same authoritative result
       const purchaseRes = calculatePurchaseItem({
@@ -106,10 +108,10 @@ describe('Jewel Suite: Wastage Calculation & Invoice Breakdown Suite', () => {
       expect(purchaseRes.net_weight).toBe(10.0);
       expect(purchaseRes.fine_weight).toBe(9.167);
       expect(purchaseRes.wastage_percent).toBe(5.0);
-      expect(purchaseRes.wastage_weight).toBe(0.5);
-      expect(purchaseRes.wastage_amount).toBe(3625.0);
-      expect(purchaseRes.metal_value).toBe(66460.75);
-      expect(purchaseRes.item_amount).toBe(70085.75);
+      expect(purchaseRes.wastage_weight).toBe(0.4584);
+      expect(purchaseRes.wastage_amount).toBe(3323.4);
+      expect(purchaseRes.metal_value).toBe(69784.15);
+      expect(purchaseRes.item_amount).toBe(69784.15);
     });
   });
 
@@ -147,16 +149,18 @@ describe('Jewel Suite: Wastage Calculation & Invoice Breakdown Suite', () => {
         wastage_percent: 2.5,
       });
 
-      // Wastage Weight = 10.0 * 2.5% = 0.2500g
-      expect(res.wastage_weight).toBe(0.25);
-      // Wastage Amount = 0.25 * 7250 = ₹1,812.50
-      expect(res.wastage_amount).toBe(1812.5);
-      // Item Amount = 66,460.75 + 1,812.50 = ₹68,273.25
-      expect(res.item_amount).toBe(68273.25);
+      // Wastage Weight = 9.1670 * 2.5% = 0.2292g
+      expect(res.wastage_weight).toBe(0.2292);
+      // Wastage Amount = 0.2292 * 7250 = ₹1,661.70
+      expect(res.wastage_amount).toBe(1661.7);
+      // Billable fine weight = 9.167 + 0.2292 = 9.3962g
+      // Metal Value = 9.3962 * 7250 = ₹68,122.45
+      expect(res.metal_value).toBe(68122.45);
+      expect(res.item_amount).toBe(68122.45);
     });
 
     // 3. Wastage such as 5% and 10%
-    it('3. Wastage such as 5% and 10%: scales linearly on net weight', () => {
+    it('3. Wastage such as 5% and 10%: scales linearly on net weight and strictly increases item amount', () => {
       const res5 = calculateSalesItem({
         gross_weight: 10.0,
         less_weight: 0.0,
@@ -164,9 +168,10 @@ describe('Jewel Suite: Wastage Calculation & Invoice Breakdown Suite', () => {
         rate_per_gram: 7250.0,
         wastage_percent: 5.0,
       });
-      expect(res5.wastage_weight).toBe(0.5);
-      expect(res5.wastage_amount).toBe(3625.0);
-      expect(res5.item_amount).toBe(70085.75);
+      expect(res5.wastage_weight).toBe(0.4584);
+      expect(res5.wastage_amount).toBe(3323.4);
+      expect(res5.metal_value).toBe(69784.15);
+      expect(res5.item_amount).toBe(69784.15);
 
       const res10 = calculateSalesItem({
         gross_weight: 10.0,
@@ -175,9 +180,13 @@ describe('Jewel Suite: Wastage Calculation & Invoice Breakdown Suite', () => {
         rate_per_gram: 7250.0,
         wastage_percent: 10.0,
       });
-      expect(res10.wastage_weight).toBe(1.0);
-      expect(res10.wastage_amount).toBe(7250.0);
-      expect(res10.item_amount).toBe(73710.75);
+      expect(res10.wastage_weight).toBe(0.9167);
+      expect(res10.wastage_amount).toBe(6646.08);
+      expect(res10.metal_value).toBe(73106.83);
+      expect(res10.item_amount).toBe(73106.83);
+
+      // Increasing Waste% must strictly increase the item amount:
+      expect(res10.item_amount).toBeGreaterThan(res5.item_amount);
     });
 
     // 4. Small jewellery weight such as 0.025 g
@@ -194,14 +203,15 @@ describe('Jewel Suite: Wastage Calculation & Invoice Breakdown Suite', () => {
       expect(res.net_weight).toBe(0.025);
       // Fine weight = 0.025 * 0.9167 = 0.0229175 -> 0.0229g
       expect(res.fine_weight).toBe(0.0229);
-      // Metal Value = roundCurrency(0.0229 * 7250) = 166.03
-      expect(res.metal_value).toBe(166.03);
-      // Wastage Weight = roundFineWeight(0.025 * 0.05) = 0.0013g
-      expect(res.wastage_weight).toBe(0.0013);
-      // Wastage Amount = roundCurrency(0.0013 * 7250) = 9.43
-      expect(res.wastage_amount).toBe(9.43);
-      // Item Amount = 166.03 + 9.43 + 50.00 = 225.46
-      expect(res.item_amount).toBe(225.46);
+      // Wastage Weight = roundFineWeight(0.0229 * 0.05) = 0.0011g
+      expect(res.wastage_weight).toBe(0.0011);
+      // Wastage Amount = roundCurrency(0.0011 * 7250) = 7.98
+      expect(res.wastage_amount).toBe(7.98);
+      // Billable Fine = 0.0229 + 0.0011 = 0.0240g
+      // Metal Value = roundCurrency(0.0240 * 7250) = 174.00
+      expect(res.metal_value).toBe(174.0);
+      // Item Amount = 174.00 + 50.00 = 224.00
+      expect(res.item_amount).toBe(224.0);
     });
 
     // 5. High-precision net and fine weights
@@ -217,14 +227,14 @@ describe('Jewel Suite: Wastage Calculation & Invoice Breakdown Suite', () => {
       expect(res.net_weight).toBe(12.345);
       // 12.345 * 0.9167 = 11.3166615 -> 11.3167g
       expect(res.fine_weight).toBe(11.3167);
-      // Metal value = roundCurrency(11.3167 * 7250.50) = 82,051.73
-      expect(res.metal_value).toBe(82051.73);
-      // Wastage weight = roundFineWeight(12.345 * 0.0325) = roundFineWeight(0.4012125) = 0.4012g
-      expect(res.wastage_weight).toBe(0.4012);
-      // Wastage amount = roundCurrency(0.4012 * 7250.50) = 2,908.90
-      expect(res.wastage_amount).toBe(2908.9);
-      // Item amount = 82,051.73 + 2,908.90 = 84,960.63
-      expect(res.item_amount).toBe(84960.63);
+      // Wastage weight = roundFineWeight(11.3167 * 0.0325) = 0.3678g
+      expect(res.wastage_weight).toBe(0.3678);
+      // Wastage amount = roundCurrency(0.3678 * 7250.50) = 2,666.73
+      expect(res.wastage_amount).toBe(2666.73);
+      // Billable weight = 11.3167 + 0.3678 = 11.6845g
+      // Metal value = roundCurrency(11.6845 * 7250.50) = 84,718.47
+      expect(res.metal_value).toBe(84718.47);
+      expect(res.item_amount).toBe(84718.47);
     });
 
     // 6. Making charges combined with wastage
@@ -238,9 +248,10 @@ describe('Jewel Suite: Wastage Calculation & Invoice Breakdown Suite', () => {
         wastage_percent: 5.0,
         making_charge: 4500.0, // e.g. ₹450/g * 10g
       });
-      expect(resPerGram.metal_value).toBe(66460.75);
-      expect(resPerGram.wastage_amount).toBe(3625.0);
-      expect(resPerGram.item_amount).toBe(74585.75); // 66460.75 + 3625 + 4500
+      // Billable weight = 9.167 + 0.4584 = 9.6254g => metal_value = 69,784.15
+      expect(resPerGram.metal_value).toBe(69784.15);
+      expect(resPerGram.wastage_amount).toBe(3323.4);
+      expect(resPerGram.item_amount).toBe(74284.15); // 69784.15 + 4500
 
       // Rejects negative wastage or negative making charges
       expect(() =>
@@ -268,25 +279,25 @@ describe('Jewel Suite: Wastage Calculation & Invoice Breakdown Suite', () => {
         gross_weight: 10.0,
         tunch_percent: 91.67,
         rate_per_gram: 7250.0,
-        wastage_percent: 5.0, // item_amount = 70,085.75
+        wastage_percent: 5.0, // under addition: metal_val = 69,784.15
       });
 
       const item2 = calculateSalesItem({
         gross_weight: 5.0,
         tunch_percent: 91.67,
         rate_per_gram: 7250.0,
-        wastage_percent: 2.5, // 5 * 0.9167 * 7250 = 33,230.38 metal, wastage = 5 * 0.025 * 7250 = 906.25 -> 34,136.63
+        wastage_percent: 2.5, // under addition: billable = 4.6981 * 7250 = 34,061.23
       });
 
       const totals = calculateSalesTotals({
         items: [{ item_amount: item1.item_amount }, { item_amount: item2.item_amount }],
-        discount_amount: 4222.38,
+        discount_amount: 3845.38,
         gst_rate: 3.0,
       });
 
-      // Subtotal = 70,085.75 + 34,136.63 = 104,222.38
-      expect(totals.subtotal).toBe(104222.38);
-      // Taxable = 104,222.38 - 4,222.38 = 100,000.00
+      // Subtotal = 69,784.15 + 34,061.23 = 103,845.38
+      expect(totals.subtotal).toBe(103845.38);
+      // Taxable = 103,845.38 - 3,845.38 = 100,000.00
       expect(totals.taxable_amount).toBe(100000.0);
       // GST 3% = ₹3,000.00
       expect(totals.gst_amount).toBe(3000.0);
@@ -297,13 +308,13 @@ describe('Jewel Suite: Wastage Calculation & Invoice Breakdown Suite', () => {
     // 8. Exchange value interactions
     it('8. Exchange value interactions: deducts scrap exchange from grand total accurately', () => {
       const totals = calculateSalesTotals({
-        items: [{ item_amount: 70085.75 }],
-        discount_amount: 85.75,
+        items: [{ item_amount: 70284.15 }],
+        discount_amount: 284.15,
         gst_rate: 3.0,
         exchange_amount: 22100.0,
       });
 
-      // Subtotal: 70,085.75 - 85.75 discount = 70,000.00
+      // Subtotal: 70,284.15 - 284.15 discount = 70,000.00
       // Taxable = 70,000.00
       // GST 3% = 2,100.00
       // Grand total = 72,100.00
@@ -354,12 +365,13 @@ describe('Jewel Suite: Wastage Calculation & Invoice Breakdown Suite', () => {
       expect(invoice.items[0].item_amount).toBe(66960.75);
 
       expect(invoice.items[1].wastage_percent).toBe(5);
-      expect(invoice.items[1].wastage_weight).toBe(0.5);
-      expect(invoice.items[1].wastage_amount).toBe(3625);
-      expect(invoice.items[1].item_amount).toBe(70585.75); // 66460.75 + 3625 + 500
+      expect(invoice.items[1].wastage_weight).toBe(0.4584);
+      expect(invoice.items[1].wastage_amount).toBe(3323.4);
+      // Under addition: metal_val = 69,784.15 + 500 making = 70,284.15
+      expect(invoice.items[1].item_amount).toBe(70284.15);
 
-      // Subtotal = 66,960.75 + 70,585.75 = 137,546.50
-      expect(invoice.subtotal).toBe(137546.5);
+      // Subtotal = 66,960.75 + 70,284.15 = 137,244.90
+      expect(invoice.subtotal).toBe(137244.9);
     });
 
     // 10. Save and reopen draft
@@ -388,24 +400,24 @@ describe('Jewel Suite: Wastage Calculation & Invoice Breakdown Suite', () => {
       });
 
       // 14.5 * 0.9167 = 13.29215 -> 13.2922g fine weight
-      // Metal value = 13.2922 * 7250 = ₹96,368.45
-      // Wastage weight = 14.5 * 0.045 = 0.6525g
-      // Wastage amount = 0.6525 * 7250 = ₹4,730.63
-      // Item amount = 96368.45 + 4730.63 + 1200 = ₹102,299.08
+      // Wastage weight = 13.2922 * 0.045 = 0.5981g
+      // Under addition: billable fine = 13.2922 + 0.5981 = 13.8903g
+      // Metal value = 13.8903 * 7250 = ₹100,704.68
+      // Item amount = 100704.68 + 1200 = ₹101,904.68
       expect(draft.items[0].net_weight).toBe(14.5);
       expect(draft.items[0].fine_weight).toBe(13.2922);
       expect(draft.items[0].wastage_percent).toBe(4.5);
-      expect(draft.items[0].wastage_weight).toBe(0.6525);
-      expect(draft.items[0].wastage_amount).toBe(4730.63);
-      expect(draft.items[0].item_amount).toBe(102299.08);
+      expect(draft.items[0].wastage_weight).toBe(0.5981);
+      expect(draft.items[0].wastage_amount).toBe(4336.23);
+      expect(draft.items[0].item_amount).toBe(101904.68);
 
       // Reopen draft from database
       const reopened = salesService.getInvoiceDetails(draft.id);
       expect(reopened.items[0].wastage_percent).toBe(4.5);
-      expect(reopened.items[0].wastage_weight).toBe(0.6525);
-      expect(reopened.items[0].wastage_amount).toBe(4730.63);
-      expect(reopened.items[0].item_amount).toBe(102299.08);
-      expect(reopened.subtotal).toBe(102299.08);
+      expect(reopened.items[0].wastage_weight).toBe(0.5981);
+      expect(reopened.items[0].wastage_amount).toBe(4336.23);
+      expect(reopened.items[0].item_amount).toBe(101904.68);
+      expect(reopened.subtotal).toBe(101904.68);
     });
 
     // 11. Finalize invoice
@@ -433,9 +445,10 @@ describe('Jewel Suite: Wastage Calculation & Invoice Breakdown Suite', () => {
 
       const finalized = salesService.finalizeSale(draft.id);
       expect(finalized.status).toBe('FINALIZED');
-      expect(finalized.items[0].wastage_weight).toBe(0.5);
-      expect(finalized.items[0].wastage_amount).toBe(3625.0);
-      expect(finalized.items[0].item_amount).toBe(70085.75);
+      expect(finalized.items[0].wastage_weight).toBe(0.4584);
+      expect(finalized.items[0].wastage_amount).toBe(3323.4);
+      // Under addition: billable fine = 9.6254 * 7250 = 69,784.15
+      expect(finalized.items[0].item_amount).toBe(69784.15);
 
       // Cannot modify finalized invoice
       expect(() =>
@@ -478,11 +491,12 @@ describe('Jewel Suite: Wastage Calculation & Invoice Breakdown Suite', () => {
       expect(formatPercentage(item.tunch_percent)).toBe('91.67%');
       expect(formatFineWeight(item.fine_weight, 4)).toBe('8.7087');
       expect(formatPercentage(item.wastage_percent)).toBe('5%');
-      expect(formatFineWeight(item.wastage_weight, 4)).toBe('0.4750'); // 9.5 * 5% = 0.4750g
-      expect(formatCurrency(item.metal_value)).toBe('₹63,138.08'); // 8.7087 * 7250 = 63,138.075 -> 63,138.08
-      expect(formatCurrency(item.wastage_amount)).toBe('₹3,443.75'); // 0.4750 * 7250 = 3443.75
+      expect(formatFineWeight(item.wastage_weight, 4)).toBe('0.4354'); // 8.7087 * 5% = 0.4354g
+      // Under addition rule: billable fine = 8.7087 + 0.4354 = 9.1441g => metal_value = 66,294.73
+      expect(formatCurrency(item.metal_value)).toBe('₹66,294.73');
+      expect(formatCurrency(item.wastage_amount)).toBe('₹3,156.65'); // 0.4354 * 7250 = 3156.65
       expect(formatCurrency(item.making_charge)).toBe('₹800.00');
-      expect(formatCurrency(item.item_amount)).toBe('₹67,381.83'); // 63138.08 + 3443.75 + 800 = 67381.83
+      expect(formatCurrency(item.item_amount)).toBe('₹67,094.73'); // 66294.73 + 800 = 67094.73
     });
 
     // 13. CSV/report values
@@ -519,8 +533,8 @@ describe('Jewel Suite: Wastage Calculation & Invoice Breakdown Suite', () => {
       const salesCsv = reportsService.exportReportCsv('sales-register', {});
       expect(salesCsv.content).toContain('Ramesh Patel');
       expect(salesCsv.filename).toMatch(/sales_register_/);
-      expect(salesCsv.content).toContain('70585.75'); // taxable amount including metal + wastage + making
-      expect(salesCsv.content).toContain('72703'); // grand total after GST
+      expect(salesCsv.content).toContain('70284.15'); // taxable amount under addition rule: 69784.15 + 500
+      expect(salesCsv.content).toContain('72393'); // grand total after GST
     });
 
     // 14. Historical invoice preservation
@@ -568,6 +582,54 @@ describe('Jewel Suite: Wastage Calculation & Invoice Breakdown Suite', () => {
       expect(histInvoice.items[0].wastage_weight).toBe(0.0);
       expect(histInvoice.items[0].wastage_amount).toBe(0.0);
       expect(histInvoice.items[0].item_amount).toBe(60000.0);
+    });
+
+    // 15. Signed Badla and Wastage calculations (e.g. -23 or +2)
+    it('15. Signed Badla calculation: correctly handles negative badla (e.g. -23) by deducting from billable fine weight', () => {
+      // Gross 10g, Less 0g -> Net 10g, Tunch 91.6% -> Pure Fine 9.16g
+      // Badla -23% on pure fine weight: 9.16 * (-23) / 100 = -2.1068g
+      // Billable Fine = 9.1600 - 2.1068 = 7.0532g
+      const res = calculateSalesItem({
+        gross_weight: 10.0,
+        less_weight: 0.0,
+        tunch_percent: 91.6,
+        rate_per_gram: 7000.0,
+        badla_percent: -23.0,
+        wastage_percent: 0.0,
+        making_charge: 0,
+      });
+
+      expect(res.net_weight).toBe(10.0);
+      expect(res.fine_weight).toBe(9.16);
+      expect(res.billable_weight).toBe(7.0532);
+      expect(res.wastage_weight).toBe(-2.1068);
+      // Metal Value = 7.0532 * 7000 = 49372.4
+      expect(res.metal_value).toBe(49372.4);
+      expect(res.item_amount).toBe(49372.4);
+    });
+
+    it('16. Signed Badla + Waste combined: correctly combines negative badla with positive waste', () => {
+      // Gross 10g, Less 0g -> Net 10g, Tunch 91.6% -> Pure Fine 9.16g
+      // Badla -2% on fine: 9.16 * -2% = -0.1832g
+      // Waste +5% on fine: 9.16 * +5% = +0.4580g
+      // Total Addition Weight = -0.1832 + 0.4580 = +0.2748g
+      // Billable Fine = 9.1600 + 0.2748 = 9.4348g
+      const res = calculateSalesItem({
+        gross_weight: 10.0,
+        less_weight: 0.0,
+        tunch_percent: 91.6,
+        rate_per_gram: 7000.0,
+        badla_percent: -2.0,
+        wastage_percent: 5.0,
+        making_charge: 0,
+      });
+
+      expect(res.net_weight).toBe(10.0);
+      expect(res.fine_weight).toBe(9.16);
+      expect(res.billable_weight).toBe(9.4348);
+      expect(res.wastage_weight).toBe(0.2748);
+      expect(res.metal_value).toBe(66043.6);
+      expect(res.item_amount).toBe(66043.6);
     });
   });
 });

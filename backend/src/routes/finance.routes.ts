@@ -18,6 +18,10 @@ financeRoutes.get('/cash-book', financeController.getCashBook);
 // General & Party Ledgers
 financeRoutes.get('/ledger', financeController.getLedgerEntries);
 financeRoutes.get('/ledger/customer/:id', financeController.getCustomerLedger);
+financeRoutes.get('/ledger/customer/:id/metal', financeController.getPartyMetalLedger);
+financeRoutes.get('/ledger/customer/:id/metal-balances', financeController.getPartyMetalBalances);
+financeRoutes.get('/ledger/party/:partyType/:id/metal', financeController.getPartyMetalLedger);
+financeRoutes.get('/ledger/party/:partyType/:id/metal-balances', financeController.getPartyMetalBalances);
 financeRoutes.get('/ledger/supplier/:id', financeController.getSupplierLedger);
 financeRoutes.get('/ledger/karigar/:id', financeController.getKarigarLedger);
 

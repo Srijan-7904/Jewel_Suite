@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import Decimal from 'decimal.js';
 import { salesApi, SalesInvoiceDetails } from '../../services/sales';
-import { customerApi, rateApi } from '../../services/masters';
-import { settingsApi, ShopProfile } from '../../services/settings';
-import { Customer, CurrentRate, Metal, MetalPurity } from '../../types';
+import { customerApi, rateApi, supplierApi } from '../../services/masters';
+import { settingsApi, ShopProfile, ShopReceivingAccount } from '../../services/settings';
+import { Customer, CurrentRate, Metal, MetalPurity, Supplier } from '../../types';
 import {
   toDecimal,
   formatWeight,
@@ -29,8 +29,40 @@ import {
   Calculator,
   CreditCard,
   Check,
+  Banknote,
+  Scale,
 } from 'lucide-react';
+import { LessWeightCalculatorModal, LessBreakdownEntry } from '../../components/LessWeightCalculatorModal';
+import '../../styles/masters.css';
 import './CreateInvoicePage.css';
+
+export const COMMON_INDIAN_BANKS = [
+  'State Bank of India',
+  'HDFC Bank',
+  'ICICI Bank',
+  'Punjab National Bank',
+  'Bank of Baroda',
+  'Axis Bank',
+  'Kotak Mahindra Bank',
+  'Canara Bank',
+  'Union Bank of India',
+  'Bank of India',
+  'IndusInd Bank',
+  'Yes Bank',
+  'Federal Bank',
+  'IDBI Bank',
+  'Indian Bank',
+  'Central Bank of India',
+  'Indian Overseas Bank',
+  'UCO Bank',
+  'Bank of Maharashtra',
+  'Punjab & Sind Bank',
+  'South Indian Bank',
+  'Bandhan Bank',
+  'RBL Bank',
+  'IDFC First Bank',
+  'AU Small Finance Bank',
+];
 
 interface SaleItemRow {
   id: string;
@@ -42,7 +74,9 @@ interface SaleItemRow {
   purity_name: string;
   gross_weight: number | string;
   less_weight: number | string;
+  less_breakdown?: LessBreakdownEntry[];
   tunch_percent: number | string;
+  badla_percent?: number | string;
   wastage_percent: number | string;
   pieces?: number | string;
   making_rate: number | string;
@@ -62,8 +96,14 @@ interface ExchangeItemRow {
   purity_name: string;
   gross_weight: number | string;
   less_weight: number | string;
+  less_breakdown?: LessBreakdownEntry[];
   tunch_percent: number | string;
-  deduction_percent: number | string;
+  badla_percent?: number | string;
+  wastage_percent?: number | string;
+  making_rate?: number | string;
+  making_charge_type?: 'PER_GRAM' | 'FIXED' | 'PER_PIECE' | 'PERCENTAGE';
+  pieces?: number | string;
+  deduction_percent?: number | string;
   exchange_rate: number | string;
   notes?: string;
 }
@@ -74,6 +114,13 @@ interface PaymentRow {
   amount: number | string;
   reference_number?: string;
   notes?: string;
+
+  // Payment source & destination
+  payer_type?: 'CUSTOMER' | 'ANOTHER_CUSTOMER' | 'SUPPLIER' | 'OTHER_PARTY' | 'EXTERNAL';
+  payer_name?: string;
+  payer_bank?: string;
+  received_in?: string;
+  payer_party_id?: string;
 
   // Metal payment fields (for GOLD / SILVER)
   metal_id?: string;
@@ -88,9 +135,13 @@ interface PaymentRow {
 
 export const CreateInvoicePage: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const editDraftId = searchParams.get('id') || searchParams.get('edit');
 
   // Reference Masters
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [receivingAccounts, setReceivingAccounts] = useState<ShopReceivingAccount[]>([]);
   const [rates, setRates] = useState<CurrentRate[]>([]);
   const [metals, setMetals] = useState<Metal[]>([]);
   const [purities, setPurities] = useState<MetalPurity[]>([]);
@@ -119,6 +170,51 @@ export const CreateInvoicePage: React.FC = () => {
   const [createdInvoice, setCreatedInvoice] = useState<SalesInvoiceDetails | null>(null);
   const [showPrintModal, setShowPrintModal] = useState(false);
 
+  // Less Weight Calculator Modal State
+  const [activeLessCalc, setActiveLessCalc] = useState<{
+    itemId: string;
+    itemName: string;
+    currentLess: number | string;
+    breakdown?: LessBreakdownEntry[];
+    target: 'SALE' | 'EXCHANGE';
+  } | null>(null);
+
+  const handleOpenSaleLessCalculator = (item: SaleItemRow) => {
+    setActiveLessCalc({
+      itemId: item.id,
+      itemName: item.item_name || 'Jewellery Item',
+      currentLess: item.less_weight,
+      breakdown: item.less_breakdown,
+      target: 'SALE',
+    });
+  };
+
+  const handleOpenExchangeLessCalculator = (ex: ExchangeItemRow) => {
+    setActiveLessCalc({
+      itemId: ex.id,
+      itemName: ex.item_name || 'Customer Scrap / Old Gold',
+      currentLess: ex.less_weight,
+      breakdown: ex.less_breakdown,
+      target: 'EXCHANGE',
+    });
+  };
+
+  const handleApplyLessTotal = (totalWeight: number, breakdown: LessBreakdownEntry[]) => {
+    if (!activeLessCalc) return;
+    if (activeLessCalc.target === 'SALE') {
+      handleUpdateSaleRow(activeLessCalc.itemId, {
+        less_weight: totalWeight,
+        less_breakdown: breakdown,
+      });
+    } else {
+      handleUpdateExchangeRow(activeLessCalc.itemId, {
+        less_weight: totalWeight,
+        less_breakdown: breakdown,
+      });
+    }
+    setActiveLessCalc(null);
+  };
+
   // Sale Items State
   const [saleItems, setSaleItems] = useState<SaleItemRow[]>([]);
 
@@ -132,6 +228,8 @@ export const CreateInvoicePage: React.FC = () => {
       payment_mode: 'CASH',
       amount: 0,
       reference_number: '',
+      payer_type: 'CUSTOMER',
+      received_in: 'Cash Counter',
     },
   ]);
 
@@ -139,17 +237,25 @@ export const CreateInvoicePage: React.FC = () => {
   useEffect(() => {
     Promise.all([
       customerApi.list({ pageSize: 150 }).catch(() => ({ items: [] })),
+      supplierApi.list({ pageSize: 100 }).catch(() => ({ items: [] })),
+      settingsApi.getReceivingAccounts().catch(() => []),
       rateApi.getCurrentRates().catch(() => []),
       rateApi.getMetals().catch(() => []),
       rateApi.getAllPurities().catch(() => []),
       settingsApi.getShopProfile().catch(() => null),
     ])
-      .then(([custRes, ratesRes, metalsRes, puritiesRes, profileRes]) => {
+      .then(([custRes, supRes, recvRes, ratesRes, metalsRes, puritiesRes, profileRes]) => {
         const custList = (custRes as any)?.items || [];
         setCustomers(custList);
-        if (custList.length > 0) {
+        if (custList.length > 0 && !editDraftId) {
           setCustomerId(custList[0].id);
         }
+
+        const supList = (supRes as any)?.items || [];
+        setSuppliers(supList);
+
+        const activeRecv = Array.isArray(recvRes) ? recvRes : [];
+        setReceivingAccounts(activeRecv);
 
         const currentRates = ratesRes || [];
         setRates(currentRates);
@@ -167,35 +273,155 @@ export const CreateInvoicePage: React.FC = () => {
           currentRates.find((r) => r.metal_name?.toUpperCase().includes('GOLD') || r.metal_code === 'GOLD') ||
           currentRates[0];
 
-        // Seed first default sale row
-        const defaultMetalId = goldRate?.metal_id || metalsRes[0]?.id || '';
-        const defaultPurityId = goldRate?.purity_id || puritiesRes[0]?.id || '';
+        // Seed first default sale row if not editing draft
+        if (!editDraftId) {
+          const defaultMetalId = goldRate?.metal_id || metalsRes[0]?.id || '';
+          const defaultPurityId = goldRate?.purity_id || puritiesRes[0]?.id || '';
 
-        setSaleItems([
-          {
-            id: `item-${Date.now()}-1`,
-            tag_no: `TAG-${Date.now().toString(36).toUpperCase()}-1`,
-            item_name: 'Gold Ring',
-            metal_id: defaultMetalId,
-            metal_name: goldRate?.metal_name || 'Gold',
-            purity_id: defaultPurityId,
-            purity_name: goldRate?.purity_name || '22K (916)',
-            gross_weight: 5.5,
-            less_weight: 0.1,
-            tunch_percent: goldRate?.tunch_percent || 91.6,
-            wastage_percent: 0,
-            making_rate: 450,
-            making_charge_type: 'PER_GRAM',
-            rate_per_gram: goldRate?.rate || 7200,
-          },
-        ]);
+          setSaleItems([
+            {
+              id: `item-${Date.now()}-1`,
+              tag_no: `TAG-${Date.now().toString(36).toUpperCase()}-1`,
+              item_name: 'Gold Ring',
+              metal_id: defaultMetalId,
+              metal_name: goldRate?.metal_name || 'Gold',
+              purity_id: defaultPurityId,
+              purity_name: goldRate?.purity_name || '22K (916)',
+              gross_weight: 5.5,
+              less_weight: 0.1,
+              tunch_percent: goldRate?.tunch_percent || 91.6,
+              badla_percent: 0,
+              wastage_percent: 0,
+              making_rate: 450,
+              making_charge_type: 'PER_GRAM',
+              rate_per_gram: goldRate?.rate || 7200,
+            },
+          ]);
+        }
       });
-  }, []);
+  }, [editDraftId]);
+
+  // Reopen and populate draft invoice if editDraftId is present
+  useEffect(() => {
+    if (!editDraftId) return;
+    salesApi.getDetails(editDraftId)
+      .then((inv) => {
+        if (!inv) return;
+        if (inv.customer_id) {
+          setCustomerId(inv.customer_id);
+        }
+        if ((inv as any).bill_type) {
+          setBillType((inv as any).bill_type as any);
+        }
+        if (inv.discount_amount !== undefined && inv.discount_amount !== null) {
+          setDiscountAmount(Number(inv.discount_amount));
+        }
+        if (inv.notes) {
+          setNotes(inv.notes);
+        }
+        if (inv.items && inv.items.length > 0) {
+          setSaleItems(
+            inv.items.map((it, idx) => ({
+              id: it.id || `item-draft-${idx}`,
+              tag_no: it.tag_no || '',
+              item_name: it.item_name,
+              metal_id: it.metal_id || '',
+              metal_name: it.metal_name || 'Gold',
+              purity_id: it.purity_id || '',
+              purity_name: it.purity_name || '',
+              gross_weight: it.gross_weight,
+              less_weight: it.less_weight,
+              tunch_percent: it.tunch_percent,
+              badla_percent: it.badla_percent || 0,
+              wastage_percent: it.wastage_percent || 0,
+              making_rate: it.making_rate || 0,
+              making_charge_type: it.making_charge_type || 'PER_GRAM',
+              rate_per_gram: it.metal_rate || it.rate_per_gram || 0,
+              huid: it.huid,
+              pieces: it.pieces,
+              notes: (it as any).notes || undefined,
+            }))
+          );
+        }
+        if (inv.exchange && inv.exchange.items && inv.exchange.items.length > 0) {
+          setExchangeItems(
+            inv.exchange.items.map((ex: any, idx: number) => ({
+              id: ex.id || `ex-draft-${idx}`,
+              tag_no: ex.tag_no || '',
+              item_name: ex.item_name || 'Customer Scrap',
+              metal_id: ex.metal_id || '',
+              metal_name: ex.metal_name || 'Gold',
+              purity_id: ex.purity_id || '',
+              purity_name: ex.purity_name || '',
+              gross_weight: ex.gross_weight,
+              less_weight: ex.less_weight,
+              tunch_percent: ex.tunch_percent,
+              badla_percent: ex.badla_percent || 0,
+              wastage_percent: ex.wastage_percent || 0,
+              making_rate: ex.making_rate || 0,
+              making_charge_type: ex.making_charge_type || 'PERCENTAGE',
+              pieces: ex.pieces || 1,
+              exchange_rate: ex.exchange_rate,
+              deduction_percent: ex.deduction_percent || 0,
+            }))
+          );
+        }
+        if (inv.payments && inv.payments.length > 0) {
+          setPayments(
+            inv.payments.map((p, idx) => ({
+              id: p.id || `pay-draft-${idx}`,
+              payment_mode: p.payment_mode,
+              amount: p.amount,
+              metal_weight: p.metal_weight ?? undefined,
+              metal_rate: p.metal_rate ?? undefined,
+              reference_number: p.reference_number || '',
+              notes: p.notes || '',
+              payer_type: (p.payer_type as any) || 'CUSTOMER',
+              payer_name: p.payer_name || '',
+              payer_bank: p.payer_bank || '',
+              received_in: p.received_in || '',
+              payer_party_id: p.payer_party_id || '',
+            }))
+          );
+        }
+        showToast('success', `Draft Invoice ${inv.invoice_number} loaded for editing`);
+      })
+      .catch((e) => {
+        console.error('Failed to load draft invoice:', e);
+        showToast('error', 'Failed to load draft invoice');
+      });
+  }, [editDraftId]);
 
   // Customer Creation Modal in Master
   const [showCustomerModal, setShowCustomerModal] = useState(false);
   const [customerSubmitting, setCustomerSubmitting] = useState(false);
   const [customerFormError, setCustomerFormError] = useState<string | null>(null);
+  const [customerPrimaryDirection, setCustomerPrimaryDirection] = useState<'DEBIT' | 'CREDIT'>('DEBIT');
+  const [customerMetals, setCustomerMetals] = useState<Metal[]>([]);
+  const [customerPurities, setCustomerPurities] = useState<MetalPurity[]>([]);
+
+  useEffect(() => {
+    if (showCustomerModal && customerPurities.length === 0) {
+      rateApi.getMetals().then(setCustomerMetals).catch(console.error);
+      rateApi.getAllPurities().then(setCustomerPurities).catch(console.error);
+    }
+  }, [showCustomerModal, customerPurities.length]);
+
+  const customerGoldPurities = useMemo(() => {
+    const goldMetal = customerMetals.find((m) => m.code.toUpperCase() === 'GOLD' || m.name.toLowerCase().includes('gold'));
+    if (goldMetal) {
+      return customerPurities.filter((p) => p.metal_id === goldMetal.id);
+    }
+    return customerPurities.filter((p) => p.name.toLowerCase().includes('22k') || p.name.toLowerCase().includes('24k') || p.name.toLowerCase().includes('18k') || p.code.includes('K'));
+  }, [customerMetals, customerPurities]);
+
+  const customerSilverPurities = useMemo(() => {
+    const silverMetal = customerMetals.find((m) => m.code.toUpperCase() === 'SILVER' || m.name.toLowerCase().includes('silver'));
+    if (silverMetal) {
+      return customerPurities.filter((p) => p.metal_id === silverMetal.id);
+    }
+    return customerPurities.filter((p) => p.name.toLowerCase().includes('925') || p.name.toLowerCase().includes('silver') || p.code.includes('925') || (p.tunch_percent !== null && p.tunch_percent >= 90));
+  }, [customerMetals, customerPurities]);
 
   const [customerForm, setCustomerForm] = useState({
     name: '',
@@ -209,13 +435,30 @@ export const CreateInvoicePage: React.FC = () => {
     state: '',
     pincode: '',
     gstin: '',
-    opening_balance: 0,
-    opening_balance_type: 'DEBIT' as 'DEBIT' | 'CREDIT',
+    opening_balance_date: new Date().toISOString().split('T')[0],
+    opening_balance_ref: '',
+    opening_balance_notes: '',
+    opening_cash_balance: 0,
+    opening_cash_type: 'DEBIT' as 'DEBIT' | 'CREDIT',
+    opening_bank_balance: 0,
+    opening_bank_type: 'DEBIT' as 'DEBIT' | 'CREDIT',
+    opening_gold_weight: 0,
+    opening_gold_type: 'DEBIT' as 'DEBIT' | 'CREDIT',
+    opening_gold_purity_id: '',
+    opening_gold_rate: 0,
+    opening_gold_value: 0,
+    opening_silver_weight: 0,
+    opening_silver_type: 'DEBIT' as 'DEBIT' | 'CREDIT',
+    opening_silver_purity_id: '',
+    opening_silver_rate: 0,
+    opening_silver_value: 0,
     notes: '',
   });
 
   const handleOpenCustomerModal = () => {
     setCustomerFormError(null);
+    const today = new Date().toISOString().split('T')[0];
+    setCustomerPrimaryDirection('DEBIT');
     setCustomerForm({
       name: '',
       customer_code: '',
@@ -228,11 +471,37 @@ export const CreateInvoicePage: React.FC = () => {
       state: shopProfile?.state || 'Maharashtra',
       pincode: shopProfile?.pincode || '',
       gstin: '',
-      opening_balance: 0,
-      opening_balance_type: 'DEBIT',
+      opening_balance_date: today,
+      opening_balance_ref: '',
+      opening_balance_notes: '',
+      opening_cash_balance: 0,
+      opening_cash_type: 'DEBIT',
+      opening_bank_balance: 0,
+      opening_bank_type: 'DEBIT',
+      opening_gold_weight: 0,
+      opening_gold_type: 'DEBIT',
+      opening_gold_purity_id: '',
+      opening_gold_rate: 0,
+      opening_gold_value: 0,
+      opening_silver_weight: 0,
+      opening_silver_type: 'DEBIT',
+      opening_silver_purity_id: '',
+      opening_silver_rate: 0,
+      opening_silver_value: 0,
       notes: '',
     });
     setShowCustomerModal(true);
+  };
+
+  const handleCustomerPrimaryDirectionChange = (dir: 'DEBIT' | 'CREDIT') => {
+    setCustomerPrimaryDirection(dir);
+    setCustomerForm((prev) => ({
+      ...prev,
+      opening_cash_type: dir,
+      opening_bank_type: dir,
+      opening_gold_type: dir,
+      opening_silver_type: dir,
+    }));
   };
 
   const handleCreateCustomerSubmit = async (e: React.FormEvent) => {
@@ -258,8 +527,23 @@ export const CreateInvoicePage: React.FC = () => {
         state: customerForm.state.trim() || null,
         pincode: customerForm.pincode.trim() || null,
         gstin: customerForm.gstin.trim() ? customerForm.gstin.trim().toUpperCase() : null,
-        opening_balance: Number(customerForm.opening_balance) || 0,
-        opening_balance_type: customerForm.opening_balance_type,
+        opening_balance_date: customerForm.opening_balance_date || undefined,
+        opening_balance_ref: customerForm.opening_balance_ref.trim() || undefined,
+        opening_balance_notes: customerForm.opening_balance_notes.trim() || undefined,
+        opening_cash_balance: Number(customerForm.opening_cash_balance) || 0,
+        opening_cash_type: customerForm.opening_cash_type,
+        opening_bank_balance: Number(customerForm.opening_bank_balance) || 0,
+        opening_bank_type: customerForm.opening_bank_type,
+        opening_gold_weight: Number(customerForm.opening_gold_weight) || 0,
+        opening_gold_type: customerForm.opening_gold_type,
+        opening_gold_purity_id: customerForm.opening_gold_purity_id || undefined,
+        opening_gold_rate: Number(customerForm.opening_gold_rate) || 0,
+        opening_gold_value: Number(customerForm.opening_gold_value) || 0,
+        opening_silver_weight: Number(customerForm.opening_silver_weight) || 0,
+        opening_silver_type: customerForm.opening_silver_type,
+        opening_silver_purity_id: customerForm.opening_silver_purity_id || undefined,
+        opening_silver_rate: Number(customerForm.opening_silver_rate) || 0,
+        opening_silver_value: Number(customerForm.opening_silver_value) || 0,
         notes: customerForm.notes.trim() || null,
       });
 
@@ -331,6 +615,7 @@ export const CreateInvoicePage: React.FC = () => {
       gross_weight: 0,
       less_weight: 0,
       tunch_percent: goldRate?.tunch_percent || 91.6,
+      badla_percent: 0,
       wastage_percent: 0,
       making_rate: 450,
       making_charge_type: 'PER_GRAM',
@@ -363,10 +648,17 @@ export const CreateInvoicePage: React.FC = () => {
             updated.purity_name = matchingRate.purity_name || '';
             updated.rate_per_gram = matchingRate.rate || updated.rate_per_gram;
             updated.tunch_percent = matchingRate.tunch_percent || 91.6;
+          } else {
+            const metalPurities = purities.filter((p) => p.metal_id === updates.metal_id);
+            if (metalPurities.length > 0) {
+              updated.purity_id = metalPurities[0].id;
+              updated.purity_name = metalPurities[0].name;
+              updated.tunch_percent = metalPurities[0].tunch_percent || 91.6;
+            }
           }
         }
 
-        // If purity changed, update rate and tunch
+        // If purity changed directly, update rate and tunch
         if (updates.purity_id && updates.purity_id !== item.purity_id) {
           const p = purities.find((p) => p.id === updates.purity_id);
           updated.purity_name = p ? p.name : '';
@@ -374,6 +666,24 @@ export const CreateInvoicePage: React.FC = () => {
           const matchingRate = rates.find((r) => r.purity_id === updates.purity_id);
           if (matchingRate && matchingRate.rate) {
             updated.rate_per_gram = matchingRate.rate;
+          }
+        }
+
+        // If tunch_percent (Purity / Badla) was edited, auto-resolve closest purity
+        if (updates.tunch_percent !== undefined) {
+          const tVal = Number(updates.tunch_percent);
+          if (!isNaN(tVal) && tVal > 0) {
+            const metalPurities = purities.filter((p) => p.metal_id === updated.metal_id);
+            const pool = metalPurities.length > 0 ? metalPurities : purities;
+            if (pool.length > 0) {
+              const closest = pool.reduce((prev, curr) =>
+                Math.abs(Number(curr.tunch_percent) - tVal) < Math.abs(Number(prev.tunch_percent) - tVal) ? curr : prev
+              );
+              if (closest) {
+                updated.purity_id = closest.id;
+                updated.purity_name = closest.name;
+              }
+            }
           }
         }
 
@@ -398,7 +708,12 @@ export const CreateInvoicePage: React.FC = () => {
       purity_name: goldPurity?.name || '22K (916)',
       gross_weight: 0,
       less_weight: 0,
-      tunch_percent: goldPurity?.tunch_percent || 85,
+      tunch_percent: goldPurity?.tunch_percent || 91.67,
+      badla_percent: 0,
+      wastage_percent: 0,
+      making_rate: 2,
+      making_charge_type: 'PERCENTAGE',
+      pieces: 1,
       deduction_percent: 2,
       exchange_rate: (currentRate?.rate || 7200) - 200,
     };
@@ -418,12 +733,36 @@ export const CreateInvoicePage: React.FC = () => {
         if (updates.metal_id && updates.metal_id !== item.metal_id) {
           const m = metals.find((m) => m.id === updates.metal_id);
           updated.metal_name = m ? m.name : '';
+          const metalPurities = purities.filter((p) => p.metal_id === updates.metal_id);
+          if (metalPurities.length > 0) {
+            updated.purity_id = metalPurities[0].id;
+            updated.purity_name = metalPurities[0].name;
+            updated.tunch_percent = metalPurities[0].tunch_percent || 85;
+          }
         }
 
         if (updates.purity_id && updates.purity_id !== item.purity_id) {
           const p = purities.find((p) => p.id === updates.purity_id);
           updated.purity_name = p ? p.name : '';
           if (p && p.tunch_percent) updated.tunch_percent = p.tunch_percent;
+        }
+
+        // If tunch_percent (Purity / Badla) was edited, auto-resolve closest purity
+        if (updates.tunch_percent !== undefined) {
+          const tVal = Number(updates.tunch_percent);
+          if (!isNaN(tVal) && tVal > 0) {
+            const metalPurities = purities.filter((p) => p.metal_id === updated.metal_id);
+            const pool = metalPurities.length > 0 ? metalPurities : purities;
+            if (pool.length > 0) {
+              const closest = pool.reduce((prev, curr) =>
+                Math.abs(Number(curr.tunch_percent) - tVal) < Math.abs(Number(prev.tunch_percent) - tVal) ? curr : prev
+              );
+              if (closest) {
+                updated.purity_id = closest.id;
+                updated.purity_name = closest.name;
+              }
+            }
+          }
         }
 
         return updated;
@@ -458,6 +797,33 @@ export const CreateInvoicePage: React.FC = () => {
     };
   };
 
+  const getDefaultReceivingAccount = (mode: string): string => {
+    if (!receivingAccounts || receivingAccounts.length === 0) {
+      if (mode === 'CASH') return 'Cash Counter';
+      if (mode === 'BANK') return 'SBI Current Account';
+      if (mode === 'UPI') return 'Store Primary UPI';
+      if (mode === 'CARD') return 'Card POS Terminal';
+      return '';
+    }
+    let match: ShopReceivingAccount | undefined;
+    if (mode === 'CASH') {
+      match = receivingAccounts.find((a) => a.account_type === 'CASH' && a.is_default && a.is_active)
+        || receivingAccounts.find((a) => a.account_type === 'CASH' && a.is_active);
+    } else if (mode === 'UPI') {
+      match = receivingAccounts.find((a) => a.account_type === 'UPI' && a.is_default && a.is_active)
+        || receivingAccounts.find((a) => a.account_type === 'UPI' && a.is_active)
+        || receivingAccounts.find((a) => a.account_type === 'BANK' && a.is_default && a.is_active);
+    } else if (mode === 'CARD') {
+      match = receivingAccounts.find((a) => a.account_type === 'CARD_POS' && a.is_default && a.is_active)
+        || receivingAccounts.find((a) => a.account_type === 'CARD_POS' && a.is_active)
+        || receivingAccounts.find((a) => a.account_type === 'BANK' && a.is_default && a.is_active);
+    } else if (mode === 'BANK') {
+      match = receivingAccounts.find((a) => a.account_type === 'BANK' && a.is_default && a.is_active)
+        || receivingAccounts.find((a) => a.account_type === 'BANK' && a.is_active);
+    }
+    return match ? match.account_name : (receivingAccounts[0]?.account_name || '');
+  };
+
   // Helper to add standard payment row
   const handleAddPaymentRow = () => {
     const newPay: PaymentRow = {
@@ -465,6 +831,8 @@ export const CreateInvoicePage: React.FC = () => {
       payment_mode: 'CASH',
       amount: '',
       reference_number: '',
+      payer_type: 'CUSTOMER',
+      received_in: getDefaultReceivingAccount('CASH'),
     };
     setPayments((prev) => [...prev, newPay]);
   };
@@ -477,6 +845,8 @@ export const CreateInvoicePage: React.FC = () => {
       payment_mode: metalType,
       amount: '',
       reference_number: '',
+      payer_type: 'CUSTOMER',
+      received_in: '',
       metal_id: info.metalId,
       metal_name: info.metalName,
       purity_id: info.purityId,
@@ -499,8 +869,13 @@ export const CreateInvoicePage: React.FC = () => {
         if (p.id !== id) return p;
         const updated = { ...p, ...updates };
 
-        // If mode switched to GOLD or SILVER, initialize metal fields
+        // If mode switched, set smart default receiving account if not customized
         if (updates.payment_mode && updates.payment_mode !== p.payment_mode) {
+          const prevDefault = getDefaultReceivingAccount(p.payment_mode);
+          if (!updated.received_in || updated.received_in === prevDefault) {
+            updated.received_in = getDefaultReceivingAccount(updates.payment_mode);
+          }
+
           if (updates.payment_mode === 'GOLD' || updates.payment_mode === 'SILVER') {
             const info = findMetalAndPurity(updates.payment_mode);
             updated.metal_id = info.metalId;
@@ -640,6 +1015,11 @@ export const CreateInvoicePage: React.FC = () => {
     let totalLessWeight = new Decimal(0);
     let totalNetWeight = new Decimal(0);
     let totalFineWeight = new Decimal(0);
+    let totalAdjustedFineWeight = new Decimal(0);
+    let totalBadlaWeight = new Decimal(0);
+    let totalBadlaAmount = new Decimal(0);
+    let totalWasteOnlyWeight = new Decimal(0);
+    let totalWasteOnlyAmount = new Decimal(0);
     let totalWastageWeight = new Decimal(0);
     let totalWastageAmount = new Decimal(0);
     let totalMakingCharges = new Decimal(0);
@@ -655,53 +1035,83 @@ export const CreateInvoicePage: React.FC = () => {
       const less = toDecimal(item.less_weight);
       const net = Decimal.max(0, gross.minus(less));
       const tunch = toDecimal(item.tunch_percent);
-      // Raw fine weight unrounded before business calculation
-      const fine = net.times(tunch).dividedBy(100);
-      const rate = toDecimal(item.rate_per_gram);
-      const metalVal = fine.times(rate);
-
       const wastage = toDecimal(item.wastage_percent);
-      const wastageWeight = net.times(wastage).dividedBy(100);
-      const wastageAmount = wastageWeight.times(rate);
+      const badla = toDecimal(item.badla_percent || 0);
+      const rate = toDecimal(item.rate_per_gram);
+
+      // Fine weight is strictly pure metal content:
+      // fineWeight = netWeight * (tunchPercent / 100)
+      const pureFine = net.times(tunch).dividedBy(100).toDecimalPlaces(4, Decimal.ROUND_HALF_UP);
+
+      // Separate Badla and Wastage calculations based on pure fine weight (gold after purity):
+      const badlaWeight = pureFine.times(badla).dividedBy(100).toDecimalPlaces(4, Decimal.ROUND_HALF_UP);
+      const badlaAmount = badlaWeight.times(rate).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+
+      const wasteOnlyWeight = pureFine.times(wastage).dividedBy(100).toDecimalPlaces(4, Decimal.ROUND_HALF_UP);
+      const wasteOnlyAmount = wasteOnlyWeight.times(rate).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+
+      // Total addition weight (Waste + Badla calculated from pure fine):
+      const additionWeight = badlaWeight.plus(wasteOnlyWeight);
+      const wastageWeight = additionWeight;
+      const wastageAmount = wastageWeight.times(rate).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+
+      // Billable weight = fine weight + wastage weight + badla weight (positive adds, negative subtracts)
+      const billableFine = !additionWeight.isZero()
+        ? Decimal.max(0, pureFine.plus(additionWeight)).toDecimalPlaces(4, Decimal.ROUND_HALF_UP)
+        : pureFine;
+      const metalVal = billableFine.times(rate).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
 
       const makingRate = toDecimal(item.making_rate);
       const pcs = toDecimal(item.pieces || 1);
       let making = new Decimal(0);
       if (item.making_charge_type === 'PERCENTAGE') {
-        making = metalVal.times(makingRate).dividedBy(100);
+        making = metalVal.times(makingRate).dividedBy(100).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
       } else if (item.making_charge_type === 'PER_PIECE') {
-        making = pcs.times(makingRate);
+        making = pcs.times(makingRate).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
       } else if (item.making_charge_type === 'FIXED') {
-        making = makingRate;
+        making = makingRate.toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
       } else {
-        making = net.times(makingRate);
+        making = net.times(makingRate).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
       }
 
-      const rowAmount = metalVal.plus(wastageAmount).plus(making);
+      const rowAmount = metalVal.plus(making);
 
       totalGrossWeight = totalGrossWeight.plus(gross);
       totalLessWeight = totalLessWeight.plus(less);
       totalNetWeight = totalNetWeight.plus(net);
-      totalFineWeight = totalFineWeight.plus(fine);
+      totalFineWeight = totalFineWeight.plus(pureFine);
+      totalAdjustedFineWeight = totalAdjustedFineWeight.plus(billableFine);
+      totalBadlaWeight = totalBadlaWeight.plus(badlaWeight);
+      totalBadlaAmount = totalBadlaAmount.plus(badlaAmount);
+      totalWasteOnlyWeight = totalWasteOnlyWeight.plus(wasteOnlyWeight);
+      totalWasteOnlyAmount = totalWasteOnlyAmount.plus(wasteOnlyAmount);
       totalWastageWeight = totalWastageWeight.plus(wastageWeight);
       totalWastageAmount = totalWastageAmount.plus(wastageAmount);
       totalMakingCharges = totalMakingCharges.plus(making);
       totalSaleAmount = totalSaleAmount.plus(rowAmount);
 
-      const isSilver = (item.metal_name || '').toUpperCase().includes('SILVER');
+      const metalName = (item.metal_name || '').toUpperCase();
+      const isSilver = metalName.includes('SILVER');
+      const isDiamond = metalName.includes('DIAMOND');
+      const isPlatinum = metalName.includes('PLATINUM');
       if (isSilver) {
         silverNetWeight = silverNetWeight.plus(net);
-        silverFineWeight = silverFineWeight.plus(fine);
-      } else {
+        silverFineWeight = silverFineWeight.plus(pureFine);
+      } else if (!isDiamond && !isPlatinum) {
         goldNetWeight = goldNetWeight.plus(net);
-        goldFineWeight = goldFineWeight.plus(fine);
+        goldFineWeight = goldFineWeight.plus(pureFine);
       }
     });
 
     // Exchange calculations
     let totalExchangeGross = new Decimal(0);
+    let totalExchangeLess = new Decimal(0);
     let totalExchangeNet = new Decimal(0);
     let totalExchangeFine = new Decimal(0);
+    let totalExchangeAdjustedFine = new Decimal(0);
+    let totalExchangeBadlaWeight = new Decimal(0);
+    let totalExchangeWasteWeight = new Decimal(0);
+    let totalExchangeDeduction = new Decimal(0);
     let totalExchangeValue = new Decimal(0);
 
     exchangeItems.forEach((ex) => {
@@ -709,16 +1119,49 @@ export const CreateInvoicePage: React.FC = () => {
       const less = toDecimal(ex.less_weight);
       const net = Decimal.max(0, gross.minus(less));
       const tunch = toDecimal(ex.tunch_percent);
-      const fine = net.times(tunch).dividedBy(100);
+      const badla = toDecimal(ex.badla_percent || 0);
+      const wastage = toDecimal(ex.wastage_percent || 0);
       const rate = toDecimal(ex.exchange_rate);
-      const metalVal = fine.times(rate);
-      const dedPercent = toDecimal(ex.deduction_percent);
-      const deduction = metalVal.times(dedPercent).dividedBy(100);
+
+      const pureFine = net.times(tunch).dividedBy(100).toDecimalPlaces(4, Decimal.ROUND_HALF_UP);
+      const badlaWeight = pureFine.times(badla).dividedBy(100).toDecimalPlaces(4, Decimal.ROUND_HALF_UP);
+      const wasteWeight = pureFine.times(wastage).dividedBy(100).toDecimalPlaces(4, Decimal.ROUND_HALF_UP);
+      const additionWeight = badlaWeight.plus(wasteWeight);
+
+      const billableFine = !additionWeight.isZero()
+        ? Decimal.max(0, pureFine.plus(additionWeight)).toDecimalPlaces(4, Decimal.ROUND_HALF_UP)
+        : pureFine;
+      const metalVal = billableFine.times(rate).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+
+      const chargeType = ex.making_charge_type || 'PERCENTAGE';
+      const makingRate = toDecimal(
+        ex.making_rate !== undefined && ex.making_rate !== ''
+          ? ex.making_rate
+          : (ex.deduction_percent !== undefined ? ex.deduction_percent : 0)
+      );
+      const pcs = toDecimal(ex.pieces || 1);
+
+      let deduction = new Decimal(0);
+      if (chargeType === 'PERCENTAGE') {
+        deduction = metalVal.times(makingRate).dividedBy(100).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+      } else if (chargeType === 'PER_PIECE') {
+        deduction = pcs.times(makingRate).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+      } else if (chargeType === 'FIXED') {
+        deduction = makingRate.toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+      } else {
+        deduction = net.times(makingRate).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+      }
+
       const exVal = Decimal.max(0, metalVal.minus(deduction));
 
       totalExchangeGross = totalExchangeGross.plus(gross);
+      totalExchangeLess = totalExchangeLess.plus(less);
       totalExchangeNet = totalExchangeNet.plus(net);
-      totalExchangeFine = totalExchangeFine.plus(fine);
+      totalExchangeFine = totalExchangeFine.plus(pureFine);
+      totalExchangeAdjustedFine = totalExchangeAdjustedFine.plus(billableFine);
+      totalExchangeBadlaWeight = totalExchangeBadlaWeight.plus(badlaWeight);
+      totalExchangeWasteWeight = totalExchangeWasteWeight.plus(wasteWeight);
+      totalExchangeDeduction = totalExchangeDeduction.plus(deduction);
       totalExchangeValue = totalExchangeValue.plus(exVal);
     });
 
@@ -769,6 +1212,11 @@ export const CreateInvoicePage: React.FC = () => {
       totalLessWeight: totalLessWeight.toNumber(),
       totalNetWeight: totalNetWeight.toNumber(),
       totalFineWeight: totalFineWeight.toNumber(),
+      totalAdjustedFineWeight: totalAdjustedFineWeight.toNumber(),
+      totalBadlaWeight: totalBadlaWeight.toNumber(),
+      totalBadlaAmount: totalBadlaAmount.toNumber(),
+      totalWasteOnlyWeight: totalWasteOnlyWeight.toNumber(),
+      totalWasteOnlyAmount: totalWasteOnlyAmount.toNumber(),
       totalWastageWeight: totalWastageWeight.toNumber(),
       totalWastageAmount: totalWastageAmount.toNumber(),
       totalMakingCharges: totalMakingCharges.toNumber(),
@@ -778,8 +1226,13 @@ export const CreateInvoicePage: React.FC = () => {
       silverNetWeight: silverNetWeight.toNumber(),
       silverFineWeight: silverFineWeight.toNumber(),
       totalExchangeGross: totalExchangeGross.toNumber(),
+      totalExchangeLess: totalExchangeLess.toNumber(),
       totalExchangeNet: totalExchangeNet.toNumber(),
       totalExchangeFine: totalExchangeFine.toNumber(),
+      totalExchangeAdjustedFine: totalExchangeAdjustedFine.toNumber(),
+      totalExchangeBadlaWeight: totalExchangeBadlaWeight.toNumber(),
+      totalExchangeWasteWeight: totalExchangeWasteWeight.toNumber(),
+      totalExchangeDeduction: totalExchangeDeduction.toNumber(),
       totalExchangeValue: totalExchangeValue.toNumber(),
       netTaxable: netTaxable.toNumber(),
       gstAmount: gstAmount.toNumber(),
@@ -803,22 +1256,28 @@ export const CreateInvoicePage: React.FC = () => {
 
   // Quick Settle Full Payment
   const handleQuickSettle = (mode: 'CASH' | 'UPI' | 'BANK') => {
+    const defaultAcc = getDefaultReceivingAccount(mode);
     setPayments([
       {
         id: `pay-${Date.now()}`,
         payment_mode: mode,
         amount: calculations.netPayable,
+        payer_type: 'CUSTOMER',
+        received_in: defaultAcc,
         reference_number: mode !== 'CASH' ? 'POS-TRANS' : '',
       },
     ]);
   };
 
   const handleClearPayments = () => {
+    const defaultAcc = getDefaultReceivingAccount('CASH');
     setPayments([
       {
         id: `pay-${Date.now()}`,
         payment_mode: 'CASH',
         amount: '',
+        payer_type: 'CUSTOMER',
+        received_in: defaultAcc,
         reference_number: '',
       },
     ]);
@@ -834,6 +1293,18 @@ export const CreateInvoicePage: React.FC = () => {
     if (saleItems.length === 0 && exchangeItems.length === 0) {
       showToast('error', 'Please add at least one sale item or exchange item');
       return;
+    }
+
+    // Validate payment rows: payer_name is required when payer is not the customer
+    for (let i = 0; i < payments.length; i++) {
+      const p = payments[i];
+      const hasAmt = toDecimal(p.amount).gt(0);
+      if (hasAmt && p.payer_type && p.payer_type !== 'CUSTOMER') {
+        if (!p.payer_name || !p.payer_name.trim()) {
+          showToast('error', `Payment row #${i + 1}: Payer name is required when payer differs from customer`);
+          return;
+        }
+      }
     }
 
     // Validate weights before submission
@@ -877,8 +1348,13 @@ export const CreateInvoicePage: React.FC = () => {
           const net = Decimal.max(0, gross.minus(less));
           const tunch = toDecimal(item.tunch_percent);
           const fine = net.times(tunch).dividedBy(100);
+          const wastage = toDecimal(item.wastage_percent);
+          const badla = toDecimal(item.badla_percent || 0);
+          const totalAdditionPercent = wastage.plus(badla);
+          const additionWeight = fine.times(totalAdditionPercent).dividedBy(100);
+          const billableFine = !totalAdditionPercent.isZero() ? Decimal.max(0, fine.plus(additionWeight)) : fine;
           const rate = toDecimal(item.rate_per_gram);
-          const metalVal = fine.times(rate);
+          const metalVal = billableFine.times(rate);
 
           const makingRate = toDecimal(item.making_rate);
           const pcs = toDecimal(item.pieces || 1);
@@ -901,6 +1377,7 @@ export const CreateInvoicePage: React.FC = () => {
             gross_weight: gross.toNumber(),
             less_weight: less.toNumber(),
             tunch_percent: tunch.toNumber(),
+            badla_percent: badla.toNumber(),
             wastage_percent: toDecimal(item.wastage_percent).toNumber(),
             rate_per_gram: rate.toNumber(),
             pieces: pcs.toNumber(),
@@ -913,18 +1390,32 @@ export const CreateInvoicePage: React.FC = () => {
         }),
         exchange_items:
           exchangeItems.length > 0
-            ? exchangeItems.map((ex) => ({
-                source_type: 'CUSTOMER_JEWELLERY' as const,
-                metal_id: ex.metal_id,
-                purity_id: ex.purity_id,
-                item_name: ex.item_name.trim() || 'Old Metal Scrap',
-                tag_no: ex.tag_no.trim() || undefined,
-                gross_weight: toDecimal(ex.gross_weight).toNumber(),
-                less_weight: toDecimal(ex.less_weight).toNumber(),
-                tunch_percent: toDecimal(ex.tunch_percent).toNumber(),
-                exchange_rate: toDecimal(ex.exchange_rate).toNumber(),
-                deduction_percent: toDecimal(ex.deduction_percent).toNumber(),
-              }))
+            ? exchangeItems.map((ex) => {
+                const chargeType = ex.making_charge_type || 'PERCENTAGE';
+                const makingRate = toDecimal(
+                  ex.making_rate !== undefined && ex.making_rate !== ''
+                    ? ex.making_rate
+                    : (ex.deduction_percent !== undefined ? ex.deduction_percent : 0)
+                ).toNumber();
+
+                return {
+                  source_type: 'CUSTOMER_JEWELLERY' as const,
+                  metal_id: ex.metal_id,
+                  purity_id: ex.purity_id,
+                  item_name: ex.item_name.trim() || 'Old Metal Scrap',
+                  tag_no: ex.tag_no.trim() || undefined,
+                  gross_weight: toDecimal(ex.gross_weight).toNumber(),
+                  less_weight: toDecimal(ex.less_weight).toNumber(),
+                  tunch_percent: toDecimal(ex.tunch_percent).toNumber(),
+                  badla_percent: toDecimal(ex.badla_percent || 0).toNumber(),
+                  wastage_percent: toDecimal(ex.wastage_percent || 0).toNumber(),
+                  making_rate: makingRate,
+                  making_charge_type: chargeType,
+                  pieces: toDecimal(ex.pieces || 1).toNumber(),
+                  exchange_rate: toDecimal(ex.exchange_rate).toNumber(),
+                  deduction_percent: chargeType === 'PERCENTAGE' ? makingRate : toDecimal(ex.deduction_percent || 0).toNumber(),
+                };
+              })
             : undefined,
         payments:
           payments.filter((p) => toDecimal(p.amount).gt(0)).length > 0
@@ -937,8 +1428,13 @@ export const CreateInvoicePage: React.FC = () => {
                   metal_rate: p.metal_rate ? toDecimal(p.metal_rate).toNumber() : undefined,
                   metal_id: p.metal_id || undefined,
                   purity_id: p.purity_id || undefined,
-                  reference_number: p.reference_number || undefined,
-                  notes: p.notes || undefined,
+                  reference_number: p.reference_number?.trim() || undefined,
+                  notes: p.notes?.trim() || undefined,
+                  payer_type: p.payer_type || 'CUSTOMER',
+                  payer_name: p.payer_name?.trim() || undefined,
+                  payer_bank: p.payer_bank?.trim() || undefined,
+                  received_in: p.received_in?.trim() || undefined,
+                  payer_party_id: p.payer_party_id || undefined,
                 }))
             : undefined,
       };
@@ -1184,12 +1680,12 @@ export const CreateInvoicePage: React.FC = () => {
                 <th className="col-tag">Tag No</th>
                 <th className="col-desc">Item Name ▾</th>
                 <th className="col-metal">Metal</th>
-                <th className="col-purity">Purity</th>
+                <th className="col-purity text-right" title="Tunch% (Acts as Purity)">Tunch%</th>
                 <th className="col-gross text-right">Gross (g)</th>
                 <th className="col-less text-right">Less (g)</th>
                 <th className="col-net text-right">Net (g)</th>
-                <th className="col-tunch text-right">Tunch%</th>
-                <th className="col-waste text-right">Waste%</th>
+                <th className="col-badla text-right" title="Badla% (Added to Fine Weight)">Badla%</th>
+                <th className="col-waste text-right" title="Waste% (Added to Fine Weight)">Waste%</th>
                 <th className="col-making text-center">Making Charge</th>
                 <th className="col-fine text-right">Fine Wt</th>
                 <th className="col-rate text-right">Rate/g (₹)</th>
@@ -1203,25 +1699,34 @@ export const CreateInvoicePage: React.FC = () => {
                 const less = toDecimal(item.less_weight);
                 const net = Decimal.max(0, gross.minus(less));
                 const tunch = toDecimal(item.tunch_percent);
-                const fine = net.times(tunch).dividedBy(100);
-                const rate = toDecimal(item.rate_per_gram);
-                const metalVal = fine.times(rate);
+                const badla = toDecimal(item.badla_percent || 0);
                 const wastage = toDecimal(item.wastage_percent);
-                const wastageWeight = net.times(wastage).dividedBy(100);
-                const wastageAmount = wastageWeight.times(rate);
+                const rate = toDecimal(item.rate_per_gram);
+
+                const pureFine = net.times(tunch).dividedBy(100).toDecimalPlaces(4, Decimal.ROUND_HALF_UP);
+                const badlaWeight = pureFine.times(badla).dividedBy(100).toDecimalPlaces(4, Decimal.ROUND_HALF_UP);
+                const wasteWeight = pureFine.times(wastage).dividedBy(100).toDecimalPlaces(4, Decimal.ROUND_HALF_UP);
+                const additionWeight = badlaWeight.plus(wasteWeight);
+                const totalAdditionPercent = badla.plus(wastage);
+
+                const billableFine = !additionWeight.isZero()
+                  ? Decimal.max(0, pureFine.plus(additionWeight)).toDecimalPlaces(4, Decimal.ROUND_HALF_UP)
+                  : pureFine;
+                const metalVal = billableFine.times(rate).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+
                 const makingRate = toDecimal(item.making_rate);
                 const pcs = toDecimal(item.pieces || 1);
                 let making = new Decimal(0);
                 if (item.making_charge_type === 'PERCENTAGE') {
-                  making = metalVal.times(makingRate).dividedBy(100);
+                  making = metalVal.times(makingRate).dividedBy(100).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
                 } else if (item.making_charge_type === 'PER_PIECE') {
-                  making = pcs.times(makingRate);
+                  making = pcs.times(makingRate).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
                 } else if (item.making_charge_type === 'FIXED') {
-                  making = makingRate;
+                  making = makingRate.toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
                 } else {
-                  making = net.times(makingRate);
+                  making = net.times(makingRate).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
                 }
-                const rowAmount = metalVal.plus(wastageAmount).plus(making);
+                const rowAmount = metalVal.plus(making);
 
                 return (
                   <tr key={item.id} className="pos-grid-row">
@@ -1260,17 +1765,15 @@ export const CreateInvoicePage: React.FC = () => {
                       </select>
                     </td>
                     <td>
-                      <select
-                        className="grid-select font-mono text-xs"
-                        value={item.purity_id}
-                        onChange={(e) => handleUpdateSaleRow(item.id, { purity_id: e.target.value })}
-                      >
-                        {purities.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.name}
-                          </option>
-                        ))}
-                      </select>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        className="grid-input text-right font-mono text-xs"
+                        value={item.tunch_percent ?? ''}
+                        onChange={(e) => handleUpdateSaleRow(item.id, { tunch_percent: parseDecimalInput(e.target.value, 4) })}
+                        placeholder="91.67"
+                        title={item.purity_name ? `${item.purity_name} (Tunch: ${item.tunch_percent}%)` : 'Tunch% (Purity)'}
+                      />
                     </td>
                     <td>
                       <input
@@ -1283,14 +1786,29 @@ export const CreateInvoicePage: React.FC = () => {
                       />
                     </td>
                     <td>
-                      <input
-                        type="text"
-                        inputMode="decimal"
-                        className="grid-input text-right font-mono text-muted"
-                        value={item.less_weight ?? ''}
-                        onChange={(e) => handleUpdateSaleRow(item.id, { less_weight: parseDecimalInput(e.target.value, 4) })}
-                        placeholder="0.000"
-                      />
+                      <div className="less-cell-wrap">
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          className="grid-input text-right font-mono text-muted"
+                          value={item.less_weight ?? ''}
+                          onChange={(e) => handleUpdateSaleRow(item.id, { less_weight: parseDecimalInput(e.target.value, 4) })}
+                          placeholder="0.000"
+                          title="Less Weight in grams (Stones, Wax, etc.)"
+                        />
+                        <button
+                          type="button"
+                          className={`btn-less-calc ${item.less_breakdown && item.less_breakdown.length > 0 ? 'has-breakdown' : ''}`}
+                          onClick={() => handleOpenSaleLessCalculator(item)}
+                          title={
+                            item.less_breakdown && item.less_breakdown.length > 0
+                              ? `Less Weight Breakdown (${item.less_breakdown.length} entries: ${formatWeight(item.less_weight, 3)}g)`
+                              : "Open Less Weight Breakdown Calculator"
+                          }
+                        >
+                          <Calculator size={12} />
+                        </button>
+                      </div>
                     </td>
                     <td className="text-right">
                       <div className="grid-readonly-cell net">
@@ -1300,21 +1818,23 @@ export const CreateInvoicePage: React.FC = () => {
                     <td>
                       <input
                         type="text"
-                        inputMode="decimal"
+                        inputMode="text"
                         className="grid-input text-right font-mono text-xs"
-                        value={item.tunch_percent ?? ''}
-                        onChange={(e) => handleUpdateSaleRow(item.id, { tunch_percent: parseDecimalInput(e.target.value, 4) })}
-                        placeholder="91.67"
+                        value={item.badla_percent ?? ''}
+                        onChange={(e) => handleUpdateSaleRow(item.id, { badla_percent: parseDecimalInput(e.target.value, 2, true) })}
+                        placeholder="0"
+                        title={!badla.isZero() ? `Badla: ${badlaWeight.gt(0) ? '+' : ''}${formatFineWeight(badlaWeight.toNumber(), 4)}g (${formatCurrency(badlaWeight.times(rate).toNumber())})` : 'Badla % (Commercial margin/discount)'}
                       />
                     </td>
                     <td>
                       <input
                         type="text"
-                        inputMode="decimal"
+                        inputMode="text"
                         className="grid-input text-right font-mono text-xs"
                         value={item.wastage_percent ?? ''}
-                        onChange={(e) => handleUpdateSaleRow(item.id, { wastage_percent: parseDecimalInput(e.target.value, 2) })}
+                        onChange={(e) => handleUpdateSaleRow(item.id, { wastage_percent: parseDecimalInput(e.target.value, 2, true) })}
                         placeholder="0"
+                        title={!wastage.isZero() ? `Waste: +${formatFineWeight(wasteWeight.toNumber(), 4)}g (${formatCurrency(wasteWeight.times(rate).toNumber())})` : 'Waste % (Manufacturing wastage)'}
                       />
                     </td>
                     <td>
@@ -1388,8 +1908,15 @@ export const CreateInvoicePage: React.FC = () => {
                       </div>
                     </td>
                     <td className="text-right">
-                      <div className="grid-readonly-cell fine">
-                        {formatFineWeight(fine, 4)}
+                      <div
+                        className="grid-readonly-cell fine font-mono font-bold"
+                        title={
+                          !totalAdditionPercent.isZero()
+                            ? `Pure Fine Wt: ${formatFineWeight(pureFine, 4)}g | Final Billable Wt: ${formatFineWeight(billableFine, 4)}g (Badla/Waste: ${totalAdditionPercent.gt(0) ? '+' : ''}${totalAdditionPercent.toFixed(2)}%)`
+                            : `Fine Weight: ${formatFineWeight(billableFine, 4)}g`
+                        }
+                      >
+                        {formatFineWeight(billableFine, 4)}
                       </div>
                     </td>
                     <td>
@@ -1449,8 +1976,8 @@ export const CreateInvoicePage: React.FC = () => {
                 <td className="text-right font-mono text-xs text-muted whitespace-nowrap">
                   Labour: {formatCurrency(calculations.totalMakingCharges)}
                 </td>
-                <td className="text-right font-mono font-bold text-muted whitespace-nowrap">
-                  {formatFineWeight(calculations.totalFineWeight, 4)}
+                <td className="text-right font-mono font-bold text-muted whitespace-nowrap" title={`Total Pure Fine: ${formatFineWeight(calculations.totalFineWeight, 4)}g | Total Billable Fine: ${formatFineWeight(calculations.totalAdjustedFineWeight, 4)}g`}>
+                  <div>{formatFineWeight(calculations.totalAdjustedFineWeight, 4)}</div>
                 </td>
                 <td></td>
                 <td className="text-right font-mono font-bold text-gold text-base whitespace-nowrap">
@@ -1508,12 +2035,13 @@ export const CreateInvoicePage: React.FC = () => {
                   <th className="col-tag">Tag No</th>
                   <th className="col-desc">Item Description</th>
                   <th className="col-metal">Metal</th>
-                  <th className="col-purity">Purity</th>
+                  <th className="col-purity text-right" title="Tunch% (Acts as Purity)">Tunch%</th>
                   <th className="col-gross text-right">Gross (g)</th>
                   <th className="col-less text-right">Less (g)</th>
                   <th className="col-net text-right">Net (g)</th>
-                  <th className="col-tunch text-right">Tunch%</th>
-                  <th className="col-deduct text-right">Deduction%</th>
+                  <th className="col-badla text-right" title="Badla% (Added to/Subtracted from Fine Weight)">Badla%</th>
+                  <th className="col-waste text-right" title="Waste% (Refining / Melting Loss)">Waste%</th>
+                  <th className="col-making text-center" title="Making / Melting / Deduction Charge">Making Charge</th>
                   <th className="col-fine text-right">Fine Wt</th>
                   <th className="col-rate text-right">Rate/g (₹)</th>
                   <th className="col-amount text-right">Amount (₹)</th>
@@ -1526,12 +2054,41 @@ export const CreateInvoicePage: React.FC = () => {
                   const less = toDecimal(ex.less_weight);
                   const net = Decimal.max(0, gross.minus(less));
                   const tunch = toDecimal(ex.tunch_percent);
-                  const fine = net.times(tunch).dividedBy(100);
+                  const badla = toDecimal(ex.badla_percent || 0);
+                  const wastage = toDecimal(ex.wastage_percent || 0);
                   const rate = toDecimal(ex.exchange_rate);
-                  const metalVal = fine.times(rate);
-                  const dedPercent = toDecimal(ex.deduction_percent);
-                  const deduction = metalVal.times(dedPercent).dividedBy(100);
-                  const exVal = Decimal.max(0, metalVal.minus(deduction));
+
+                  const pureFine = net.times(tunch).dividedBy(100).toDecimalPlaces(4, Decimal.ROUND_HALF_UP);
+                  const badlaWeight = pureFine.times(badla).dividedBy(100).toDecimalPlaces(4, Decimal.ROUND_HALF_UP);
+                  const wasteWeight = pureFine.times(wastage).dividedBy(100).toDecimalPlaces(4, Decimal.ROUND_HALF_UP);
+                  const additionWeight = badlaWeight.plus(wasteWeight);
+                  const totalAdditionPercent = badla.plus(wastage);
+
+                  const billableFine = !additionWeight.isZero()
+                    ? Decimal.max(0, pureFine.plus(additionWeight)).toDecimalPlaces(4, Decimal.ROUND_HALF_UP)
+                    : pureFine;
+                  const metalVal = billableFine.times(rate).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+
+                  const chargeType = ex.making_charge_type || 'PERCENTAGE';
+                  const makingRate = toDecimal(
+                    ex.making_rate !== undefined && ex.making_rate !== ''
+                      ? ex.making_rate
+                      : (ex.deduction_percent !== undefined ? ex.deduction_percent : 0)
+                  );
+                  const pcs = toDecimal(ex.pieces || 1);
+
+                  let deduction = new Decimal(0);
+                  if (chargeType === 'PERCENTAGE') {
+                    deduction = metalVal.times(makingRate).dividedBy(100).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+                  } else if (chargeType === 'PER_PIECE') {
+                    deduction = pcs.times(makingRate).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+                  } else if (chargeType === 'FIXED') {
+                    deduction = makingRate.toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+                  } else {
+                    deduction = net.times(makingRate).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+                  }
+
+                  const rowAmount = Decimal.max(0, metalVal.minus(deduction));
 
                   return (
                     <tr key={ex.id} className="pos-grid-row">
@@ -1544,6 +2101,7 @@ export const CreateInvoicePage: React.FC = () => {
                           className="grid-input font-mono text-xs uppercase"
                           value={ex.tag_no}
                           onChange={(e) => handleUpdateExchangeRow(ex.id, { tag_no: e.target.value })}
+                          placeholder="EX-TAG"
                         />
                       </td>
                       <td>
@@ -1569,17 +2127,17 @@ export const CreateInvoicePage: React.FC = () => {
                         </select>
                       </td>
                       <td>
-                        <select
-                          className="grid-select font-mono text-xs"
-                          value={ex.purity_id}
-                          onChange={(e) => handleUpdateExchangeRow(ex.id, { purity_id: e.target.value })}
-                        >
-                          {purities.map((p) => (
-                            <option key={p.id} value={p.id}>
-                              {p.name}
-                            </option>
-                          ))}
-                        </select>
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          className="grid-input text-right font-mono text-xs"
+                          value={ex.tunch_percent ?? ''}
+                          onChange={(e) =>
+                            handleUpdateExchangeRow(ex.id, { tunch_percent: parseDecimalInput(e.target.value, 4) })
+                          }
+                          placeholder="91.67"
+                          title={ex.purity_name ? `${ex.purity_name} (Tunch: ${ex.tunch_percent}%)` : 'Tunch% (Purity)'}
+                        />
                       </td>
                       <td>
                         <input
@@ -1594,16 +2152,31 @@ export const CreateInvoicePage: React.FC = () => {
                         />
                       </td>
                       <td>
-                        <input
-                          type="text"
-                          inputMode="decimal"
-                          className="grid-input text-right font-mono text-muted"
-                          value={ex.less_weight ?? ''}
-                          onChange={(e) =>
-                            handleUpdateExchangeRow(ex.id, { less_weight: parseDecimalInput(e.target.value, 4) })
-                          }
-                          placeholder="0.000"
-                        />
+                        <div className="less-cell-wrap">
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            className="grid-input text-right font-mono text-muted"
+                            value={ex.less_weight ?? ''}
+                            onChange={(e) =>
+                              handleUpdateExchangeRow(ex.id, { less_weight: parseDecimalInput(e.target.value, 4) })
+                            }
+                            placeholder="0.000"
+                            title="Less Weight in grams"
+                          />
+                          <button
+                            type="button"
+                            className={`btn-less-calc ${ex.less_breakdown && ex.less_breakdown.length > 0 ? 'has-breakdown' : ''}`}
+                            onClick={() => handleOpenExchangeLessCalculator(ex)}
+                            title={
+                              ex.less_breakdown && ex.less_breakdown.length > 0
+                                ? `Less Breakdown (${ex.less_breakdown.length} entries: ${formatWeight(ex.less_weight, 3)}g)`
+                                : 'Open Less Weight Breakdown Calculator'
+                            }
+                          >
+                            <Calculator size={12} />
+                          </button>
+                        </div>
                       </td>
                       <td className="text-right">
                         <div className="grid-readonly-cell net">
@@ -1613,30 +2186,115 @@ export const CreateInvoicePage: React.FC = () => {
                       <td>
                         <input
                           type="text"
-                          inputMode="decimal"
+                          inputMode="text"
                           className="grid-input text-right font-mono text-xs"
-                          value={ex.tunch_percent ?? ''}
-                          onChange={(e) =>
-                            handleUpdateExchangeRow(ex.id, { tunch_percent: parseDecimalInput(e.target.value, 4) })
-                          }
-                          placeholder="85"
+                          value={ex.badla_percent ?? ''}
+                          onChange={(e) => handleUpdateExchangeRow(ex.id, { badla_percent: parseDecimalInput(e.target.value, 2, true) })}
+                          placeholder="0"
+                          title={!badla.isZero() ? `Badla: ${badlaWeight.gt(0) ? '+' : ''}${formatFineWeight(badlaWeight.toNumber(), 4)}g (${formatCurrency(badlaWeight.times(rate).toNumber())})` : 'Badla % (Commercial margin/discount)'}
                         />
                       </td>
                       <td>
                         <input
                           type="text"
-                          inputMode="decimal"
+                          inputMode="text"
                           className="grid-input text-right font-mono text-xs"
-                          value={ex.deduction_percent ?? ''}
-                          onChange={(e) =>
-                            handleUpdateExchangeRow(ex.id, { deduction_percent: parseDecimalInput(e.target.value, 2) })
-                          }
-                          placeholder="2.0"
+                          value={ex.wastage_percent ?? ''}
+                          onChange={(e) => handleUpdateExchangeRow(ex.id, { wastage_percent: parseDecimalInput(e.target.value, 2, true) })}
+                          placeholder="0"
+                          title={!wastage.isZero() ? `Waste: +${formatFineWeight(wasteWeight.toNumber(), 4)}g (${formatCurrency(wasteWeight.times(rate).toNumber())})` : 'Waste % (Refining/melting loss)'}
                         />
                       </td>
+                      <td>
+                        <div className="making-cell-wrap">
+                          <div className="making-input-group">
+                            <select
+                              className="making-select font-mono"
+                              value={chargeType}
+                              onChange={(e) =>
+                                handleUpdateExchangeRow(ex.id, {
+                                  making_charge_type: e.target.value as any,
+                                })
+                              }
+                              title="Deduction / Charge Mode: % (Percentage), /g (Per Gram), Fix (Fixed Lump Sum), or /pc (Per Piece)"
+                            >
+                              <option value="PERCENTAGE">%</option>
+                              <option value="PER_GRAM">/g</option>
+                              <option value="FIXED">Fix</option>
+                              <option value="PER_PIECE">/pc</option>
+                            </select>
+                            {chargeType === 'PER_PIECE' && (
+                              <div className="making-pcs-box" title="Number of pieces">
+                                <input
+                                  type="number"
+                                  min={1}
+                                  className="making-pcs-input font-mono"
+                                  value={ex.pieces ?? 1}
+                                  onChange={(e) => handleUpdateExchangeRow(ex.id, { pieces: parseInt(e.target.value) || 1 })}
+                                  placeholder="1"
+                                />
+                                <span className="making-pcs-unit">pc</span>
+                              </div>
+                            )}
+                            <div className="making-rate-box">
+                              <input
+                                type="text"
+                                inputMode="decimal"
+                                className="making-rate-input font-mono text-right"
+                                value={ex.making_rate !== undefined ? ex.making_rate : (ex.deduction_percent ?? '')}
+                                onChange={(e) => {
+                                  const val = parseDecimalInput(e.target.value, 2);
+                                  handleUpdateExchangeRow(ex.id, {
+                                    making_rate: val,
+                                    deduction_percent: chargeType === 'PERCENTAGE' ? val : ex.deduction_percent,
+                                  });
+                                }}
+                                placeholder={
+                                  chargeType === 'PER_PIECE'
+                                    ? '₹/pc'
+                                    : chargeType === 'FIXED'
+                                    ? '₹ Fix'
+                                    : chargeType === 'PERCENTAGE'
+                                    ? '%'
+                                    : '50'
+                                }
+                                title={
+                                  chargeType === 'PER_PIECE'
+                                    ? 'Deduction rate per piece (₹/pc)'
+                                    : chargeType === 'FIXED'
+                                    ? 'Fixed lump-sum deduction (₹)'
+                                    : chargeType === 'PERCENTAGE'
+                                    ? 'Deduction percentage of metal value (%)'
+                                    : 'Deduction rate per gram (₹/g)'
+                                }
+                              />
+                            </div>
+                          </div>
+                          <div className="making-sub-label font-mono">
+                            {deduction.gt(0) ? (
+                              chargeType === 'PER_PIECE'
+                                ? `−₹${deduction.toFixed(2)} (${ex.pieces || 1} pc @ ₹${makingRate})`
+                                : chargeType === 'FIXED'
+                                ? `−₹${deduction.toFixed(2)} (Fixed)`
+                                : chargeType === 'PERCENTAGE'
+                                ? `−₹${deduction.toFixed(2)} (${makingRate}%)`
+                                : `−₹${deduction.toFixed(2)} (@₹${makingRate}/g)`
+                            ) : (
+                              <span className="text-muted">₹0.00</span>
+                            )}
+                          </div>
+                        </div>
+                      </td>
                       <td className="text-right">
-                        <div className="grid-readonly-cell fine">
-                          {formatFineWeight(fine, 4)}
+                        <div
+                          className="grid-readonly-cell fine font-mono font-bold"
+                          title={
+                            !totalAdditionPercent.isZero()
+                              ? `Pure Fine Wt: ${formatFineWeight(pureFine, 4)}g | Billable Fine Wt: ${formatFineWeight(billableFine, 4)}g (Badla/Waste: ${totalAdditionPercent.gt(0) ? '+' : ''}${totalAdditionPercent.toFixed(2)}%)`
+                              : `Fine Weight: ${formatFineWeight(billableFine, 4)}g`
+                          }
+                        >
+                          {formatFineWeight(billableFine, 4)}
                         </div>
                       </td>
                       <td>
@@ -1648,12 +2306,12 @@ export const CreateInvoicePage: React.FC = () => {
                           onChange={(e) =>
                             handleUpdateExchangeRow(ex.id, { exchange_rate: parseDecimalInput(e.target.value, 2) })
                           }
-                          placeholder="6800"
+                          placeholder="6990"
                         />
                       </td>
                       <td className="text-right">
-                        <div className="grid-readonly-cell exchange-amount">
-                          {formatCurrency(exVal.toNumber())}
+                        <div className="grid-readonly-cell exchange-amount font-mono font-bold">
+                          {formatCurrency(rowAmount.toNumber())}
                         </div>
                       </td>
                       <td className="text-center">
@@ -1680,14 +2338,19 @@ export const CreateInvoicePage: React.FC = () => {
                   <td className="text-right font-mono font-bold whitespace-nowrap">
                     {formatWeight(calculations.totalExchangeGross, 3)}
                   </td>
-                  <td></td>
+                  <td className="text-right font-mono text-muted whitespace-nowrap">
+                    {formatWeight(calculations.totalExchangeLess, 3)}
+                  </td>
                   <td className="text-right font-mono font-bold text-amber-300 whitespace-nowrap">
                     {formatWeight(calculations.totalExchangeNet, 3)}
                   </td>
                   <td></td>
                   <td></td>
-                  <td className="text-right font-mono text-muted whitespace-nowrap">
-                    {formatFineWeight(calculations.totalExchangeFine, 4)}
+                  <td className="text-right font-mono text-xs text-muted whitespace-nowrap">
+                    Deduct: −{formatCurrency(calculations.totalExchangeDeduction)}
+                  </td>
+                  <td className="text-right font-mono font-bold text-muted whitespace-nowrap" title={`Total Pure Fine: ${formatFineWeight(calculations.totalExchangeFine, 4)}g | Total Billable Fine: ${formatFineWeight(calculations.totalExchangeAdjustedFine, 4)}g`}>
+                    <div>{formatFineWeight(calculations.totalExchangeAdjustedFine, 4)}</div>
                   </td>
                   <td></td>
                   <td className="text-right font-mono font-bold text-emerald-400 text-base whitespace-nowrap">
@@ -1774,110 +2437,313 @@ export const CreateInvoicePage: React.FC = () => {
             </div>
 
             <div className="payments-list mt-3">
+              <datalist id="indian-banks-list">
+                {COMMON_INDIAN_BANKS.map((bank) => (
+                  <option key={bank} value={bank} />
+                ))}
+              </datalist>
+
               {payments.map((p) => {
                 const isMetal = ['GOLD', 'SILVER'].includes(p.payment_mode);
                 const availablePurities = purities.filter((pur) => pur.metal_id === p.metal_id);
+                const selectedCust = customers.find((c) => c.id === customerId);
+                const currentCustomerName = selectedCust ? selectedCust.name : 'Walk-in Customer';
 
                 return (
                   <div key={p.id} className={`payment-entry-row ${isMetal ? 'metal-payment' : ''}`}>
-                    <select
-                      className="payment-mode-select font-mono"
-                      value={p.payment_mode}
-                      onChange={(e) =>
-                        handleUpdatePaymentRow(p.id, { payment_mode: e.target.value as any })
-                      }
-                    >
-                      <option value="CASH">Cash</option>
-                      <option value="UPI">UPI / QR</option>
-                      <option value="CARD">Debit / Credit Card</option>
-                      <option value="BANK">Bank Transfer / NEFT</option>
-                      <option value="CREDIT">Customer Credit Ledger</option>
-                      <option value="GOLD">Gold Payment (Metal)</option>
-                      <option value="SILVER">Silver Payment (Metal)</option>
-                      <option value="OTHER">Other Tender</option>
-                    </select>
+                    {/* Primary Mode & Amount Row */}
+                    <div className="payment-entry-main-row">
+                      <select
+                        className="payment-mode-select font-mono"
+                        value={p.payment_mode}
+                        onChange={(e) =>
+                          handleUpdatePaymentRow(p.id, { payment_mode: e.target.value as any })
+                        }
+                      >
+                        <option value="CASH">Cash</option>
+                        <option value="UPI">UPI / QR</option>
+                        <option value="CARD">Debit / Credit Card</option>
+                        <option value="BANK">Bank Transfer / NEFT / RTGS / IMPS</option>
+                        <option value="CREDIT">Customer Credit Ledger</option>
+                        <option value="GOLD">Gold Payment (Metal)</option>
+                        <option value="SILVER">Silver Payment (Metal)</option>
+                        <option value="OTHER">Other Tender</option>
+                      </select>
 
-                    {isMetal && (
-                      <>
-                        <select
-                          className="payment-purity-select font-mono text-xs"
-                          value={p.purity_id || ''}
-                          onChange={(e) =>
-                            handleUpdatePaymentRow(p.id, { purity_id: e.target.value })
-                          }
-                          title="Select Purity for Metal Rate"
-                        >
-                          {availablePurities.map((pur) => (
-                            <option key={pur.id} value={pur.id}>
-                              {pur.name}
-                            </option>
-                          ))}
-                        </select>
-
-                        <div className="payment-rate-input-box" title="Applicable Metal Rate (₹/g)">
-                          <span className="rate-prefix">₹</span>
-                          <input
-                            type="text"
-                            inputMode="decimal"
-                            className="payment-rate-input font-mono"
-                            value={p.metal_rate !== undefined ? p.metal_rate : ''}
+                      {isMetal && (
+                        <>
+                          <select
+                            className="payment-purity-select font-mono text-xs"
+                            value={p.purity_id || ''}
                             onChange={(e) =>
-                              handleUpdatePaymentRow(p.id, { metal_rate: parseDecimalInput(e.target.value, 2) })
+                              handleUpdatePaymentRow(p.id, { purity_id: e.target.value })
                             }
-                            placeholder="Rate/g"
-                          />
-                          <span className="rate-suffix">/g</span>
-                        </div>
+                            title="Select Purity for Metal Rate"
+                          >
+                            {availablePurities.map((pur) => (
+                              <option key={pur.id} value={pur.id}>
+                                {pur.name}
+                              </option>
+                            ))}
+                          </select>
 
-                        <div className="payment-weight-input-box" title="Payment Weight in Grams">
-                          <input
-                            type="text"
-                            inputMode="decimal"
-                            className="payment-weight-input font-mono"
-                            value={p.metal_weight !== undefined ? p.metal_weight : ''}
-                            onChange={(e) => handleMetalWeightChange(p.id, e.target.value)}
-                            placeholder="0.000"
-                          />
-                          <span className="weight-suffix">g</span>
-                        </div>
-                      </>
-                    )}
+                          <div className="payment-rate-input-box" title="Applicable Metal Rate (₹/g)">
+                            <span className="rate-prefix">₹</span>
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              className="payment-rate-input font-mono"
+                              value={p.metal_rate !== undefined ? p.metal_rate : ''}
+                              onChange={(e) =>
+                                handleUpdatePaymentRow(p.id, { metal_rate: parseDecimalInput(e.target.value, 2) })
+                              }
+                              placeholder="Rate/g"
+                            />
+                            <span className="rate-suffix">/g</span>
+                          </div>
 
-                    <div className="payment-amount-input-box" title={isMetal ? 'Metal Payment Rupee Value (₹)' : 'Received Amount (₹)'}>
-                      <span className="currency-prefix">₹</span>
-                      <input
-                        type="text"
-                        inputMode="decimal"
-                        className="payment-amount-input font-mono font-bold"
-                        value={p.amount !== undefined ? p.amount : ''}
-                        onChange={(e) => handlePaymentAmountChange(p.id, e.target.value)}
-                        placeholder="0"
-                      />
+                          <div className="payment-weight-input-box" title="Payment Weight in Grams">
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              className="payment-weight-input font-mono"
+                              value={p.metal_weight !== undefined ? p.metal_weight : ''}
+                              onChange={(e) => handleMetalWeightChange(p.id, e.target.value)}
+                              placeholder="0.000"
+                            />
+                            <span className="weight-suffix">g</span>
+                          </div>
+                        </>
+                      )}
+
+                      <div className="payment-amount-input-box" title={isMetal ? 'Metal Payment Rupee Value (₹)' : 'Received Amount (₹)'}>
+                        <span className="currency-prefix">₹</span>
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          className="payment-amount-input font-mono font-bold"
+                          value={p.amount !== undefined ? p.amount : ''}
+                          onChange={(e) => handlePaymentAmountChange(p.id, e.target.value)}
+                          placeholder="0"
+                        />
+                      </div>
+
+                      {payments.length > 1 && (
+                        <button
+                          type="button"
+                          className="btn-trash-row"
+                          onClick={() => handleRemovePaymentRow(p.id)}
+                          title="Remove payment row"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      )}
                     </div>
 
-                    <input
-                      type="text"
-                      className="payment-ref-input font-mono text-xs"
-                      value={p.reference_number || ''}
-                      onChange={(e) =>
-                        handleUpdatePaymentRow(p.id, { reference_number: e.target.value })
-                      }
-                      placeholder={isMetal ? 'Notes / Scrap details' : 'Ref / UTR / Auth No'}
-                    />
+                    {/* Conditional Source, Payer & Destination Details Row */}
+                    <div className="payment-source-subrow">
+                      {/* Paid By / Payer Type selector */}
+                      <div className="payment-field-group">
+                        <label className="payment-field-label">Paid by / Through</label>
+                        <select
+                          className="payment-sub-select font-mono"
+                          value={p.payer_type || 'CUSTOMER'}
+                          onChange={(e) => {
+                            const newType = e.target.value as any;
+                            let newName = p.payer_name || '';
+                            let partyId = p.payer_party_id;
+                            if (newType === 'CUSTOMER') {
+                              newName = currentCustomerName;
+                              partyId = customerId;
+                            } else if (newType === 'EXTERNAL') {
+                              partyId = undefined;
+                              if (newName === currentCustomerName) newName = '';
+                            }
+                            handleUpdatePaymentRow(p.id, {
+                              payer_type: newType,
+                              payer_name: newName,
+                              payer_party_id: partyId,
+                            });
+                          }}
+                        >
+                          <option value="CUSTOMER">Invoice Customer ({currentCustomerName})</option>
+                          <option value="ANOTHER_CUSTOMER">Another Customer (Master)</option>
+                          <option value="SUPPLIER">Supplier / Karigar</option>
+                          <option value="EXTERNAL">External Third Party</option>
+                          <option value="OTHER_PARTY">Other Party</option>
+                        </select>
+                      </div>
 
-                    {payments.length > 1 && (
-                      <button
-                        type="button"
-                        className="btn-trash-row"
-                        onClick={() => handleRemovePaymentRow(p.id)}
-                        title="Remove payment row"
-                      >
-                        <Trash2 size={13} />
-                      </button>
-                    )}
+                      {/* Another Customer selection */}
+                      {p.payer_type === 'ANOTHER_CUSTOMER' && (
+                        <div className="payment-field-group">
+                          <label className="payment-field-label">Select Payer Customer</label>
+                          <select
+                            className="payment-sub-select font-mono"
+                            value={p.payer_party_id || ''}
+                            onChange={(e) => {
+                              const found = customers.find((c) => c.id === e.target.value);
+                              handleUpdatePaymentRow(p.id, {
+                                payer_party_id: e.target.value,
+                                payer_name: found ? found.name : '',
+                              });
+                            }}
+                          >
+                            <option value="">-- Choose Customer --</option>
+                            {customers.map((c) => (
+                              <option key={c.id} value={c.id}>
+                                {c.name} {c.phone ? `(${c.phone})` : ''}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+
+                      {/* Supplier selection */}
+                      {p.payer_type === 'SUPPLIER' && (
+                        <div className="payment-field-group">
+                          <label className="payment-field-label">Select Supplier</label>
+                          <select
+                            className="payment-sub-select font-mono"
+                            value={p.payer_party_id || ''}
+                            onChange={(e) => {
+                              const found = suppliers.find((s) => s.id === e.target.value);
+                              handleUpdatePaymentRow(p.id, {
+                                payer_party_id: e.target.value,
+                                payer_name: found ? found.name : '',
+                              });
+                            }}
+                          >
+                            <option value="">-- Choose Supplier --</option>
+                            {suppliers.map((s) => (
+                              <option key={s.id} value={s.id}>
+                                {s.name} {s.phone ? `(${s.phone})` : ''}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+
+                      {/* External / Other Party manual name input */}
+                      {(p.payer_type === 'EXTERNAL' || p.payer_type === 'OTHER_PARTY') && (
+                        <div className="payment-field-group">
+                          <label className="payment-field-label">Payer Name *</label>
+                          <input
+                            type="text"
+                            className="payment-sub-input font-semibold"
+                            placeholder="e.g. Rahul Sharma"
+                            value={p.payer_name || ''}
+                            onChange={(e) => handleUpdatePaymentRow(p.id, { payer_name: e.target.value })}
+                            required
+                          />
+                        </div>
+                      )}
+
+                      {/* Payer Bank: Shown for BANK or OTHER */}
+                      {(p.payment_mode === 'BANK' || p.payment_mode === 'OTHER') && (
+                        <div className="payment-field-group">
+                          <label className="payment-field-label">Payer Bank</label>
+                          <input
+                            type="text"
+                            list="indian-banks-list"
+                            className="payment-sub-input"
+                            placeholder="e.g. HDFC Bank, SBI, ICICI"
+                            value={p.payer_bank || ''}
+                            onChange={(e) => handleUpdatePaymentRow(p.id, { payer_bank: e.target.value })}
+                          />
+                        </div>
+                      )}
+
+                      {/* Receiving Shop Account: Shown for all except CREDIT */}
+                      {p.payment_mode !== 'CREDIT' && (
+                        <div className="payment-field-group">
+                          <label className="payment-field-label">Received in (Shop Account)</label>
+                          {receivingAccounts.length > 0 ? (
+                            <select
+                              className="payment-sub-select font-mono"
+                              value={p.received_in || ''}
+                              onChange={(e) => handleUpdatePaymentRow(p.id, { received_in: e.target.value })}
+                            >
+                              <option value="">-- Choose Shop Account --</option>
+                              {receivingAccounts
+                                .filter((a) => a.is_active)
+                                .map((acc) => (
+                                  <option key={acc.id} value={acc.account_name}>
+                                    {acc.account_name} ({acc.account_type})
+                                  </option>
+                                ))}
+                            </select>
+                          ) : (
+                            <input
+                              type="text"
+                              className="payment-sub-input font-mono"
+                              placeholder={
+                                p.payment_mode === 'CASH'
+                                  ? 'Cash Counter'
+                                  : p.payment_mode === 'BANK'
+                                  ? 'SBI Current Account'
+                                  : p.payment_mode === 'UPI'
+                                  ? 'Store Primary UPI'
+                                  : 'Shop Account'
+                              }
+                              value={p.received_in || ''}
+                              onChange={(e) => handleUpdatePaymentRow(p.id, { received_in: e.target.value })}
+                            />
+                          )}
+                        </div>
+                      )}
+
+                      {/* Reference Number / UTR / Auth Code */}
+                      {p.payment_mode !== 'CASH' && p.payment_mode !== 'CREDIT' && (
+                        <div className="payment-field-group">
+                          <label className="payment-field-label">
+                            {p.payment_mode === 'BANK'
+                              ? 'UTR / Transfer Ref'
+                              : p.payment_mode === 'UPI'
+                              ? 'UPI Reference No'
+                              : p.payment_mode === 'CARD'
+                              ? 'Card Slip / Auth Code'
+                              : isMetal
+                              ? 'Metal / Scrap Notes'
+                              : 'Reference Number'}
+                          </label>
+                          <input
+                            type="text"
+                            className="payment-sub-input font-mono"
+                            value={p.reference_number || ''}
+                            onChange={(e) => handleUpdatePaymentRow(p.id, { reference_number: e.target.value })}
+                            placeholder={
+                              p.payment_mode === 'BANK'
+                                ? 'e.g. UTR / NEFT / IMPS Ref'
+                                : p.payment_mode === 'UPI'
+                                ? 'e.g. 12-digit UPI Ref'
+                                : 'Reference No'
+                            }
+                          />
+                        </div>
+                      )}
+
+                      {/* Notes / Remarks */}
+                      <div className="payment-field-group flex-grow">
+                        <label className="payment-field-label">Payment Notes</label>
+                        <input
+                          type="text"
+                          className="payment-sub-input"
+                          value={p.notes || ''}
+                          onChange={(e) => handleUpdatePaymentRow(p.id, { notes: e.target.value })}
+                          placeholder={
+                            p.payment_mode === 'CREDIT'
+                              ? 'Running khata balance debit'
+                              : isMetal
+                              ? 'Handed over by / purity remark'
+                              : 'Optional notes'
+                          }
+                        />
+                      </div>
+                    </div>
 
                     {p.rate_error && (
-                      <div className="payment-row-warning flex items-center gap-1">
+                      <div className="payment-row-warning flex items-center gap-1 mt-1">
                         <AlertCircle size={12} />
                         <span>{p.rate_error}</span>
                       </div>
@@ -2061,21 +2927,64 @@ export const CreateInvoicePage: React.FC = () => {
               {/* Fine Metal Reconciliation */}
               <div className="metal-fine-reconciliation mt-3 pt-3 border-t">
                 <div className="flex justify-between text-xs py-0.5">
-                  <span className="text-muted">Fine Gold Net Sold:</span>
+                  <span className="text-muted font-medium">Fine Gold Net Sold (Pure):</span>
                   <strong className="font-mono text-gold">{formatFineWeight(calculations.goldFineWeight, 4)} g</strong>
                 </div>
-                {calculations.totalExchangeFine > 0 && (
+
+                {calculations.totalBadlaWeight !== 0 && (
+                  <div className="flex justify-between text-xs py-0.5">
+                    <span className={calculations.totalBadlaWeight < 0 ? 'text-rose-400' : 'text-emerald-400'}>
+                      ↳ Badla Calculated ({calculations.totalBadlaWeight > 0 ? '+' : ''}{formatFineWeight(calculations.totalBadlaWeight, 3)} g):
+                    </span>
+                    <span className={`font-mono font-semibold ${calculations.totalBadlaWeight < 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
+                      {calculations.totalBadlaWeight > 0 ? '+' : ''}{formatCurrency(calculations.totalBadlaAmount)}
+                    </span>
+                  </div>
+                )}
+
+                {calculations.totalWasteOnlyWeight > 0 && (
                   <div className="flex justify-between text-xs py-0.5 text-amber-400">
+                    <span>↳ Wastage Calculated (+{formatFineWeight(calculations.totalWasteOnlyWeight, 3)} g):</span>
+                    <span className="font-mono font-semibold text-amber-400">+{formatCurrency(calculations.totalWasteOnlyAmount)}</span>
+                  </div>
+                )}
+
+                {Math.abs(calculations.totalAdjustedFineWeight - calculations.totalFineWeight) > 0.00005 && (
+                  <div className="flex justify-between text-xs py-0.5 font-semibold text-blue-400 border-t border-dashed border-border/40 mt-1 pt-1">
+                    <span>Billable Settlement Fine Gold:</span>
+                    <strong className="font-mono">
+                      {formatFineWeight(calculations.totalAdjustedFineWeight, 4)} g
+                    </strong>
+                  </div>
+                )}
+                {calculations.totalExchangeFine > 0 && (
+                  <div className="flex justify-between text-xs py-0.5 text-rose-400">
                     <span>Fine Gold Inward Exchange:</span>
-                    <strong className="font-mono">+{formatFineWeight(calculations.totalExchangeFine, 4)} g</strong>
+                    <strong className="font-mono">−{formatFineWeight(calculations.totalExchangeFine, 4)} g</strong>
                   </div>
                 )}
                 {calculations.silverFineWeight > 0 && (
                   <div className="flex justify-between text-xs py-0.5">
-                    <span className="text-muted">Fine Silver Net Sold:</span>
+                    <span className="text-muted font-medium">Fine Silver Net Sold:</span>
                     <strong className="font-mono">{formatFineWeight(calculations.silverFineWeight, 4)} g</strong>
                   </div>
                 )}
+                <div
+                  className="flex justify-between text-xs py-1 mt-1 border-t border-dashed border-border/60 font-semibold text-gold"
+                  title={
+                    calculations.totalExchangeFine > 0
+                      ? `Net Gold Weight: ${formatFineWeight(calculations.goldFineWeight, 4)}g (Pure Fine Sold) − ${formatFineWeight(calculations.totalExchangeFine, 4)}g (Inward Exchange)`
+                      : `Net Gold Weight: ${formatFineWeight(calculations.goldFineWeight, 4)}g (Pure Fine)`
+                  }
+                >
+                  <span className="text-muted font-bold">Net Gold Weight:</span>
+                  <strong className="font-mono text-sm">
+                    {formatFineWeight(
+                      Math.max(0, calculations.goldFineWeight - calculations.totalExchangeFine),
+                      4
+                    )} g
+                  </strong>
+                </div>
               </div>
 
               {/* Main Submit Button */}
@@ -2276,39 +3185,310 @@ export const CreateInvoicePage: React.FC = () => {
                     />
                   </div>
 
-                  {/* Opening Balance */}
-                  <div className="customer-field">
-                    <label className="customer-field-label">Opening Balance (₹)</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      className="customer-field-input font-mono"
-                      value={customerForm.opening_balance || 0}
-                      onChange={(e) =>
-                        setCustomerForm({
-                          ...customerForm,
-                          opening_balance: parseFloat(e.target.value) || 0,
-                        })
-                      }
-                    />
-                  </div>
+                  {/* MULTI-TYPE OPENING BALANCE SECTION */}
+                  <div className="col-span-2 mt-2 pt-3 border-t border-[var(--border-subtle)]">
+                    <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+                      <div className="flex items-center gap-2">
+                        <Coins size={16} className="text-[var(--gold-primary)]" />
+                        <span className="font-bold text-xs uppercase tracking-wider text-[var(--gold-primary)]">
+                          Opening Balance (Ledger Carried Forward)
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1 bg-[var(--bg-app)] p-1 rounded border border-[var(--border-subtle)] text-xs">
+                        <button
+                          type="button"
+                          className={`px-2 py-0.5 rounded font-medium transition-colors ${
+                            customerPrimaryDirection === 'DEBIT'
+                              ? 'bg-[var(--gold-primary)] text-black font-bold'
+                              : 'text-[var(--text-dim)] hover:text-[var(--text-main)]'
+                          }`}
+                          onClick={() => handleCustomerPrimaryDirectionChange('DEBIT')}
+                        >
+                          Customer Owes Us (Dr)
+                        </button>
+                        <button
+                          type="button"
+                          className={`px-2 py-0.5 rounded font-medium transition-colors ${
+                            customerPrimaryDirection === 'CREDIT'
+                              ? 'bg-[var(--gold-primary)] text-black font-bold'
+                              : 'text-[var(--text-dim)] hover:text-[var(--text-main)]'
+                          }`}
+                          onClick={() => handleCustomerPrimaryDirectionChange('CREDIT')}
+                        >
+                          We Owe Customer (Cr)
+                        </button>
+                      </div>
+                    </div>
 
-                  {/* Balance Type */}
-                  <div className="customer-field">
-                    <label className="customer-field-label">Balance Type</label>
-                    <select
-                      className="customer-field-select font-mono text-xs"
-                      value={customerForm.opening_balance_type}
-                      onChange={(e) =>
-                        setCustomerForm({
-                          ...customerForm,
-                          opening_balance_type: e.target.value as any,
-                        })
-                      }
-                    >
-                      <option value="DEBIT">Debit (Customer owes shop)</option>
-                      <option value="CREDIT">Credit (Shop owes customer)</option>
-                    </select>
+                    {/* Date & Ref */}
+                    <div className="grid grid-cols-2 gap-3 mb-3">
+                      <div className="customer-field">
+                        <label className="customer-field-label">Opening Balance Date</label>
+                        <input
+                          type="date"
+                          className="customer-field-input text-xs font-mono"
+                          value={customerForm.opening_balance_date}
+                          onChange={(e) =>
+                            setCustomerForm({ ...customerForm, opening_balance_date: e.target.value })
+                          }
+                        />
+                      </div>
+                      <div className="customer-field">
+                        <label className="customer-field-label">Ref / Old Book Voucher</label>
+                        <input
+                          type="text"
+                          className="customer-field-input text-xs font-mono"
+                          placeholder="e.g. KHATA-2024/09"
+                          value={customerForm.opening_balance_ref}
+                          onChange={(e) =>
+                            setCustomerForm({ ...customerForm, opening_balance_ref: e.target.value })
+                          }
+                        />
+                      </div>
+                    </div>
+
+                    {/* 4 Cards Grid: Cash, Bank, Gold, Silver */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {/* Cash Card */}
+                      <div className="opening-ledger-card card-cash">
+                        <div className="card-heading">
+                          <span className="flex items-center gap-1.5 font-semibold text-xs">
+                            <Banknote size={14} className="text-emerald-500" />
+                            Cash Opening (₹)
+                          </span>
+                          <select
+                            className="bg-[var(--bg-app)] border border-[var(--border-subtle)] text-[10px] rounded px-1.5 py-0.5 font-mono"
+                            value={customerForm.opening_cash_type}
+                            onChange={(e) =>
+                              setCustomerForm({
+                                ...customerForm,
+                                opening_cash_type: e.target.value as 'DEBIT' | 'CREDIT',
+                              })
+                            }
+                          >
+                            <option value="DEBIT">Dr (Owes Shop)</option>
+                            <option value="CREDIT">Cr (Advance)</option>
+                          </select>
+                        </div>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          className="customer-field-input font-mono text-sm font-bold"
+                          placeholder="0.00"
+                          value={customerForm.opening_cash_balance || ''}
+                          onChange={(e) =>
+                            setCustomerForm({
+                              ...customerForm,
+                              opening_cash_balance: parseFloat(e.target.value) || 0,
+                            })
+                          }
+                        />
+                      </div>
+
+                      {/* Bank Card */}
+                      <div className="opening-ledger-card card-bank">
+                        <div className="card-heading">
+                          <span className="flex items-center gap-1.5 font-semibold text-xs">
+                            <CreditCard size={14} className="text-blue-500" />
+                            Bank / RTGS Opening (₹)
+                          </span>
+                          <select
+                            className="bg-[var(--bg-app)] border border-[var(--border-subtle)] text-[10px] rounded px-1.5 py-0.5 font-mono"
+                            value={customerForm.opening_bank_type}
+                            onChange={(e) =>
+                              setCustomerForm({
+                                ...customerForm,
+                                opening_bank_type: e.target.value as 'DEBIT' | 'CREDIT',
+                              })
+                            }
+                          >
+                            <option value="DEBIT">Dr (Owes Shop)</option>
+                            <option value="CREDIT">Cr (Advance)</option>
+                          </select>
+                        </div>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          className="customer-field-input font-mono text-sm font-bold"
+                          placeholder="0.00"
+                          value={customerForm.opening_bank_balance || ''}
+                          onChange={(e) =>
+                            setCustomerForm({
+                              ...customerForm,
+                              opening_bank_balance: parseFloat(e.target.value) || 0,
+                            })
+                          }
+                        />
+                      </div>
+
+                      {/* Gold Card */}
+                      <div className="opening-ledger-card card-gold">
+                        <div className="card-heading">
+                          <span className="flex items-center gap-1.5 font-semibold text-xs text-[#dfb742]">
+                            <Coins size={14} />
+                            Gold Opening (grams)
+                          </span>
+                          <select
+                            className="bg-[var(--bg-app)] border border-[var(--border-subtle)] text-[10px] rounded px-1.5 py-0.5 font-mono"
+                            value={customerForm.opening_gold_type}
+                            onChange={(e) =>
+                              setCustomerForm({
+                                ...customerForm,
+                                opening_gold_type: e.target.value as 'DEBIT' | 'CREDIT',
+                              })
+                            }
+                          >
+                            <option value="DEBIT">Dr (Owes Gold)</option>
+                            <option value="CREDIT">Cr (Deposited)</option>
+                          </select>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <input
+                            type="number"
+                            step="0.001"
+                            min="0"
+                            className="customer-field-input font-mono text-xs"
+                            placeholder="Weight (g)"
+                            value={customerForm.opening_gold_weight || ''}
+                            onChange={(e) => {
+                              const weight = parseFloat(e.target.value) || 0;
+                              const rate = customerForm.opening_gold_rate || 0;
+                              setCustomerForm({
+                                ...customerForm,
+                                opening_gold_weight: weight,
+                                opening_gold_value: Math.round(weight * rate * 100) / 100,
+                              });
+                            }}
+                          />
+                          <select
+                            className="customer-field-select text-xs font-mono"
+                            value={customerForm.opening_gold_purity_id}
+                            onChange={(e) =>
+                              setCustomerForm({
+                                ...customerForm,
+                                opening_gold_purity_id: e.target.value,
+                              })
+                            }
+                          >
+                            <option value="">Select Karat/Purity</option>
+                            {customerGoldPurities.map((p) => (
+                              <option key={p.id} value={p.id}>
+                                {p.name} {p.tunch_percent ? `(${p.tunch_percent}%)` : `(${p.code})`}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 pt-1">
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            className="customer-field-input font-mono text-[11px]"
+                            placeholder="Valuation Rate ₹/g"
+                            value={customerForm.opening_gold_rate || ''}
+                            onChange={(e) => {
+                              const rate = parseFloat(e.target.value) || 0;
+                              const weight = customerForm.opening_gold_weight || 0;
+                              setCustomerForm({
+                                ...customerForm,
+                                opening_gold_rate: rate,
+                                opening_gold_value: Math.round(weight * rate * 100) / 100,
+                              });
+                            }}
+                          />
+                          <div className="text-[11px] font-mono flex items-center justify-end px-2 bg-[var(--bg-app)] rounded border border-[var(--border-subtle)] text-[var(--text-dim)]">
+                            {customerForm.opening_gold_value > 0
+                              ? `₹${customerForm.opening_gold_value.toLocaleString('en-IN')}`
+                              : 'Value (₹)'}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Silver Card */}
+                      <div className="opening-ledger-card card-silver">
+                        <div className="card-heading">
+                          <span className="flex items-center gap-1.5 font-semibold text-xs text-slate-300">
+                            <Scale size={14} />
+                            Silver Opening (grams)
+                          </span>
+                          <select
+                            className="bg-[var(--bg-app)] border border-[var(--border-subtle)] text-[10px] rounded px-1.5 py-0.5 font-mono"
+                            value={customerForm.opening_silver_type}
+                            onChange={(e) =>
+                              setCustomerForm({
+                                ...customerForm,
+                                opening_silver_type: e.target.value as 'DEBIT' | 'CREDIT',
+                              })
+                            }
+                          >
+                            <option value="DEBIT">Dr (Owes Silver)</option>
+                            <option value="CREDIT">Cr (Deposited)</option>
+                          </select>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <input
+                            type="number"
+                            step="0.001"
+                            min="0"
+                            className="customer-field-input font-mono text-xs"
+                            placeholder="Weight (g)"
+                            value={customerForm.opening_silver_weight || ''}
+                            onChange={(e) => {
+                              const weight = parseFloat(e.target.value) || 0;
+                              const rate = customerForm.opening_silver_rate || 0;
+                              setCustomerForm({
+                                ...customerForm,
+                                opening_silver_weight: weight,
+                                opening_silver_value: Math.round(weight * rate * 100) / 100,
+                              });
+                            }}
+                          />
+                          <select
+                            className="customer-field-select text-xs font-mono"
+                            value={customerForm.opening_silver_purity_id}
+                            onChange={(e) =>
+                              setCustomerForm({
+                                ...customerForm,
+                                opening_silver_purity_id: e.target.value,
+                              })
+                            }
+                          >
+                            <option value="">Select Purity</option>
+                            {customerSilverPurities.map((p) => (
+                              <option key={p.id} value={p.id}>
+                                {p.name} {p.tunch_percent ? `(${p.tunch_percent}%)` : `(${p.code})`}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 pt-1">
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            className="customer-field-input font-mono text-[11px]"
+                            placeholder="Valuation Rate ₹/g"
+                            value={customerForm.opening_silver_rate || ''}
+                            onChange={(e) => {
+                              const rate = parseFloat(e.target.value) || 0;
+                              const weight = customerForm.opening_silver_weight || 0;
+                              setCustomerForm({
+                                ...customerForm,
+                                opening_silver_rate: rate,
+                                opening_silver_value: Math.round(weight * rate * 100) / 100,
+                              });
+                            }}
+                          />
+                          <div className="text-[11px] font-mono flex items-center justify-end px-2 bg-[var(--bg-app)] rounded border border-[var(--border-subtle)] text-[var(--text-dim)]">
+                            {customerForm.opening_silver_value > 0
+                              ? `₹${customerForm.opening_silver_value.toLocaleString('en-IN')}`
+                              : 'Value (₹)'}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   </div>
 
                   {/* Internal Notes */}
@@ -2484,7 +3664,7 @@ export const CreateInvoicePage: React.FC = () => {
                       <th className="text-right">Net (g)</th>
                       <th className="text-right">Tunch %</th>
                       <th className="text-right">Fine Wt</th>
-                      <th className="text-right">Wastage</th>
+                      <th className="text-right">Badla/Waste</th>
                       <th className="text-right">Rate (₹/g)</th>
                       <th className="text-right">Making (₹)</th>
                       <th className="text-right">Total (₹)</th>
@@ -2496,14 +3676,16 @@ export const CreateInvoicePage: React.FC = () => {
                       const less = Number(it.less_weight || 0);
                       const net = Number(it.net_weight || Math.max(0, gross - less));
                       const tunch = Number(it.tunch_percent || 0);
-                      const fine = Number(it.fine_weight || (net * tunch) / 100);
+                      const pureFine = Number(it.fine_weight || (net * tunch) / 100);
                       const metalRate = Number(it.rate_per_gram ?? it.metal_rate ?? 0);
                       const wastagePercent = Number(it.wastage_percent ?? 0);
-                      const wastageWeight = Number(it.wastage_weight ?? (wastagePercent > 0 ? (net * wastagePercent) / 100 : 0));
-                      const wastageAmount = Number(it.wastage_amount ?? (wastageWeight * metalRate));
+                      const badlaPercent = Number(it.badla_percent ?? 0);
+                      const totalAdditionPercent = wastagePercent + badlaPercent;
+                      const wastageWeight = Number(it.wastage_weight ?? (totalAdditionPercent !== 0 ? (pureFine * totalAdditionPercent) / 100 : 0));
+                      const billableFine = Number(it.billable_weight ?? (totalAdditionPercent !== 0 ? Math.max(0, pureFine + wastageWeight) : pureFine));
                       const makingCharge = Number(it.making_charge ?? it.making_charges ?? 0);
-                      const metalValue = Number(it.metal_value ?? (fine * metalRate));
-                      const itemTotal = Number(it.item_amount ?? it.item_total ?? (metalValue + wastageAmount + makingCharge));
+                      const metalValue = Number(it.metal_value ?? (billableFine * metalRate));
+                      const itemTotal = Number(it.item_amount ?? it.item_total ?? (metalValue + makingCharge));
 
                       return (
                         <tr key={it.id || idx}>
@@ -2525,12 +3707,17 @@ export const CreateInvoicePage: React.FC = () => {
                           <td className="text-right font-mono text-muted whitespace-nowrap">{formatWeight(less, 3)}</td>
                           <td className="text-right font-mono font-bold whitespace-nowrap">{formatWeight(net, 3)}</td>
                           <td className="text-right font-mono whitespace-nowrap">{tunch > 0 ? `${tunch.toFixed(2)}%` : '-'}</td>
-                          <td className="text-right font-mono text-muted whitespace-nowrap">{fine > 0 ? formatFineWeight(fine, 4) : '-'}</td>
+                          <td className="text-right font-mono whitespace-nowrap">
+                            <div className="font-semibold">{billableFine > 0 ? formatFineWeight(billableFine, 4) : '-'}</div>
+                          </td>
                           <td className="text-right font-mono text-xs whitespace-nowrap">
-                            {wastagePercent > 0 ? (
+                            {totalAdditionPercent !== 0 ? (
                               <div>
-                                <div>{formatWeight(wastageWeight, 3)}g</div>
-                                <div className="text-[10px] text-muted">({wastagePercent}%)</div>
+                                <div>{wastageWeight > 0 ? '+' : ''}{formatWeight(wastageWeight, 3)}g</div>
+                                <div className="text-[10px] text-muted">
+                                  {badlaPercent !== 0 && <span>B:{badlaPercent > 0 ? '+' : ''}{badlaPercent}% </span>}
+                                  {wastagePercent !== 0 && <span>W:{wastagePercent > 0 ? '+' : ''}{wastagePercent}%</span>}
+                                </div>
                               </div>
                             ) : (
                               <span className="text-muted">-</span>
@@ -2583,10 +3770,23 @@ export const CreateInvoicePage: React.FC = () => {
                       </td>
                       <td></td>
                       <td className="text-right font-mono font-bold text-muted whitespace-nowrap">
-                        {formatFineWeight(
-                          (createdInvoice.items || []).reduce((acc, it) => acc + Number(it.fine_weight || 0), 0),
-                          4
-                        )}
+                        <div>
+                          {formatFineWeight(
+                            (createdInvoice.items || []).reduce((acc, it) => {
+                              const gross = Number(it.gross_weight || 0);
+                              const less = Number(it.less_weight || 0);
+                              const net = Number(it.net_weight || Math.max(0, gross - less));
+                              const tunch = Number(it.tunch_percent || 0);
+                              const pureFine = Number(it.fine_weight || (net * tunch) / 100);
+                              const badlaPercent = Number(it.badla_percent ?? 0);
+                              const wastagePercent = Number(it.wastage_percent ?? 0);
+                              const totalAdditionPercent = badlaPercent + wastagePercent;
+                              const additionWeight = Number(it.wastage_weight ?? ((pureFine * totalAdditionPercent) / 100));
+                              return acc + Number(it.billable_weight ?? (totalAdditionPercent !== 0 ? Math.max(0, pureFine + additionWeight) : pureFine));
+                            }, 0),
+                            4
+                          )}
+                        </div>
                       </td>
                       <td></td>
                       <td></td>
@@ -2600,14 +3800,11 @@ export const CreateInvoicePage: React.FC = () => {
                           (createdInvoice.items || []).reduce((acc, it) => {
                             const metalRate = Number(it.rate_per_gram ?? it.metal_rate ?? 0);
                             const makingCharge = Number(it.making_charge ?? it.making_charges ?? 0);
-                            const wastagePercent = Number(it.wastage_percent ?? 0);
-                            const net = Number(it.net_weight || 0);
-                            const wastageWeight = Number(it.wastage_weight ?? (wastagePercent > 0 ? (net * wastagePercent) / 100 : 0));
-                            const wastageAmount = Number(it.wastage_amount ?? (wastageWeight * metalRate));
                             const tunch = Number(it.tunch_percent || 0);
+                            const net = Number(it.net_weight || 0);
                             const fine = Number(it.fine_weight || (net * tunch) / 100);
                             const metalValue = Number(it.metal_value ?? (fine * metalRate));
-                            return acc + Number(it.item_amount ?? it.item_total ?? (metalValue + wastageAmount + makingCharge));
+                            return acc + Number(it.item_amount ?? it.item_total ?? (metalValue + makingCharge));
                           }, 0)
                         )}
                       </td>
@@ -2695,13 +3892,32 @@ export const CreateInvoicePage: React.FC = () => {
                           ? 'Gold Payment'
                           : p.payment_mode === 'SILVER'
                           ? 'Silver Payment'
+                          : p.payment_mode === 'BANK'
+                          ? 'Bank Transfer'
                           : p.payment_mode;
+
+                      const detailsParts: string[] = [];
+                      if (p.metal_weight) {
+                        detailsParts.push(`${formatWeight(p.metal_weight, 3)}g @ ₹${p.metal_rate || 0}/g`);
+                      }
+                      if (p.payer_name && p.payer_name !== createdInvoice.customer_name) {
+                        detailsParts.push(`Paid by: ${p.payer_name}`);
+                      }
+                      if (p.payer_bank) {
+                        detailsParts.push(`from ${p.payer_bank}`);
+                      }
+                      if (p.received_in) {
+                        detailsParts.push(`into ${p.received_in}`);
+                      }
+                      if (p.reference_number) {
+                        detailsParts.push(`Ref: ${p.reference_number}`);
+                      }
+
                       return (
                         <div key={p.id} className="print-payment-row">
                           <span className="font-semibold text-slate-700">
                             {metalLabel}
-                            {p.metal_weight ? ` (${formatWeight(p.metal_weight, 3)}g @ ₹${p.metal_rate || 0}/g)` : ''}
-                            {p.reference_number ? ` • Ref: ${p.reference_number}` : ''}:
+                            {detailsParts.length > 0 ? ` (${detailsParts.join(' • ')})` : ''}:
                           </span>
                           <strong className="font-mono text-slate-900">
                             {formatCurrency(p.amount)}
@@ -2822,6 +4038,19 @@ export const CreateInvoicePage: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* LESS WEIGHT CALCULATOR POPUP */}
+      {activeLessCalc && (
+        <LessWeightCalculatorModal
+          isOpen={true}
+          itemName={activeLessCalc.itemName}
+          initialLessWeight={activeLessCalc.currentLess}
+          initialBreakdown={activeLessCalc.breakdown}
+          purities={purities}
+          onApply={handleApplyLessTotal}
+          onClose={() => setActiveLessCalc(null)}
+        />
       )}
     </div>
   );

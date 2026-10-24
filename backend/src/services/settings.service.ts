@@ -16,6 +16,7 @@ import {
   BillingSettings,
   GSTSettings,
   PaymentModeConfig,
+  ShopReceivingAccount,
   PrintSettings,
   AboutSystemInfo,
   TaxMode,
@@ -348,6 +349,100 @@ export class SettingsService {
     });
 
     return updated;
+  }
+
+  /**
+   * Shop Receiving Accounts Configuration
+   */
+  getReceivingAccounts(): ShopReceivingAccount[] {
+    const raw = settingRepository.getJson<ShopReceivingAccount[]>('shop.receiving_accounts', []);
+    if (raw && raw.length > 0) {
+      return raw;
+    }
+
+    // Seed defaults based on shop profile
+    const shop = this.getShopProfile();
+    const defaults: ShopReceivingAccount[] = [
+      {
+        id: 'acc-cash',
+        account_name: 'Cash Counter',
+        account_type: 'CASH',
+        is_default: true,
+        is_active: true,
+      },
+      {
+        id: 'acc-bank-sbi',
+        account_name: shop.bank_name ? `${shop.bank_name} Current Account` : 'SBI Current Account',
+        account_type: 'BANK',
+        bank_name: shop.bank_name || 'State Bank of India',
+        account_number: shop.account_number || null,
+        ifsc: shop.ifsc || null,
+        is_default: true,
+        is_active: true,
+      },
+      {
+        id: 'acc-bank-hdfc',
+        account_name: 'HDFC Current Account',
+        account_type: 'BANK',
+        bank_name: 'HDFC Bank',
+        account_number: null,
+        ifsc: null,
+        is_default: false,
+        is_active: true,
+      },
+      {
+        id: 'acc-upi',
+        account_name: 'Store Primary UPI / QR',
+        account_type: 'UPI',
+        upi_id: shop.upi_id || null,
+        is_default: true,
+        is_active: true,
+      },
+      {
+        id: 'acc-pos',
+        account_name: 'Card POS Terminal #1',
+        account_type: 'CARD_POS',
+        is_default: true,
+        is_active: true,
+      },
+    ];
+
+    settingRepository.setJson('shop.receiving_accounts', defaults);
+    return defaults;
+  }
+
+  updateReceivingAccounts(accounts: ShopReceivingAccount[], userId?: string): ShopReceivingAccount[] {
+    if (!Array.isArray(accounts)) {
+      throw new BadRequestError('Accounts list must be an array', 'VALIDATION_ERROR');
+    }
+
+    const sanitized = accounts.map((acc, idx) => {
+      if (!acc.account_name || !acc.account_name.trim()) {
+        throw new BadRequestError(`Account at row ${idx + 1} must have an account name`, 'VALIDATION_ERROR');
+      }
+      return {
+        id: acc.id || `acc-${Date.now()}-${idx + 1}`,
+        account_name: acc.account_name.trim(),
+        account_type: acc.account_type || 'BANK',
+        bank_name: acc.bank_name ? acc.bank_name.trim() : null,
+        account_number: acc.account_number ? acc.account_number.trim() : null,
+        ifsc: acc.ifsc ? acc.ifsc.trim().toUpperCase() : null,
+        upi_id: acc.upi_id ? acc.upi_id.trim() : null,
+        is_default: Boolean(acc.is_default),
+        is_active: acc.is_active !== undefined ? Boolean(acc.is_active) : true,
+      };
+    });
+
+    settingRepository.setJson('shop.receiving_accounts', sanitized);
+
+    auditRepository.log({
+      user_id: userId,
+      action: 'RECEIVING_ACCOUNTS_UPDATED',
+      entity_type: 'SHOP_ACCOUNTS',
+      metadata: { count: sanitized.length },
+    });
+
+    return sanitized;
   }
 
   /**

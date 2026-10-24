@@ -1,6 +1,7 @@
 import { getDb } from '../database/connection/db.js';
 import { PaginatedResult } from './customer.repository.js';
 import { v4 as uuidv4 } from 'uuid';
+import { Decimal } from 'decimal.js';
 import { documentSequenceRepository } from './documentSequence.repository.js';
 
 export interface SalesInvoiceRecord {
@@ -81,6 +82,9 @@ export interface SalesInvoiceItemRecord {
   metal_rate?: number;
   making_charges?: number;
   item_total?: number;
+  adjusted_fine_weight?: number;
+  billable_weight?: number;
+  effective_fine_weight?: number;
 }
 
 export interface SalesInvoicePaymentRecord {
@@ -92,6 +96,11 @@ export interface SalesInvoicePaymentRecord {
   metal_rate?: number | null;
   reference_number: string | null;
   notes: string | null;
+  payer_type?: string | null;
+  payer_name?: string | null;
+  payer_bank?: string | null;
+  received_in?: string | null;
+  payer_party_id?: string | null;
   created_at: string;
 }
 
@@ -146,6 +155,11 @@ export interface CreateSalesPaymentData {
   metal_rate?: number | null;
   reference_number?: string | null;
   notes?: string | null;
+  payer_type?: string | null;
+  payer_name?: string | null;
+  payer_bank?: string | null;
+  received_in?: string | null;
+  payer_party_id?: string | null;
 }
 
 export interface SalesQueryParams {
@@ -491,6 +505,8 @@ export class SalesRepository {
       .get(id) as SalesInvoiceItemRecord | undefined;
 
     if (!row) return null;
+    const fineWeightDec = new Decimal(row.fine_weight || 0);
+    const wastageWeightDec = new Decimal(row.wastage_weight || 0);
     return {
       ...row,
       wastage_percent: row.wastage_percent ?? 0.0,
@@ -499,6 +515,15 @@ export class SalesRepository {
       metal_rate: row.rate_per_gram,
       making_charges: row.making_charge,
       item_total: row.item_amount,
+      adjusted_fine_weight: !wastageWeightDec.isZero()
+        ? Decimal.max(0, fineWeightDec.plus(wastageWeightDec)).toDecimalPlaces(4, Decimal.ROUND_HALF_UP).toNumber()
+        : row.fine_weight,
+      billable_weight: !wastageWeightDec.isZero()
+        ? Decimal.max(0, fineWeightDec.plus(wastageWeightDec)).toDecimalPlaces(4, Decimal.ROUND_HALF_UP).toNumber()
+        : row.fine_weight,
+      effective_fine_weight: !wastageWeightDec.isZero()
+        ? Decimal.max(0, fineWeightDec.plus(wastageWeightDec)).toDecimalPlaces(4, Decimal.ROUND_HALF_UP).toNumber()
+        : row.fine_weight,
     };
   }
 
@@ -520,15 +545,28 @@ export class SalesRepository {
       `)
       .all(invoiceId) as SalesInvoiceItemRecord[];
 
-    return rows.map((r) => ({
-      ...r,
-      wastage_percent: r.wastage_percent ?? 0.0,
-      wastage_weight: r.wastage_weight ?? 0.0,
-      wastage_amount: r.wastage_amount ?? 0.0,
-      metal_rate: r.rate_per_gram,
-      making_charges: r.making_charge,
-      item_total: r.item_amount,
-    }));
+    return rows.map((r) => {
+      const fineWeightDec = new Decimal(r.fine_weight || 0);
+      const wastageWeightDec = new Decimal(r.wastage_weight || 0);
+      return {
+        ...r,
+        wastage_percent: r.wastage_percent ?? 0.0,
+        wastage_weight: r.wastage_weight ?? 0.0,
+        wastage_amount: r.wastage_amount ?? 0.0,
+        metal_rate: r.rate_per_gram,
+        making_charges: r.making_charge,
+        item_total: r.item_amount,
+        adjusted_fine_weight: !wastageWeightDec.isZero()
+          ? Decimal.max(0, fineWeightDec.plus(wastageWeightDec)).toDecimalPlaces(4, Decimal.ROUND_HALF_UP).toNumber()
+          : r.fine_weight,
+        billable_weight: !wastageWeightDec.isZero()
+          ? Decimal.max(0, fineWeightDec.plus(wastageWeightDec)).toDecimalPlaces(4, Decimal.ROUND_HALF_UP).toNumber()
+          : r.fine_weight,
+        effective_fine_weight: !wastageWeightDec.isZero()
+          ? Decimal.max(0, fineWeightDec.plus(wastageWeightDec)).toDecimalPlaces(4, Decimal.ROUND_HALF_UP).toNumber()
+          : r.fine_weight,
+      };
+    });
   }
 
   deleteItem(itemId: string): boolean {
@@ -545,8 +583,9 @@ export class SalesRepository {
 
     const stmt = db.prepare(`
       INSERT INTO sales_invoice_payments (
-        id, sales_invoice_id, payment_mode, amount, metal_weight, metal_rate, reference_number, notes, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+        id, sales_invoice_id, payment_mode, amount, metal_weight, metal_rate,
+        reference_number, notes, payer_type, payer_name, payer_bank, received_in, payer_party_id, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
     `);
 
     stmt.run(
@@ -557,7 +596,12 @@ export class SalesRepository {
       data.metal_weight ?? null,
       data.metal_rate ?? null,
       data.reference_number || null,
-      data.notes ? data.notes.trim() : null
+      data.notes ? data.notes.trim() : null,
+      data.payer_type || 'CUSTOMER',
+      data.payer_name ? data.payer_name.trim() : null,
+      data.payer_bank ? data.payer_bank.trim() : null,
+      data.received_in ? data.received_in.trim() : null,
+      data.payer_party_id || null
     );
 
     const row = db.prepare('SELECT * FROM sales_invoice_payments WHERE id = ?').get(id);

@@ -21,6 +21,7 @@ import {
   CheckCircle,
   XCircle,
   X,
+  Edit3,
 } from 'lucide-react';
 import './InvoicesPage.css';
 
@@ -352,14 +353,24 @@ export const InvoicesPage: React.FC = () => {
                           <Eye size={15} />
                         </button>
                         {inv.status === 'DRAFT' && (
-                          <button
-                            type="button"
-                            className="btn-action-icon text-success"
-                            title="Finalize Invoice"
-                            onClick={() => handleFinalize(inv.id)}
-                          >
-                            <CheckCircle size={15} />
-                          </button>
+                          <>
+                            <button
+                              type="button"
+                              className="btn-action-icon text-gold"
+                              title="Edit / Reopen Draft Invoice"
+                              onClick={() => navigate(`/billing/create?id=${inv.id}`)}
+                            >
+                              <Edit3 size={15} />
+                            </button>
+                            <button
+                              type="button"
+                              className="btn-action-icon text-success"
+                              title="Finalize Invoice"
+                              onClick={() => handleFinalize(inv.id)}
+                            >
+                              <CheckCircle size={15} />
+                            </button>
+                          </>
                         )}
                         {inv.status !== 'CANCELLED' && (
                           <button
@@ -534,7 +545,7 @@ export const InvoicesPage: React.FC = () => {
                       <th className="text-right">Net (g)</th>
                       <th className="text-right">Tunch %</th>
                       <th className="text-right">Fine Wt</th>
-                      <th className="text-right">Wastage</th>
+                      <th className="text-right">Badla/Waste</th>
                       <th className="text-right">Rate (₹/g)</th>
                       <th className="text-right">Making (₹)</th>
                       <th className="text-right">Total (₹)</th>
@@ -546,14 +557,16 @@ export const InvoicesPage: React.FC = () => {
                       const less = Number(it.less_weight || 0);
                       const net = Number(it.net_weight || Math.max(0, gross - less));
                       const tunch = Number(it.tunch_percent || 0);
-                      const fine = Number(it.fine_weight || (net * tunch) / 100);
+                      const pureFine = Number(it.fine_weight || (net * tunch) / 100);
                       const metalRate = Number(it.rate_per_gram ?? it.metal_rate ?? 0);
                       const wastagePercent = Number(it.wastage_percent ?? 0);
-                      const wastageWeight = Number(it.wastage_weight ?? (wastagePercent > 0 ? (net * wastagePercent) / 100 : 0));
-                      const wastageAmount = Number(it.wastage_amount ?? (wastageWeight * metalRate));
+                      const badlaPercent = Number(it.badla_percent ?? 0);
+                      const totalAdditionPercent = wastagePercent + badlaPercent;
+                      const wastageWeight = Number(it.wastage_weight ?? (totalAdditionPercent !== 0 ? (pureFine * totalAdditionPercent) / 100 : 0));
+                      const billableFine = Number(it.billable_weight ?? (totalAdditionPercent !== 0 ? Math.max(0, pureFine + wastageWeight) : pureFine));
                       const makingCharge = Number(it.making_charge ?? it.making_charges ?? 0);
-                      const metalValue = Number(it.metal_value ?? (fine * metalRate));
-                      const itemTotal = Number(it.item_amount ?? it.item_total ?? (metalValue + wastageAmount + makingCharge));
+                      const metalValue = Number(it.metal_value ?? (billableFine * metalRate));
+                      const itemTotal = Number(it.item_amount ?? it.item_total ?? (metalValue + makingCharge));
 
                       return (
                         <tr key={it.id || idx}>
@@ -575,12 +588,17 @@ export const InvoicesPage: React.FC = () => {
                           <td className="text-right font-mono text-muted whitespace-nowrap">{formatWeight(less, 3)}</td>
                           <td className="text-right font-mono font-bold whitespace-nowrap">{formatWeight(net, 3)}</td>
                           <td className="text-right font-mono whitespace-nowrap">{tunch > 0 ? `${tunch.toFixed(2)}%` : '-'}</td>
-                          <td className="text-right font-mono text-muted whitespace-nowrap">{fine > 0 ? formatFineWeight(fine, 4) : '-'}</td>
+                          <td className="text-right font-mono whitespace-nowrap">
+                            <div className="font-semibold">{billableFine > 0 ? formatFineWeight(billableFine, 4) : '-'}</div>
+                          </td>
                           <td className="text-right font-mono text-xs whitespace-nowrap">
-                            {wastagePercent > 0 ? (
+                            {totalAdditionPercent !== 0 ? (
                               <div>
-                                <div>{formatWeight(wastageWeight, 3)}g</div>
-                                <div className="text-[10px] text-muted">({wastagePercent}%)</div>
+                                <div>{wastageWeight > 0 ? '+' : ''}{formatWeight(wastageWeight, 3)}g</div>
+                                <div className="text-[10px] text-muted">
+                                  {badlaPercent !== 0 && <span>B:{badlaPercent > 0 ? '+' : ''}{badlaPercent}% </span>}
+                                  {wastagePercent !== 0 && <span>W:{wastagePercent > 0 ? '+' : ''}{wastagePercent}%</span>}
+                                </div>
                               </div>
                             ) : (
                               <span className="text-muted">-</span>
@@ -633,10 +651,23 @@ export const InvoicesPage: React.FC = () => {
                       </td>
                       <td></td>
                       <td className="text-right font-mono font-bold text-muted whitespace-nowrap">
-                        {formatFineWeight(
-                          (selectedInvoice.items || []).reduce((acc, it) => acc + Number(it.fine_weight || 0), 0),
-                          4
-                        )}
+                        <div>
+                          {formatFineWeight(
+                            (selectedInvoice.items || []).reduce((acc, it) => {
+                              const gross = Number(it.gross_weight || 0);
+                              const less = Number(it.less_weight || 0);
+                              const net = Number(it.net_weight || Math.max(0, gross - less));
+                              const tunch = Number(it.tunch_percent || 0);
+                              const pureFine = Number(it.fine_weight || (net * tunch) / 100);
+                              const badlaPercent = Number(it.badla_percent ?? 0);
+                              const wastagePercent = Number(it.wastage_percent ?? 0);
+                              const totalAdditionPercent = badlaPercent + wastagePercent;
+                              const additionWeight = Number(it.wastage_weight ?? ((pureFine * totalAdditionPercent) / 100));
+                              return acc + Number(it.billable_weight ?? (totalAdditionPercent !== 0 ? Math.max(0, pureFine + additionWeight) : pureFine));
+                            }, 0),
+                            4
+                          )}
+                        </div>
                       </td>
                       <td></td>
                       <td></td>
@@ -650,14 +681,11 @@ export const InvoicesPage: React.FC = () => {
                           (selectedInvoice.items || []).reduce((acc, it) => {
                             const metalRate = Number(it.rate_per_gram ?? it.metal_rate ?? 0);
                             const makingCharge = Number(it.making_charge ?? it.making_charges ?? 0);
-                            const wastagePercent = Number(it.wastage_percent ?? 0);
-                            const net = Number(it.net_weight || 0);
-                            const wastageWeight = Number(it.wastage_weight ?? (wastagePercent > 0 ? (net * wastagePercent) / 100 : 0));
-                            const wastageAmount = Number(it.wastage_amount ?? (wastageWeight * metalRate));
                             const tunch = Number(it.tunch_percent || 0);
+                            const net = Number(it.net_weight || 0);
                             const fine = Number(it.fine_weight || (net * tunch) / 100);
                             const metalValue = Number(it.metal_value ?? (fine * metalRate));
-                            return acc + Number(it.item_amount ?? it.item_total ?? (metalValue + wastageAmount + makingCharge));
+                            return acc + Number(it.item_amount ?? it.item_total ?? (metalValue + makingCharge));
                           }, 0)
                         )}
                       </td>
@@ -745,13 +773,32 @@ export const InvoicesPage: React.FC = () => {
                           ? 'Gold Payment'
                           : p.payment_mode === 'SILVER'
                           ? 'Silver Payment'
+                          : p.payment_mode === 'BANK'
+                          ? 'Bank Transfer'
                           : p.payment_mode;
+
+                      const detailsParts: string[] = [];
+                      if (p.metal_weight) {
+                        detailsParts.push(`${formatWeight(p.metal_weight, 3)}g @ ₹${p.metal_rate || 0}/g`);
+                      }
+                      if (p.payer_name && p.payer_name !== selectedInvoice.customer_name) {
+                        detailsParts.push(`Paid by: ${p.payer_name}`);
+                      }
+                      if (p.payer_bank) {
+                        detailsParts.push(`from ${p.payer_bank}`);
+                      }
+                      if (p.received_in) {
+                        detailsParts.push(`into ${p.received_in}`);
+                      }
+                      if (p.reference_number) {
+                        detailsParts.push(`Ref: ${p.reference_number}`);
+                      }
+
                       return (
                         <div key={p.id} className="print-payment-row">
                           <span className="font-semibold text-slate-700">
                             {metalLabel}
-                            {p.metal_weight ? ` (${formatWeight(p.metal_weight, 3)}g @ ₹${p.metal_rate || 0}/g)` : ''}
-                            {p.reference_number ? ` • Ref: ${p.reference_number}` : ''}:
+                            {detailsParts.length > 0 ? ` (${detailsParts.join(' • ')})` : ''}:
                           </span>
                           <strong className="font-mono text-slate-900">
                             {formatCurrency(p.amount)}

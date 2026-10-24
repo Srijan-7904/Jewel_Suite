@@ -14,6 +14,7 @@ import {
   DatabaseInfo,
   AboutSystemInfo,
   UserDetail,
+  ShopReceivingAccount,
 } from '../../services/settings';
 import { rateApi } from '../../services/masters';
 import { CurrentRate } from '../../types';
@@ -37,6 +38,11 @@ import {
   UserPlus,
   RefreshCw,
   Database,
+  Landmark,
+  Plus,
+  Trash2,
+  Edit2,
+  Building2,
 } from 'lucide-react';
 import './SettingsPage.css';
 
@@ -85,6 +91,29 @@ export const SettingsPage: React.FC = () => {
   const [dbInfo, setDbInfo] = useState<DatabaseInfo | null>(null);
   const [about, setAbout] = useState<AboutSystemInfo | null>(null);
   const [userList, setUserList] = useState<UserDetail[]>([]);
+  const [receivingAccounts, setReceivingAccounts] = useState<ShopReceivingAccount[]>([]);
+  const [showAccountModal, setShowAccountModal] = useState<boolean>(false);
+  const [editingAccount, setEditingAccount] = useState<ShopReceivingAccount | null>(null);
+  const [accountForm, setAccountForm] = useState<{
+    id?: string;
+    account_name: string;
+    account_type: 'BANK' | 'CASH' | 'UPI' | 'CARD_POS' | 'OTHER';
+    bank_name: string;
+    account_number: string;
+    ifsc: string;
+    upi_id: string;
+    is_default: boolean;
+    is_active: boolean;
+  }>({
+    account_name: '',
+    account_type: 'BANK',
+    bank_name: '',
+    account_number: '',
+    ifsc: '',
+    upi_id: '',
+    is_default: false,
+    is_active: true,
+  });
 
   // User Management Modals
   const [showAddUserModal, setShowAddUserModal] = useState<boolean>(false);
@@ -144,6 +173,7 @@ export const SettingsPage: React.FC = () => {
         printData,
         amcData,
         aboutData,
+        receivingAccountsData,
       ] = await Promise.all([
         settingsApi.getShopProfile().catch((e) => {
           console.warn('Failed to load shop profile:', e);
@@ -180,6 +210,10 @@ export const SettingsPage: React.FC = () => {
         settingsApi.getAbout().catch((e) => {
           console.warn('Failed to load about info:', e);
           return null;
+        }),
+        settingsApi.getReceivingAccounts().catch((e) => {
+          console.warn('Failed to load receiving accounts:', e);
+          return [] as ShopReceivingAccount[];
         }),
       ]);
 
@@ -253,6 +287,7 @@ export const SettingsPage: React.FC = () => {
       );
 
       setPaymentModes(Array.isArray(pmData) ? pmData : []);
+      setReceivingAccounts(Array.isArray(receivingAccountsData) ? receivingAccountsData : []);
 
       setPrinting(
         printData || {
@@ -459,6 +494,121 @@ export const SettingsPage: React.FC = () => {
       showNotification('success', `Payment mode '${code}' status toggled`);
     } catch (err: any) {
       showNotification('error', err.message || 'Failed to toggle payment mode');
+    }
+  };
+
+  // Receiving Accounts
+  const handleOpenAccountModal = (acc?: ShopReceivingAccount) => {
+    if (acc) {
+      setEditingAccount(acc);
+      setAccountForm({
+        id: acc.id,
+        account_name: acc.account_name,
+        account_type: acc.account_type,
+        bank_name: acc.bank_name || '',
+        account_number: acc.account_number || '',
+        ifsc: acc.ifsc || '',
+        upi_id: acc.upi_id || '',
+        is_default: !!acc.is_default,
+        is_active: acc.is_active !== false,
+      });
+    } else {
+      setEditingAccount(null);
+      setAccountForm({
+        account_name: '',
+        account_type: 'BANK',
+        bank_name: '',
+        account_number: '',
+        ifsc: '',
+        upi_id: '',
+        is_default: false,
+        is_active: true,
+      });
+    }
+    setShowAccountModal(true);
+  };
+
+  const handleSaveAccount = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!accountForm.account_name.trim()) {
+      showNotification('error', 'Account Name is required');
+      return;
+    }
+    setSaving(true);
+    try {
+      let updatedList: ShopReceivingAccount[];
+      if (editingAccount) {
+        updatedList = receivingAccounts.map((a) =>
+          a.id === editingAccount.id
+            ? {
+                ...a,
+                account_name: accountForm.account_name.trim(),
+                account_type: accountForm.account_type,
+                bank_name: accountForm.bank_name.trim() || undefined,
+                account_number: accountForm.account_number.trim() || undefined,
+                ifsc: accountForm.ifsc.trim() || undefined,
+                upi_id: accountForm.upi_id.trim() || undefined,
+                is_default: accountForm.is_default,
+                is_active: accountForm.is_active,
+              }
+            : accountForm.is_default && a.account_type === accountForm.account_type
+            ? { ...a, is_default: false }
+            : a
+        );
+      } else {
+        const newAcc: ShopReceivingAccount = {
+          id: `acc-${Date.now()}`,
+          account_name: accountForm.account_name.trim(),
+          account_type: accountForm.account_type,
+          bank_name: accountForm.bank_name.trim() || undefined,
+          account_number: accountForm.account_number.trim() || undefined,
+          ifsc: accountForm.ifsc.trim() || undefined,
+          upi_id: accountForm.upi_id.trim() || undefined,
+          is_default: accountForm.is_default,
+          is_active: accountForm.is_active,
+          display_order: receivingAccounts.length + 1,
+        };
+        updatedList = [...receivingAccounts, newAcc];
+        if (newAcc.is_default) {
+          updatedList = updatedList.map((a) =>
+            a.id !== newAcc.id && a.account_type === newAcc.account_type ? { ...a, is_default: false } : a
+          );
+        }
+      }
+
+      const res = await settingsApi.updateReceivingAccounts(updatedList);
+      setReceivingAccounts(res);
+      setShowAccountModal(false);
+      showNotification('success', 'Shop receiving account saved successfully');
+    } catch (err: any) {
+      showNotification('error', err.message || 'Failed to save receiving account');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleToggleAccountActive = async (id: string) => {
+    try {
+      const updatedList = receivingAccounts.map((a) =>
+        a.id === id ? { ...a, is_active: !a.is_active } : a
+      );
+      const res = await settingsApi.updateReceivingAccounts(updatedList);
+      setReceivingAccounts(res);
+      showNotification('success', 'Account status updated');
+    } catch (err: any) {
+      showNotification('error', err.message || 'Failed to update account status');
+    }
+  };
+
+  const handleDeleteAccount = async (id: string) => {
+    if (!window.confirm('Are you sure you want to remove this receiving account?')) return;
+    try {
+      const updatedList = receivingAccounts.filter((a) => a.id !== id);
+      const res = await settingsApi.updateReceivingAccounts(updatedList);
+      setReceivingAccounts(res);
+      showNotification('success', 'Account removed');
+    } catch (err: any) {
+      showNotification('error', err.message || 'Failed to delete account');
     }
   };
 
@@ -1340,6 +1490,114 @@ export const SettingsPage: React.FC = () => {
                   </div>
                 ))}
               </div>
+
+              {/* Shop Receiving Accounts & Destinations */}
+              <div className="receiving-accounts-section mt-6">
+                <div className="card-header flex justify-between items-center mb-3">
+                  <div>
+                    <h3 className="card-title font-serif flex items-center gap-2">
+                      <Landmark size={18} className="gold" />
+                      <span>Shop Receiving Accounts & Destinations</span>
+                    </h3>
+                    <p className="card-desc">
+                      Configure your shop's bank accounts, cash drawers, UPI handles, and card terminals used to receive payments at billing.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm flex items-center gap-1.5"
+                    onClick={() => handleOpenAccountModal()}
+                  >
+                    <Plus size={14} />
+                    <span>Add Receiving Account</span>
+                  </button>
+                </div>
+
+                <div className="table-responsive">
+                  <table className="settings-table">
+                    <thead>
+                      <tr>
+                        <th>Account Name</th>
+                        <th>Type</th>
+                        <th>Bank / Gateway</th>
+                        <th>Account No / UPI / Identifier</th>
+                        <th>IFSC</th>
+                        <th>Default</th>
+                        <th>Status</th>
+                        <th className="text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {receivingAccounts.length === 0 ? (
+                        <tr>
+                          <td colSpan={8} className="text-center text-muted py-4">
+                            No shop receiving accounts configured. Click "Add Receiving Account" to register one.
+                          </td>
+                        </tr>
+                      ) : (
+                        receivingAccounts.map((acc) => (
+                          <tr key={acc.id} className={!acc.is_active ? 'opacity-60' : ''}>
+                            <td className="font-semibold text-gold flex items-center gap-1.5">
+                              {acc.account_type === 'BANK' ? <Landmark size={14} /> : <Building2 size={14} />}
+                              <span>{acc.account_name}</span>
+                            </td>
+                            <td>
+                              <span className="badge badge-system font-mono text-[10px]">
+                                {acc.account_type}
+                              </span>
+                            </td>
+                            <td>{acc.bank_name || '—'}</td>
+                            <td className="font-mono text-xs">
+                              {acc.account_number || acc.upi_id || '—'}
+                            </td>
+                            <td className="font-mono text-xs text-muted">{acc.ifsc || '—'}</td>
+                            <td>
+                              {acc.is_default ? (
+                                <span className="badge badge-success text-[10px]">DEFAULT</span>
+                              ) : (
+                                <span className="text-muted text-xs">—</span>
+                              )}
+                            </td>
+                            <td>
+                              <span className={`badge ${acc.is_active ? 'badge-success' : 'badge-danger'} text-[10px]`}>
+                                {acc.is_active ? 'ACTIVE' : 'INACTIVE'}
+                              </span>
+                            </td>
+                            <td className="text-right">
+                              <div className="flex justify-end gap-1.5">
+                                <button
+                                  type="button"
+                                  className="btn btn-outline btn-xs"
+                                  onClick={() => handleOpenAccountModal(acc)}
+                                  title="Edit Account Details"
+                                >
+                                  <Edit2 size={12} />
+                                </button>
+                                <button
+                                  type="button"
+                                  className={`btn btn-xs ${acc.is_active ? 'btn-danger-outline' : 'btn-outline'}`}
+                                  onClick={() => handleToggleAccountActive(acc.id)}
+                                  title={acc.is_active ? 'Deactivate' : 'Activate'}
+                                >
+                                  {acc.is_active ? 'Disable' : 'Enable'}
+                                </button>
+                                <button
+                                  type="button"
+                                  className="btn btn-danger-outline btn-xs"
+                                  onClick={() => handleDeleteAccount(acc.id)}
+                                  title="Delete Account"
+                                >
+                                  <Trash2 size={12} />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </div>
           )}
 
@@ -1967,6 +2225,130 @@ export const SettingsPage: React.FC = () => {
                 </button>
                 <button type="submit" className="btn btn-primary" disabled={saving}>
                   {saving ? 'Updating...' : 'Publish Rate'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {/* Modal 4: Shop Receiving Account */}
+      {showAccountModal && (
+        <div className="modal-backdrop">
+          <div className="modal-dialog">
+            <div className="modal-header">
+              <h3 className="modal-title font-serif flex items-center gap-2">
+                <Landmark size={18} className="gold" />
+                <span>{editingAccount ? 'Edit Receiving Account' : 'Add Shop Receiving Account'}</span>
+              </h3>
+              <button type="button" className="close-btn" onClick={() => setShowAccountModal(false)}>
+                &times;
+              </button>
+            </div>
+            <form onSubmit={handleSaveAccount} className="modal-body">
+              <div className="form-group mb-3">
+                <label>Account Label / Destination Name *</label>
+                <input
+                  type="text"
+                  className="form-control"
+                  value={accountForm.account_name}
+                  onChange={(e) => setAccountForm({ ...accountForm, account_name: e.target.value })}
+                  placeholder="e.g. SBI Current Account, HDFC Current Account, Cash Counter"
+                  required
+                />
+              </div>
+
+              <div className="form-group mb-3">
+                <label>Account Type *</label>
+                <select
+                  className="form-control"
+                  value={accountForm.account_type}
+                  onChange={(e) => setAccountForm({ ...accountForm, account_type: e.target.value as any })}
+                  required
+                >
+                  <option value="BANK">Bank Account (Current / Savings)</option>
+                  <option value="CASH">Cash Counter / Safe Drawer</option>
+                  <option value="UPI">UPI VPA / QR Handle</option>
+                  <option value="CARD_POS">Card POS Terminal / Merchant</option>
+                  <option value="OTHER">Other Tender Destination</option>
+                </select>
+              </div>
+
+              {(accountForm.account_type === 'BANK' || accountForm.account_type === 'CARD_POS') && (
+                <div className="form-group mb-3">
+                  <label>Bank Name</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    value={accountForm.bank_name}
+                    onChange={(e) => setAccountForm({ ...accountForm, bank_name: e.target.value })}
+                    placeholder="e.g. State Bank of India, HDFC Bank, ICICI Bank"
+                  />
+                </div>
+              )}
+
+              {accountForm.account_type === 'BANK' && (
+                <>
+                  <div className="form-group mb-3">
+                    <label>Account Number</label>
+                    <input
+                      type="text"
+                      className="form-control font-mono"
+                      value={accountForm.account_number}
+                      onChange={(e) => setAccountForm({ ...accountForm, account_number: e.target.value })}
+                      placeholder="e.g. 409281002918"
+                    />
+                  </div>
+                  <div className="form-group mb-3">
+                    <label>IFSC Code</label>
+                    <input
+                      type="text"
+                      className="form-control font-mono uppercase"
+                      value={accountForm.ifsc}
+                      onChange={(e) => setAccountForm({ ...accountForm, ifsc: e.target.value.toUpperCase() })}
+                      placeholder="e.g. SBIN0000300"
+                    />
+                  </div>
+                </>
+              )}
+
+              {accountForm.account_type === 'UPI' && (
+                <div className="form-group mb-3">
+                  <label>UPI ID / VPA</label>
+                  <input
+                    type="text"
+                    className="form-control font-mono"
+                    value={accountForm.upi_id}
+                    onChange={(e) => setAccountForm({ ...accountForm, upi_id: e.target.value })}
+                    placeholder="e.g. jewelsuite@sbi or 9876543210@paytm"
+                  />
+                </div>
+              )}
+
+              <div className="flex items-center gap-4 my-3">
+                <label className="flex items-center gap-2 cursor-pointer text-sm">
+                  <input
+                    type="checkbox"
+                    checked={accountForm.is_default}
+                    onChange={(e) => setAccountForm({ ...accountForm, is_default: e.target.checked })}
+                  />
+                  <span>Set as default for this type</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer text-sm">
+                  <input
+                    type="checkbox"
+                    checked={accountForm.is_active}
+                    onChange={(e) => setAccountForm({ ...accountForm, is_active: e.target.checked })}
+                  />
+                  <span>Active for billing selections</span>
+                </label>
+              </div>
+
+              <div className="modal-footer">
+                <button type="button" className="btn btn-outline" onClick={() => setShowAccountModal(false)}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={saving}>
+                  {saving ? 'Saving...' : 'Save Account'}
                 </button>
               </div>
             </form>

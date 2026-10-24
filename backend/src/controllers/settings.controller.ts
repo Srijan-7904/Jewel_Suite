@@ -160,6 +160,26 @@ export class SettingsController {
     }
   }
 
+  // Shop Receiving Accounts
+  async getReceivingAccounts(_req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const accounts = settingsService.getReceivingAccounts();
+      sendSuccess(res, accounts, 'Shop receiving accounts retrieved');
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  async updateReceivingAccounts(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userId = req.user?.id;
+      const updated = settingsService.updateReceivingAccounts(req.body, userId);
+      sendSuccess(res, updated, 'Shop receiving accounts updated successfully');
+    } catch (err) {
+      next(err);
+    }
+  }
+
   // Print Settings
   async getPrintSettings(_req: Request, res: Response, next: NextFunction): Promise<void> {
     try {

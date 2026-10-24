@@ -239,4 +239,43 @@ describe('Jewel Suite Part 8: Finance API Integration Tests', () => {
     expect(invoiceEntries.some((e: any) => e.entry_type === 'SALE' && e.debit_credit === 'DEBIT')).toBe(true);
     expect(invoiceEntries.some((e: any) => e.entry_type === 'SALE_PAYMENT' && e.debit_credit === 'CREDIT')).toBe(true);
   });
+
+  it('retrieves customer metal balances and metal ledger entries via API', async () => {
+    // Create customer with gold and silver opening balances
+    const custRes = await request(app)
+      .post('/api/customers')
+      .set('Authorization', `Bearer ${authToken}`)
+      .send({
+        name: 'Metal API Customer',
+        phone: '9899009988',
+        customer_type: 'RETAIL',
+        opening_gold_weight: 15.25,
+        opening_gold_type: 'DEBIT',
+        opening_silver_weight: 50.0,
+        opening_silver_type: 'CREDIT',
+      });
+
+    expect(custRes.status).toBe(201);
+    const newCustId = custRes.body.data.id;
+
+    // Test GET /api/finance/ledger/customer/:id/metal-balances
+    const balancesRes = await request(app)
+      .get(`/api/finance/ledger/customer/${newCustId}/metal-balances`)
+      .set('Authorization', `Bearer ${authToken}`);
+
+    expect(balancesRes.status).toBe(200);
+    const balances = balancesRes.body.data;
+    const gold = balances.find((b: any) => b.metal_code === 'GOLD');
+    const silver = balances.find((b: any) => b.metal_code === 'SILVER');
+    expect(gold.balance_grams).toBe(15.25);
+    expect(silver.balance_grams).toBe(-50.0);
+
+    // Test GET /api/finance/ledger/customer/:id/metal
+    const ledgerRes = await request(app)
+      .get(`/api/finance/ledger/customer/${newCustId}/metal`)
+      .set('Authorization', `Bearer ${authToken}`);
+
+    expect(ledgerRes.status).toBe(200);
+    expect(ledgerRes.body.items.length).toBe(2);
+  });
 });

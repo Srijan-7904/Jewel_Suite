@@ -7,6 +7,8 @@ import {
   CashBookResponse,
   FinanceSummary,
   PaginatedResult,
+  PartyMetalLedgerRecord,
+  PartyMetalBalanceSummary,
 } from '../types';
 
 export interface LedgerQueryParams {
@@ -99,6 +101,33 @@ export const financeApi = {
 
     const qs = query.toString();
     return request<PartyLedgerResponse>(`/api/finance/ledger/customer/${customerId}${qs ? `?${qs}` : ''}`);
+  },
+
+  async getCustomerMetalBalances(customerId: string): Promise<PartyMetalBalanceSummary[]> {
+    return request<PartyMetalBalanceSummary[]>(`/api/finance/ledger/customer/${customerId}/metal-balances`);
+  },
+
+  async getCustomerMetalLedger(
+    customerId: string,
+    params: { from_date?: string; to_date?: string; metal_id?: string; page?: number; pageSize?: number; search?: string } = {}
+  ): Promise<PaginatedResult<PartyMetalLedgerRecord>> {
+    const query = new URLSearchParams();
+    if (params.from_date) query.append('from_date', params.from_date);
+    if (params.to_date) query.append('to_date', params.to_date);
+    if (params.metal_id && params.metal_id !== 'ALL') query.append('metal_id', params.metal_id);
+    if (params.page) query.append('page', params.page.toString());
+    if (params.pageSize) query.append('pageSize', params.pageSize.toString());
+    if (params.search) query.append('search', params.search);
+
+    const qs = query.toString();
+    const res = await request<any>(`/api/finance/ledger/customer/${customerId}/metal${qs ? `?${qs}` : ''}`);
+    return {
+      items: res.items || [],
+      total: res.total || 0,
+      page: res.page || 1,
+      pageSize: res.pageSize || 50,
+      totalPages: res.totalPages || 1,
+    };
   },
 
   async getSupplierLedger(supplierId: string, params: { from_date?: string; to_date?: string; page?: number; pageSize?: number } = {}): Promise<PartyLedgerResponse> {

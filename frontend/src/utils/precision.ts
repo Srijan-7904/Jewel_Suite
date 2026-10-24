@@ -148,9 +148,11 @@ export function formatCurrency(
  */
 export function parseDecimalInput(
   input: string,
-  maxDecimals?: number
+  maxDecimals?: number,
+  allowNegative: boolean = false
 ): string {
   if (!input) return '';
+  const isNegative = allowNegative && input.trim().startsWith('-');
   let cleaned = input.replace(/[^0-9.]/g, '');
   const parts = cleaned.split('.');
   if (parts.length > 2) {
@@ -158,6 +160,9 @@ export function parseDecimalInput(
   }
   if (maxDecimals !== undefined && parts.length === 2 && parts[1].length > maxDecimals) {
     cleaned = parts[0] + '.' + parts[1].substring(0, maxDecimals);
+  }
+  if (isNegative) {
+    return '-' + cleaned;
   }
   return cleaned;
 }

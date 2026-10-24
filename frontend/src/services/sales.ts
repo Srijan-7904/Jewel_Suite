@@ -56,8 +56,12 @@ export interface SalesInvoiceItem {
 
   tunch_percent: number;
   fine_weight: number;
+  effective_fine_weight?: number;
+  adjusted_fine_weight?: number;
+  billable_weight?: number;
 
   wastage_percent?: number;
+  badla_percent?: number;
   wastage_weight?: number;
   wastage_amount?: number;
 
@@ -84,6 +88,11 @@ export interface SalesPaymentRecord {
   metal_rate?: number | null;
   reference_number: string | null;
   notes: string | null;
+  payer_type?: string | null;
+  payer_name?: string | null;
+  payer_bank?: string | null;
+  received_in?: string | null;
+  payer_party_id?: string | null;
   created_at: string;
 }
 
@@ -151,6 +160,11 @@ export const salesApi = {
       purity_id?: string;
       reference_number?: string;
       notes?: string;
+      payer_type?: string;
+      payer_name?: string;
+      payer_bank?: string;
+      received_in?: string;
+      payer_party_id?: string;
     }[];
   }): Promise<SalesInvoiceDetails> {
     return request<SalesInvoiceDetails>('/api/sales/invoices', {
@@ -168,6 +182,11 @@ export const salesApi = {
     purity_id?: string;
     reference_number?: string;
     notes?: string;
+    payer_type?: string;
+    payer_name?: string;
+    payer_bank?: string;
+    received_in?: string;
+    payer_party_id?: string;
   }[]): Promise<SalesInvoiceDetails> {
     return request<SalesInvoiceDetails>(`/api/sales/invoices/${id}/finalize`, {
       method: 'POST',

@@ -392,15 +392,16 @@
 .col-tag { width: 96px; min-width: 88px; }
 .col-desc { min-width: 95px; }
 .col-metal { width: 72px; min-width: 68px; }
-.col-purity { width: 96px; min-width: 90px; }
+.col-purity { width: 68px; min-width: 62px; }
 .col-gross { width: 64px; min-width: 60px; }
-.col-less { width: 56px; min-width: 52px; }
+.col-less { width: 80px; min-width: 74px; }
 .col-net { width: 64px; min-width: 58px; }
 .col-tunch { width: 52px; min-width: 48px; }
-.col-waste { width: 48px; min-width: 44px; }
+.col-badla { width: 58px; min-width: 52px; }
+.col-waste { width: 58px; min-width: 52px; }
 .col-deduct { width: 56px; min-width: 52px; }
 .col-making { width: 140px; min-width: 130px; }
-.col-fine { width: 64px; min-width: 60px; }
+.col-fine { width: 80px; min-width: 74px; }
 .col-rate { width: 68px; min-width: 64px; }
 .col-amount { width: 92px; min-width: 82px; }
 .col-action { width: 28px; min-width: 26px; text-align: center; }
@@ -650,6 +651,62 @@
   text-overflow: ellipsis;
 }
 
+.fine-cell-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+}
+
+.fine-sub-label {
+  font-size: 0.62rem;
+  color: var(--accent, #60a5fa);
+  text-align: right;
+  line-height: 1.1;
+  padding-right: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.input-cell-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+}
+
+.input-sub-label {
+  font-size: 0.62rem;
+  color: var(--text-muted);
+  text-align: right;
+  line-height: 1.15;
+  padding-right: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.input-sub-label .sub-currency,
+.sub-currency {
+  font-size: 0.58rem;
+  line-height: 1.1;
+  opacity: 0.9;
+  letter-spacing: -0.2px;
+}
+
+.input-sub-label.badla-neg {
+  color: #f87171;
+}
+
+.input-sub-label.badla-pos {
+  color: #34d399;
+}
+
+.input-sub-label.waste {
+  color: #fbbf24;
+}
+
 .btn-trash-row {
   width: 26px;
   height: 26px;
@@ -792,6 +849,32 @@
   margin: 0 0 0.5rem 0;
 }
 
+/* POS Lower Grid: Side-by-Side Payment and Summary */
+.pos-lower-grid {
+  display: grid;
+  grid-template-columns: 1.35fr 1fr;
+  gap: 1.25rem;
+  align-items: start;
+}
+
+@media (max-width: 1100px) {
+  .pos-lower-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.pos-payment-column {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.pos-summary-column {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 /* Quick Tender Bar */
 .quick-tender-bar {
   display: flex;
@@ -841,16 +924,77 @@
 
 .payment-entry-row {
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 0.5rem;
   background: var(--bg-surface-elevated);
   border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 0.6rem 0.75rem;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.payment-entry-row:hover {
+  border-color: var(--border-default);
+}
+
+.payment-entry-main-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.payment-source-subrow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 0.5rem;
+  background: rgba(0, 0, 0, 0.15);
+  border: 1px solid var(--border-subtle);
   border-radius: 6px;
-  padding: 0.4rem 0.5rem;
+  padding: 0.5rem 0.6rem;
+}
+
+.payment-field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 140px;
+}
+
+.payment-field-label {
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+}
+
+.payment-sub-select,
+.payment-sub-input {
+  width: 100%;
+  background: var(--bg-input);
+  border: 1px solid var(--border-default);
+  border-radius: 4px;
+  padding: 0.35rem 0.5rem;
+  color: var(--text-main);
+  font-size: 0.78rem;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.payment-sub-select:focus,
+.payment-sub-input:focus {
+  border-color: var(--gold-primary);
+  box-shadow: 0 0 0 2px var(--gold-bg-subtle);
+}
+
+.payment-sub-select option {
+  background: var(--bg-surface);
+  color: var(--text-main);
 }
 
 .payment-mode-select {
-  width: 130px;
+  width: 150px;
   background: var(--bg-input);
   border: 1px solid var(--border-default);
   border-radius: 4px;
@@ -1577,7 +1721,7 @@
   border: 1px solid var(--gold-border, #d4af37);
   border-radius: 12px;
   width: 100%;
-  max-width: 680px;
+  max-width: 760px;
   max-height: calc(100vh - 4rem);
   display: flex;
   flex-direction: column;

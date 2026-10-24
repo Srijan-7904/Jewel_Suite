@@ -13,6 +13,7 @@ import { stockMovementRepository } from '../repositories/stock_movement.reposito
 import { auditRepository } from '../repositories/audit.repository.js';
 import { withTransaction } from '../database/connection/db.js';
 import { calculatePurchaseItem, calculatePurchaseTotals } from '../utils/purchaseMath.js';
+import { toDecimal } from '../utils/precision.js';
 import { MovementType, StockStatus } from '../domain/stockStatus.js';
 import { financeRepository } from '../repositories/finance.repository.js';
 import { PartyType, EntryType, DebitCredit, PaymentType } from '../domain/finance.js';
@@ -30,7 +31,8 @@ export const purchaseItemSchema = z.object({
     .number()
     .min(0, 'Tunch percent cannot be negative')
     .max(100, 'Tunch percent cannot exceed 100'),
-  wastage_percent: z.number().min(0, 'Wastage percent cannot be negative').default(0),
+  wastage_percent: z.number().default(0),
+  badla_percent: z.number().default(0).optional(),
   making_charge: z.number().min(0, 'Making charge cannot be negative').default(0),
   rate_per_gram: z.number().positive('Purchase rate per gram must be greater than zero'),
   huid: z.string().trim().nullable().optional(),
@@ -38,8 +40,12 @@ export const purchaseItemSchema = z.object({
 });
 
 export const purchasePaymentSchema = z.object({
-  payment_mode: z.enum(['CASH', 'CARD', 'UPI', 'BANK', 'CREDIT']),
+  payment_mode: z.enum(['CASH', 'CARD', 'UPI', 'BANK', 'CREDIT', 'GOLD', 'SILVER', 'OTHER']),
   amount: z.number().positive('Payment amount must be greater than zero'),
+  metal_weight: z.number().nonnegative().optional(),
+  metal_rate: z.number().nonnegative().optional(),
+  metal_id: z.string().optional(),
+  purity_id: z.string().optional(),
   reference_number: z.string().trim().nullable().optional(),
   notes: z.string().trim().nullable().optional(),
 });
@@ -100,6 +106,7 @@ export class PurchaseService {
             rate_per_gram: itemInput.rate_per_gram,
             making_charge: itemInput.making_charge,
             wastage_percent: itemInput.wastage_percent,
+            badla_percent: itemInput.badla_percent,
           });
 
           purchaseRepository.createItem({
@@ -114,7 +121,7 @@ export class PurchaseService {
             net_weight: calc.net_weight,
             tunch_percent: itemInput.tunch_percent,
             fine_weight: calc.fine_weight,
-            wastage_percent: calc.wastage_percent,
+            wastage_percent: toDecimal(calc.wastage_percent).plus(toDecimal(itemInput.badla_percent || 0)).toNumber(),
             wastage_weight: calc.wastage_weight,
             wastage_amount: calc.wastage_amount,
             making_charge: itemInput.making_charge,
@@ -243,6 +250,7 @@ export class PurchaseService {
       rate_per_gram: validated.rate_per_gram,
       making_charge: validated.making_charge,
       wastage_percent: validated.wastage_percent,
+      badla_percent: validated.badla_percent,
     });
 
     purchaseRepository.createItem({
@@ -257,7 +265,7 @@ export class PurchaseService {
       net_weight: calc.net_weight,
       tunch_percent: validated.tunch_percent,
       fine_weight: calc.fine_weight,
-      wastage_percent: calc.wastage_percent,
+      wastage_percent: toDecimal(calc.wastage_percent).plus(toDecimal(validated.badla_percent || 0)).toNumber(),
       wastage_weight: calc.wastage_weight,
       wastage_amount: calc.wastage_amount,
       making_charge: validated.making_charge,

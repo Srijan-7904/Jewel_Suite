@@ -9,6 +9,9 @@ import {
   LedgerQueryParams,
   PaymentQueryParams,
   CashBookQueryParams,
+  PartyMetalLedgerRecord,
+  PartyMetalBalanceSummary,
+  MetalLedgerQueryParams,
 } from '../repositories/finance.repository.js';
 import { customerRepository } from '../repositories/customer.repository.js';
 import { supplierRepository } from '../repositories/supplier.repository.js';
@@ -304,6 +307,20 @@ export class FinanceService {
 
   getFinanceSummary() {
     return financeRepository.getFinanceMetrics();
+  }
+
+  getPartyMetalBalances(partyType: string, partyId: string): PartyMetalBalanceSummary[] {
+    this.validateParty(partyType, partyId);
+    return financeRepository.getPartyMetalBalances(partyType, partyId);
+  }
+
+  getPartyMetalLedger(partyType: string, partyId: string, params: MetalLedgerQueryParams = {}): PaginatedResult<PartyMetalLedgerRecord> {
+    this.validateParty(partyType, partyId);
+    return financeRepository.findPartyMetalLedgerEntries({
+      ...params,
+      party_type: partyType,
+      party_id: partyId,
+    });
   }
 }
 

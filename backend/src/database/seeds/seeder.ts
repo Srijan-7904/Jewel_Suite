@@ -179,9 +179,10 @@ export async function runSeeds(): Promise<void> {
     console.log('[Seed] Populated standard jewellery products');
   }
 
-  // 7. Seed Initial Demo Stock Items if none exist
+  // 7. Seed Initial Demo Stock Items if none exist and not explicitly cleared by user
+  const demoStockCleared = settingRepository.get('seed.demo_stock_cleared');
   const stockCount = (db.prepare('SELECT COUNT(*) as count FROM stock_items').get() as { count: number }).count;
-  if (stockCount === 0) {
+  if (stockCount === 0 && demoStockCleared !== 'true') {
     const { v4: uuidv4 } = await import('uuid');
     const gold = db.prepare("SELECT id FROM metals WHERE code = 'GOLD'").get() as { id: string } | undefined;
     const silver = db.prepare("SELECT id FROM metals WHERE code = 'SILVER'").get() as { id: string } | undefined;

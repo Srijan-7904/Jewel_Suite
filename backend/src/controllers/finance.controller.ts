@@ -249,6 +249,58 @@ export class FinanceController {
       next(err);
     }
   }
+
+  /**
+   * GET /api/finance/ledger/party/:partyType/:id/metal-balances
+   * or /api/finance/ledger/customer/:id/metal-balances
+   */
+  async getPartyMetalBalances(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const partyType = (req.params.partyType || 'CUSTOMER').toUpperCase();
+      const partyId = req.params.id as string;
+      const balances = financeService.getPartyMetalBalances(partyType, partyId);
+      sendSuccess(res, balances);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /**
+   * GET /api/finance/ledger/party/:partyType/:id/metal
+   * or /api/finance/ledger/customer/:id/metal
+   */
+  async getPartyMetalLedger(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const partyType = (req.params.partyType || 'CUSTOMER').toUpperCase();
+      const partyId = req.params.id as string;
+      const page = req.query.page ? parseInt(req.query.page as string, 10) : 1;
+      const pageSize = req.query.pageSize ? parseInt(req.query.pageSize as string, 10) : 50;
+      const metal_id = req.query.metal_id as string | undefined;
+      const entry_type = req.query.entry_type as string | undefined;
+      const debit_credit = req.query.debit_credit as string | undefined;
+      const from_date = req.query.from_date as string | undefined;
+      const to_date = req.query.to_date as string | undefined;
+      const search = req.query.search as string | undefined;
+
+      const result = financeService.getPartyMetalLedger(partyType, partyId, {
+        page,
+        pageSize,
+        metal_id,
+        entry_type,
+        debit_credit,
+        from_date,
+        to_date,
+        search,
+      });
+
+      res.status(200).json({
+        success: true,
+        ...result,
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
 }
 
 export const financeController = new FinanceController();

@@ -1,6 +1,7 @@
 import { getDb } from '../database/connection/db.js';
 import { PaginatedResult } from './customer.repository.js';
 import { v4 as uuidv4 } from 'uuid';
+import { Decimal } from 'decimal.js';
 import { documentSequenceRepository } from './documentSequence.repository.js';
 
 export interface PurchaseBillRecord {
@@ -76,6 +77,9 @@ export interface PurchaseBillItemRecord {
   huid: string | null;
   notes: string | null;
   created_at: string;
+  adjusted_fine_weight?: number;
+  billable_weight?: number;
+  effective_fine_weight?: number;
 }
 
 export interface PurchaseBillPaymentRecord {
@@ -459,7 +463,23 @@ export class PurchaseRepository {
       WHERE pbi.purchase_bill_id = ?
       ORDER BY pbi.created_at ASC
     `;
-    return db.prepare(sql).all(billId) as PurchaseBillItemRecord[];
+    const rows = db.prepare(sql).all(billId) as PurchaseBillItemRecord[];
+    return rows.map((r) => {
+      const fineWeightDec = new Decimal(r.fine_weight || 0);
+      const wastageWeightDec = new Decimal(r.wastage_weight || 0);
+      return {
+        ...r,
+        adjusted_fine_weight: !wastageWeightDec.isZero()
+          ? Decimal.max(0, fineWeightDec.plus(wastageWeightDec)).toDecimalPlaces(4, Decimal.ROUND_HALF_UP).toNumber()
+          : r.fine_weight,
+        billable_weight: !wastageWeightDec.isZero()
+          ? Decimal.max(0, fineWeightDec.plus(wastageWeightDec)).toDecimalPlaces(4, Decimal.ROUND_HALF_UP).toNumber()
+          : r.fine_weight,
+        effective_fine_weight: !wastageWeightDec.isZero()
+          ? Decimal.max(0, fineWeightDec.plus(wastageWeightDec)).toDecimalPlaces(4, Decimal.ROUND_HALF_UP).toNumber()
+          : r.fine_weight,
+      };
+    });
   }
 
   // --- Purchase Payments ---

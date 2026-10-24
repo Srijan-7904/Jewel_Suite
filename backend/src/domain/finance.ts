@@ -80,3 +80,50 @@ export function calculateNextBalance(
     }
   }
 }
+
+export enum MetalEntryType {
+  OPENING_BALANCE = 'OPENING_BALANCE',
+  METAL_PAYMENT = 'METAL_PAYMENT',
+  EXCHANGE_INWARD = 'EXCHANGE_INWARD',
+  METAL_RETURN = 'METAL_RETURN',
+  ADJUSTMENT = 'ADJUSTMENT',
+  SETTLEMENT = 'SETTLEMENT',
+  OTHER = 'OTHER',
+}
+
+/**
+ * Calculates new party metal balance (in physical grams) based on party type and transaction entry.
+ *
+ * Semantic Rules:
+ * - CUSTOMER:
+ *   - DEBIT: Increases metal receivable (Customer owes metal to shop)
+ *   - CREDIT: Decreases metal receivable (Shop owes metal to customer / Customer delivered metal)
+ *   - Net Balance = Total Debits - Total Credits (Positive = Customer owes metal to shop)
+ * - SUPPLIER / KARIGAR:
+ *   - CREDIT: Increases metal payable (Shop owes metal to party)
+ *   - DEBIT: Decreases metal payable (Party owes metal to shop)
+ */
+export function calculateNextMetalBalance(
+  partyType: PartyType | string,
+  currentBalance: number,
+  debitCredit: DebitCredit | string,
+  weight: number
+): number {
+  const normParty = partyType.toUpperCase();
+  const normDC = debitCredit.toUpperCase();
+
+  if (normParty === PartyType.CUSTOMER) {
+    if (normDC === DebitCredit.DEBIT) {
+      return Number((currentBalance + weight).toFixed(4));
+    } else {
+      return Number((currentBalance - weight).toFixed(4));
+    }
+  } else {
+    if (normDC === DebitCredit.CREDIT) {
+      return Number((currentBalance + weight).toFixed(4));
+    } else {
+      return Number((currentBalance - weight).toFixed(4));
+    }
+  }
+}
+
