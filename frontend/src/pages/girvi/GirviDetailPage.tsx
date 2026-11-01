@@ -45,7 +45,7 @@ export const GirviDetailPage: React.FC = () => {
 
   const handleDisburse = async () => {
     if (!loan) return;
-    if (!window.confirm(`Disburse principal of ₹${loan.principal_amount.toLocaleString('en-IN')} to ${loan.customer_name}? This will record a Finance Payment voucher and debit customer receivable.`)) {
+    if (!window.confirm(`Disburse principal of ₹${loan.principal_amount.toLocaleString('en-IN')} to ${loan.customer_name}? This will record a Finance Payment voucher and record as customer Baaki / Debit receivable (बाकी).`)) {
       return;
     }
     try {
@@ -142,7 +142,7 @@ export const GirviDetailPage: React.FC = () => {
               Girvi Loan {loan.loan_number}
             </h1>
             <div className="girvi-subtitle">
-              Customer: <strong>{loan.customer_name}</strong> ({loan.customer_phone || 'No phone'}) | Loan Date: {loan.loan_date} | Due: {loan.due_date}
+              Customer: <strong>{loan.customer_name}</strong> ({loan.customer_phone || 'No phone'}) | Loan Date: {loan.loan_date} | Tenure: <strong>{loan.tenure_period || `${loan.tenure_days ? loan.tenure_days + 'D' : 'Custom'}`}</strong> | Due: {loan.due_date}
             </div>
           </div>
         </div>
@@ -217,10 +217,20 @@ export const GirviDetailPage: React.FC = () => {
       {/* Financial Overview Cards */}
       <div className="girvi-summary-cards">
         <div className="girvi-card">
-          <div className="girvi-card-title">Principal Amount</div>
+          <div className="girvi-card-title">Principal & Disbursed</div>
           <div className="girvi-card-value">₹{loan.principal_amount.toLocaleString('en-IN')}</div>
-          <div style={{ fontSize: '0.75rem', color: '#8e95a5' }}>
-            Interest: {loan.interest_rate}% ({loan.interest_type})
+          {loan.disbursed_amount && (
+            <div style={{ fontSize: '0.75rem', color: '#2ecc71', fontWeight: 600 }}>
+              Paid (Disbursed): ₹{loan.disbursed_amount.toLocaleString('en-IN')}
+            </div>
+          )}
+          {loan.upfront_deduction && loan.upfront_deduction > 0 && (
+            <div style={{ fontSize: '0.75rem', color: '#e74c3c' }}>
+              Upfront Deduction: -₹{loan.upfront_deduction.toLocaleString('en-IN')}
+            </div>
+          )}
+          <div style={{ fontSize: '0.75rem', color: '#8e95a5', marginTop: '2px' }}>
+            Interest: {loan.interest_rate}% ({loan.interest_type === 'DAILY_PERCENT' ? 'Daily %' : loan.interest_type === 'MONTHLY_PERCENT' ? 'Monthly %' : loan.interest_type === 'ANNUAL_PERCENT' ? 'Annual %' : 'Flat Amount'})
           </div>
         </div>
 

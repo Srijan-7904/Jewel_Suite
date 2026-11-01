@@ -44,6 +44,7 @@ export interface StockItemRecord {
   purity_code?: string;
   purity_name?: string;
   current_rate?: number | null;
+  live_benchmark_rate?: number | null;
   current_valuation?: number | null;
 }
 
@@ -109,16 +110,34 @@ export class StockRepository {
         ORDER BY mr.effective_from DESC, mr.created_at DESC 
         LIMIT 1
       ) AS current_rate,
+      (
+        SELECT mr.rate 
+        FROM metal_rates mr 
+        JOIN metal_purities mp2 ON mr.purity_id = mp2.id
+        WHERE mr.metal_id = s.metal_id AND (mp2.code IN ('24K', '999', 'FINE') OR mp2.tunch_percent >= 99)
+        ORDER BY mr.effective_from DESC, mr.created_at DESC 
+        LIMIT 1
+      ) AS live_benchmark_rate,
       ROUND(
         s.fine_weight * IFNULL(
           (
             SELECT mr.rate 
             FROM metal_rates mr 
-            WHERE mr.metal_id = s.metal_id AND mr.purity_id = s.purity_id 
+            JOIN metal_purities mp2 ON mr.purity_id = mp2.id
+            WHERE mr.metal_id = s.metal_id AND (mp2.code IN ('24K', '999', 'FINE') OR mp2.tunch_percent >= 99)
             ORDER BY mr.effective_from DESC, mr.created_at DESC 
             LIMIT 1
-          ), 
-          s.rate_per_gram
+          ),
+          IFNULL(
+            (
+              SELECT mr.rate 
+              FROM metal_rates mr 
+              WHERE mr.metal_id = s.metal_id AND mr.purity_id = s.purity_id 
+              ORDER BY mr.effective_from DESC, mr.created_at DESC 
+              LIMIT 1
+            ),
+            s.rate_per_gram
+          )
         ), 
         2
       ) AS current_valuation

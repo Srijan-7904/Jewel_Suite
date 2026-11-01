@@ -85,6 +85,10 @@ export class GirviRepository {
     max_allowed_loan?: number;
     is_overridden?: number;
     override_reason?: string | null;
+    disbursed_amount?: number | null;
+    upfront_deduction?: number;
+    tenure_days?: number | null;
+    tenure_period?: string | null;
     notes?: string | null;
     created_by?: string | null;
   }): GirviLoan {
@@ -104,6 +108,8 @@ export class GirviRepository {
     const ltv_percent = data.ltv_percent ?? 75.0;
     const max_allowed_loan = data.max_allowed_loan || 0;
     const is_overridden = data.is_overridden || 0;
+    const disbursed_amount = data.disbursed_amount ?? data.principal_amount;
+    const upfront_deduction = data.upfront_deduction ?? Math.max(0, data.principal_amount - disbursed_amount);
 
     db.prepare(`
       INSERT INTO girvi_loans (
@@ -112,12 +118,14 @@ export class GirviRepository {
         processing_fee, other_charges, total_interest, total_charges,
         total_repaid, outstanding_amount, status,
         ltv_percent, max_allowed_loan, is_overridden, override_reason,
+        disbursed_amount, upfront_deduction, tenure_days, tenure_period,
         notes, created_by, created_at, updated_at
       ) VALUES (
         ?, ?, ?, ?, ?,
         ?, ?, ?,
         ?, ?, ?, ?,
         ?, ?, ?,
+        ?, ?, ?, ?,
         ?, ?, ?, ?,
         ?, ?, ?, ?
       )
@@ -141,6 +149,10 @@ export class GirviRepository {
       max_allowed_loan,
       is_overridden,
       data.override_reason || null,
+      disbursed_amount,
+      upfront_deduction,
+      data.tenure_days || null,
+      data.tenure_period || null,
       data.notes || null,
       data.created_by || null,
       now,
@@ -429,6 +441,10 @@ export class GirviRepository {
       'override_reason',
       'disbursement_date',
       'disbursed_by',
+      'disbursed_amount',
+      'upfront_deduction',
+      'tenure_days',
+      'tenure_period',
       'closure_date',
       'closed_by',
       'closure_notes',

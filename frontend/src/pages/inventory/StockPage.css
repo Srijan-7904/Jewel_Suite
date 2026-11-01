@@ -51,13 +51,36 @@
 
 .valuation-grid {
   display: grid;
-  grid-template-columns: 1.2fr 1fr 1fr 1fr;
-  gap: 1.25rem;
+  grid-template-columns: 1.15fr 1fr 1fr 1fr;
+  gap: 1rem;
 }
 
 .valuation-metric {
   display: flex;
   flex-direction: column;
+  justify-content: center;
+  padding: 0.65rem 0.85rem;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.valuation-metric.valuation-card-total {
+  background: linear-gradient(135deg, rgba(236, 253, 245, 0.8) 0%, rgba(209, 250, 229, 0.5) 100%);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  box-shadow: 0 1px 3px rgba(16, 185, 129, 0.08);
+}
+
+.valuation-metric.valuation-card-gold {
+  background: linear-gradient(135deg, rgba(254, 243, 199, 0.75) 0%, rgba(253, 230, 138, 0.45) 100%);
+  border: 1px solid rgba(217, 119, 6, 0.35);
+  box-shadow: 0 1px 3px rgba(217, 119, 6, 0.08);
+}
+
+.valuation-metric.valuation-card-silver {
+  background: linear-gradient(135deg, rgba(240, 249, 255, 0.85) 0%, rgba(224, 242, 254, 0.6) 100%);
+  border: 1px solid rgba(3, 105, 161, 0.3);
+  box-shadow: 0 1px 3px rgba(3, 105, 161, 0.08);
 }
 
 .valuation-label {

@@ -109,13 +109,48 @@ export interface Supplier {
   id: string;
   supplier_code: string;
   name: string;
+  contact_person?: string | null;
   phone: string | null;
+  alternate_phone?: string | null;
   email: string | null;
   address: string | null;
   city: string | null;
   state: string | null;
   pincode: string | null;
   gstin: string | null;
+
+  // Granular Multi-Type Opening Balances
+  opening_balance?: number;
+  opening_balance_type?: 'DEBIT' | 'CREDIT';
+  opening_balance_date?: string | null;
+  opening_balance_ref?: string | null;
+  opening_balance_notes?: string | null;
+
+  opening_cash_balance?: number;
+  opening_cash_type?: 'DEBIT' | 'CREDIT';
+
+  opening_bank_balance?: number;
+  opening_bank_type?: 'DEBIT' | 'CREDIT';
+
+  opening_gold_weight?: number;
+  opening_gold_type?: 'DEBIT' | 'CREDIT';
+  opening_gold_purity_id?: string | null;
+  opening_gold_purity_name?: string | null;
+  opening_gold_rate?: number;
+  opening_gold_value?: number;
+
+  opening_silver_weight?: number;
+  opening_silver_type?: 'DEBIT' | 'CREDIT';
+  opening_silver_purity_id?: string | null;
+  opening_silver_purity_name?: string | null;
+  opening_silver_rate?: number;
+  opening_silver_value?: number;
+
+  // Live Balances (Closed / Current)
+  current_balance?: number;
+  gold_balance_grams?: number;
+  silver_balance_grams?: number;
+
   notes: string | null;
   is_active: number;
   created_at: string;
@@ -241,6 +276,7 @@ export interface StockItem {
   purity_code?: string;
   purity_name?: string;
   current_rate?: number | null;
+  live_benchmark_rate?: number | null;
   current_valuation?: number | null;
 }
 
@@ -293,7 +329,8 @@ export interface StockValuationResponse {
 
 export interface CreateStockInput {
   tag_no: string;
-  product_id: string;
+  product_id?: string;
+  item_name?: string;
   metal_id: string;
   purity_id: string;
   gross_weight: number;
@@ -403,6 +440,7 @@ export interface CreatePurchaseInput {
 
 export interface AddPurchaseItemInput {
   product_id: string;
+  item_name?: string;
   metal_id: string;
   purity_id: string;
   tag_no: string;
@@ -410,6 +448,7 @@ export interface AddPurchaseItemInput {
   less_weight?: number;
   tunch_percent: number;
   wastage_percent?: number;
+  badla_percent?: number;
   making_charge?: number;
   rate_per_gram: number;
   huid?: string;
@@ -662,7 +701,7 @@ export interface FinanceSummary {
 
 // --- Part 9: Girvi Loans & Pledged Jewellery ---
 export type GirviLoanStatus = 'DRAFT' | 'ACTIVE' | 'PARTIALLY_PAID' | 'OVERDUE' | 'CLOSED' | 'DEFAULTED' | 'CANCELLED';
-export type GirviInterestType = 'MONTHLY_PERCENT' | 'ANNUAL_PERCENT' | 'FLAT_AMOUNT';
+export type GirviInterestType = 'DAILY_PERCENT' | 'MONTHLY_PERCENT' | 'ANNUAL_PERCENT' | 'FLAT_AMOUNT';
 export type GirviPledgeStatus = 'PLEDGED' | 'RELEASED' | 'FORFEITED';
 
 export interface GirviLoanItem {
@@ -730,6 +769,10 @@ export interface GirviLoan {
   loan_date: string;
   due_date: string;
   principal_amount: number;
+  disbursed_amount?: number | null;
+  upfront_deduction?: number;
+  tenure_days?: number | null;
+  tenure_period?: string | null;
   interest_rate: number;
   interest_type: GirviInterestType;
   processing_fee: number;

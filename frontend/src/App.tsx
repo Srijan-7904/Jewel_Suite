@@ -30,6 +30,8 @@ import { GirviDetailPage } from './pages/girvi/GirviDetailPage';
 import { SavingSchemesPage } from './pages/saving-schemes/SavingSchemesPage';
 import { SavingSchemeDetailPage } from './pages/saving-schemes/SavingSchemeDetailPage';
 import { ReportsPage } from './pages/reports/ReportsPage';
+import { ProfitReportPage } from './pages/reports/ProfitReportPage';
+import { MetalStockInwardPage } from './pages/inventory/MetalStockInwardPage';
 import { SettingsPage } from './pages/settings/SettingsPage';
 import { Gem } from 'lucide-react';
 
@@ -72,7 +74,7 @@ const PublicOnlyRoute: React.FC<{ children: React.ReactElement }> = ({ children 
 export const App: React.FC = () => {
   return (
     <AuthProvider>
-      <HashRouter>
+      <HashRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <Routes>
           {/* Public Auth Route */}
           <Route
@@ -127,9 +129,12 @@ export const App: React.FC = () => {
 
             {/* Inventory Routes (Part 3: Inventory & Valuation) */}
             <Route path="inventory/stock" element={<StockPage />} />
+            <Route path="inventory/metal-inward" element={<MetalStockInwardPage />} />
 
             {/* Reports & Compliance (Part 10: Reports + GST Reports) */}
             <Route path="reports" element={<ReportsPage />} />
+            <Route path="reports/profit" element={<ProfitReportPage />} />
+            <Route path="reports/profit-metal-stock" element={<MetalStockInwardPage />} />
 
             {/* Masters Routes */}
             <Route path="masters/customers" element={<CustomersPage />} />

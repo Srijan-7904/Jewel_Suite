@@ -141,6 +141,78 @@
 .girvi-status-draft { background: var(--bg-surface-hover); color: var(--text-muted); border: 1px solid var(--border-default); }
 .girvi-status-active { background: var(--success-bg); color: var(--success); border: 1px solid rgba(13, 130, 82, 0.3); }
 .girvi-status-partially-paid { background: var(--warning-bg); color: var(--warning); border: 1px solid rgba(194, 120, 3, 0.3); }
-.girvi-status-overdue { background: var(--danger-bg); color: var(--danger); border: 1px solid rgba(220, 38, 38, 0.3); }
 .girvi-status-closed { background: var(--info-bg); color: var(--info); border: 1px solid rgba(29, 111, 184, 0.3); }
 .girvi-status-released { background: rgba(124, 58, 237, 0.12); color: #7C3AED; border: 1px solid rgba(124, 58, 237, 0.3); }
+
+/* Tenure Quick Select Pills */
+.girvi-tenure-group {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  margin-top: 0.35rem;
+}
+
+.girvi-tenure-btn {
+  padding: 0.35rem 0.75rem;
+  border-radius: 6px;
+  border: 1px solid var(--border-default);
+  background: var(--bg-surface-elevated);
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.girvi-tenure-btn:hover {
+  border-color: var(--gold-primary);
+  color: var(--gold-primary);
+}
+
+.girvi-tenure-btn.active {
+  background: var(--gold-bg-subtle);
+  border-color: var(--gold-primary);
+  color: var(--gold-primary);
+  box-shadow: 0 0 8px rgba(212, 175, 55, 0.2);
+}
+
+/* Girvi Calculation Summary / Maturity Breakdown Card */
+.girvi-math-card {
+  background: linear-gradient(135deg, rgba(212, 175, 55, 0.08), rgba(212, 175, 55, 0.02));
+  border: 1px solid var(--border-gold);
+  border-radius: 8px;
+  padding: 0.9rem 1.1rem;
+  margin-bottom: 1.25rem;
+}
+
+.girvi-math-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.girvi-math-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.girvi-math-label {
+  font-size: 0.725rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.girvi-math-val {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.girvi-math-val.gold { color: var(--gold-primary); }
+.girvi-math-val.green { color: var(--success); }
+.girvi-math-val.red { color: var(--danger); }
+.girvi-math-val.blue { color: var(--info); }
+

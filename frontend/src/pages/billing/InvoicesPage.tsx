@@ -315,7 +315,7 @@ export const InvoicesPage: React.FC = () => {
                   <tr key={inv.id} className="invoice-row">
                     <td className="font-mono font-bold text-gold">{inv.invoice_number}</td>
                     <td className="font-mono text-xs">{inv.invoice_date}</td>
-                    <td className="font-semibold text-main">{inv.customer_name || 'Walk-in Customer'}</td>
+                    <td className="font-semibold text-main">{inv.customer_name || 'CASH CUSTOMER'}</td>
                     <td className="font-mono text-xs text-muted">{inv.customer_phone || '-'}</td>
                     <td className="font-mono text-right">{formatCurrency(inv.taxable_amount)}</td>
                     <td className="font-mono text-right">{formatCurrency(inv.gst_amount)}</td>
@@ -473,12 +473,12 @@ export const InvoicesPage: React.FC = () => {
                 <div className="invoice-meta-card">
                   <div className="invoice-meta-header">BILLED TO (CUSTOMER DETAILS)</div>
                   <div className="meta-customer-name">
-                    {selectedInvoice.customer_name || 'Walk-in Retail Customer'}
+                    {selectedInvoice.customer_name || 'CASH CUSTOMER'}
                   </div>
                   <div className="meta-info-row">
                     <span className="meta-info-label">Contact / Phone:</span>
                     <span className="meta-info-val font-mono">
-                      {selectedInvoice.customer_phone || 'Counter Walk-in'}
+                      {selectedInvoice.customer_phone || 'Counter Cash Sale'}
                     </span>
                   </div>
                   <div className="meta-info-row">
@@ -718,7 +718,7 @@ export const InvoicesPage: React.FC = () => {
                           <th className="text-right">Fine Wt</th>
                           <th className="text-right">Deduct %</th>
                           <th className="text-right">Ex. Rate</th>
-                          <th className="text-right">Credit Value (₹)</th>
+                          <th className="text-right">Credit / Jama Value (₹ - जमा)</th>
                         </tr>
                       </thead>
                       <tbody>

@@ -474,7 +474,7 @@ export const ExchangePage: React.FC = () => {
                     </td>
                     <td className="font-mono text-xs">{ex.exchange_date}</td>
                     <td>
-                      <div className="font-semibold text-main">{ex.customer_name || 'Walk-in Customer'}</div>
+                      <div className="font-semibold text-main">{ex.customer_name || 'CASH CUSTOMER'}</div>
                     </td>
                     <td className="font-mono text-xs text-muted">{ex.customer_phone || '-'}</td>
                     <td className="font-mono text-right font-medium">
@@ -603,7 +603,7 @@ export const ExchangePage: React.FC = () => {
               <div className="voucher-meta-grid py-3 border-b text-xs">
                 <div>
                   <span className="text-muted block">Customer (Seller):</span>
-                  <strong className="text-sm font-semibold">{selectedExchange.customer_name || 'Walk-in Customer'}</strong>
+                  <strong className="text-sm font-semibold">{selectedExchange.customer_name || 'CASH CUSTOMER'}</strong>
                   {selectedExchange.customer_phone && (
                     <span className="block font-mono text-muted">Tel: {selectedExchange.customer_phone}</span>
                   )}
@@ -695,7 +695,7 @@ export const ExchangePage: React.FC = () => {
                     </div>
                   )}
                   <div className="flex justify-between py-1 border-t text-sm font-bold text-emerald">
-                    <span>Final Exchange Credit:</span>
+                    <span>Final Exchange Credit / Jama (जमा):</span>
                     <span className="font-mono">{formatCurrency(selectedExchange.final_exchange_value)}</span>
                   </div>
                 </div>

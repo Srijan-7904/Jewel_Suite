@@ -80,8 +80,16 @@ export async function request<T>(endpoint: string, options: RequestInit = {}): P
   }
 
   if (!response.ok || !data.success) {
-    const errorObj = data.error || {};
-    let msg = errorObj.message || 'An unexpected error occurred';
+    const errorObj = typeof data.error === 'object' && data.error !== null ? data.error : {};
+    let msg =
+      errorObj.message ||
+      (typeof data.error === 'string' ? data.error : undefined) ||
+      data.message ||
+      data.msg ||
+      data.error_description ||
+      (response.statusText ? `Server Error ${response.status}: ${response.statusText}` : undefined) ||
+      'An unexpected error occurred';
+
     if (errorObj.details && Array.isArray(errorObj.details) && errorObj.details.length > 0) {
       const first = errorObj.details[0];
       if (first.field && first.message) {
@@ -89,12 +97,20 @@ export async function request<T>(endpoint: string, options: RequestInit = {}): P
       } else if (first.message) {
         msg = first.message;
       }
+    } else if (data.details && Array.isArray(data.details) && data.details.length > 0) {
+      const first = data.details[0];
+      if (first.field && first.message) {
+        msg = `${first.field}: ${first.message}`;
+      } else if (first.message) {
+        msg = first.message;
+      }
     }
+
     throw new ApiClientError(
       msg,
-      errorObj.code || 'UNKNOWN_ERROR',
+      errorObj.code || data.code || 'UNKNOWN_ERROR',
       response.status,
-      errorObj.details
+      errorObj.details || data.details
     );
   }
 

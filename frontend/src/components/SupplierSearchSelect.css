@@ -1,0 +1,38 @@
+/* SupplierSearchSelect.css */
+.supplier-search-select-container .customer-avatar-badge.is-supplier {
+  background: rgba(217, 119, 6, 0.12);
+  border: 1px solid rgba(217, 119, 6, 0.35);
+  color: #f59e0b;
+}
+
+.supplier-search-select-container .customer-avatar-badge.is-cash {
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  color: #10b981;
+}
+
+.supplier-search-select-container .shortcut-btn.quick-walkin {
+  background: rgba(16, 185, 129, 0.08);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: #10b981;
+}
+
+.supplier-search-select-container .shortcut-btn.quick-walkin:hover {
+  background: rgba(16, 185, 129, 0.16);
+  border-color: #10b981;
+}
+
+.supplier-select-balances {
+  margin-top: 2px;
+}
+
+.supplier-select-balances span,
+.supplier-item-balances span {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+

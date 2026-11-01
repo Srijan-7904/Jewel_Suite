@@ -377,9 +377,9 @@ export const CustomersPage: React.FC = () => {
                     </div>
                     <div style={{ fontSize: '0.7rem', color: '#9da4b3' }}>
                       {(selectedCustomer.current_balance ?? selectedCustomer.opening_balance ?? 0) > 0
-                        ? 'Customer owes shop (Receivable)'
+                        ? 'Customer owes shop / Baaki (Receivable - बाकी)'
                         : (selectedCustomer.current_balance ?? selectedCustomer.opening_balance ?? 0) < 0
-                        ? 'Shop owes customer (Store Credit)'
+                        ? 'Shop owes customer / Jama (Store Credit - जमा)'
                         : 'Account fully settled'}
                     </div>
                   </div>
@@ -469,16 +469,16 @@ export const CustomersPage: React.FC = () => {
                       </div>
                       <div>
                         <span className="text-muted">Opening Cash: </span>
-                        <strong>₹{(selectedCustomer.opening_cash_balance || 0).toFixed(2)} ({selectedCustomer.opening_cash_type || 'DEBIT'})</strong>
+                        <strong>₹{(selectedCustomer.opening_cash_balance || 0).toFixed(2)} ({selectedCustomer.opening_cash_type === 'DEBIT' ? 'Baaki (Dr)' : 'Jama (Cr)'})</strong>
                       </div>
                       <div>
                         <span className="text-muted">Opening Bank: </span>
-                        <strong>₹{(selectedCustomer.opening_bank_balance || 0).toFixed(2)} ({selectedCustomer.opening_bank_type || 'DEBIT'})</strong>
+                        <strong>₹{(selectedCustomer.opening_bank_balance || 0).toFixed(2)} ({selectedCustomer.opening_bank_type === 'DEBIT' ? 'Baaki (Dr)' : 'Jama (Cr)'})</strong>
                       </div>
                       <div>
                         <span className="text-muted">Opening Gold: </span>
                         <strong className="text-gold">
-                          {(selectedCustomer.opening_gold_weight || 0)}g {selectedCustomer.opening_gold_purity_name ? `(${selectedCustomer.opening_gold_purity_name})` : ''} - {selectedCustomer.opening_gold_type || 'DEBIT'}
+                          {(selectedCustomer.opening_gold_weight || 0)}g {selectedCustomer.opening_gold_purity_name ? `(${selectedCustomer.opening_gold_purity_name})` : ''} - {selectedCustomer.opening_gold_type === 'DEBIT' ? 'Baaki (Dr)' : 'Jama (Cr)'}
                         </strong>
                         {Boolean(selectedCustomer.opening_gold_rate && selectedCustomer.opening_gold_rate > 0) && (
                           <span style={{ fontSize: '0.7rem', color: '#9da4b3', marginLeft: '0.3rem' }}>
@@ -489,7 +489,7 @@ export const CustomersPage: React.FC = () => {
                       <div>
                         <span className="text-muted">Opening Silver: </span>
                         <strong style={{ color: '#cbd5e1' }}>
-                          {(selectedCustomer.opening_silver_weight || 0)}g {selectedCustomer.opening_silver_purity_name ? `(${selectedCustomer.opening_silver_purity_name})` : ''} - {selectedCustomer.opening_silver_type || 'DEBIT'}
+                          {(selectedCustomer.opening_silver_weight || 0)}g {selectedCustomer.opening_silver_purity_name ? `(${selectedCustomer.opening_silver_purity_name})` : ''} - {selectedCustomer.opening_silver_type === 'DEBIT' ? 'Baaki (Dr)' : 'Jama (Cr)'}
                         </strong>
                         {Boolean(selectedCustomer.opening_silver_rate && selectedCustomer.opening_silver_rate > 0) && (
                           <span style={{ fontSize: '0.7rem', color: '#9da4b3', marginLeft: '0.3rem' }}>
@@ -648,8 +648,8 @@ export const CustomersPage: React.FC = () => {
                                 }));
                               }}
                             >
-                              <option value="DEBIT">Customer Owes Us (Dr)</option>
-                              <option value="CREDIT">We Owe Customer (Cr)</option>
+                              <option value="DEBIT">Customer Owes Us / Baaki (Dr - बाकी)</option>
+                              <option value="CREDIT">We Owe Customer / Jama (Cr - जमा)</option>
                             </select>
                           </div>
                         </div>
@@ -709,8 +709,8 @@ export const CustomersPage: React.FC = () => {
                                   value={selectedCustomer.opening_cash_type || 'DEBIT'}
                                   onChange={(e) => setSelectedCustomer({ ...selectedCustomer, opening_cash_type: e.target.value as any })}
                                 >
-                                  <option value="DEBIT">Customer Owes Us (Dr)</option>
-                                  <option value="CREDIT">We Owe (Cr)</option>
+                                  <option value="DEBIT">Baaki / Dr (Customer Owes - बाकी)</option>
+                                  <option value="CREDIT">Jama / Cr (Advance Deposit - जमा)</option>
                                 </select>
                               </div>
                             </div>
@@ -739,8 +739,8 @@ export const CustomersPage: React.FC = () => {
                                   value={selectedCustomer.opening_bank_type || 'DEBIT'}
                                   onChange={(e) => setSelectedCustomer({ ...selectedCustomer, opening_bank_type: e.target.value as any })}
                                 >
-                                  <option value="DEBIT">Customer Owes Us (Dr)</option>
-                                  <option value="CREDIT">We Owe (Cr)</option>
+                                  <option value="DEBIT">Baaki / Dr (Customer Owes - बाकी)</option>
+                                  <option value="CREDIT">Jama / Cr (Advance Deposit - जमा)</option>
                                 </select>
                               </div>
                             </div>
@@ -778,8 +778,8 @@ export const CustomersPage: React.FC = () => {
                                   value={selectedCustomer.opening_gold_type || 'DEBIT'}
                                   onChange={(e) => setSelectedCustomer({ ...selectedCustomer, opening_gold_type: e.target.value as any })}
                                 >
-                                  <option value="DEBIT">Customer Owes (Dr)</option>
-                                  <option value="CREDIT">We Owe (Cr)</option>
+                                  <option value="DEBIT">Baaki / Dr (Customer Owes - बाकी)</option>
+                                  <option value="CREDIT">Jama / Cr (Deposited - जमा)</option>
                                 </select>
                               </div>
                             </div>
@@ -860,8 +860,8 @@ export const CustomersPage: React.FC = () => {
                                   value={selectedCustomer.opening_silver_type || 'DEBIT'}
                                   onChange={(e) => setSelectedCustomer({ ...selectedCustomer, opening_silver_type: e.target.value as any })}
                                 >
-                                  <option value="DEBIT">Customer Owes (Dr)</option>
-                                  <option value="CREDIT">We Owe (Cr)</option>
+                                  <option value="DEBIT">Baaki / Dr (Customer Owes - बाकी)</option>
+                                  <option value="CREDIT">Jama / Cr (Deposited - जमा)</option>
                                 </select>
                               </div>
                             </div>

@@ -25,10 +25,13 @@ import {
 import { BadRequestError, NotFoundError, ConflictError } from '../utils/errors.js';
 import { PaginatedResult } from '../repositories/customer.repository.js';
 
+import { resolveOrCreateProduct } from './purchase.service.js';
+
 export const createStockSchema = z
   .object({
     tag_no: z.string().min(1, 'Tag number is required').trim().toUpperCase(),
-    product_id: z.string().min(1, 'Product is required'),
+    product_id: z.string().trim().optional().default(''),
+    item_name: z.string().trim().optional().default(''),
     metal_id: z.string().min(1, 'Metal is required'),
     purity_id: z.string().min(1, 'Purity is required'),
 
@@ -138,10 +141,7 @@ export class InventoryService {
     const validated = createStockSchema.parse(data);
 
     // 1. Validate master relations
-    const product = productRepository.findById(validated.product_id);
-    if (!product) {
-      throw new NotFoundError(`Product with ID '${validated.product_id}' does not exist`);
-    }
+    const resolvedProductId = resolveOrCreateProduct(validated.product_id, validated.item_name || validated.notes);
 
     const metal = metalRepository.getMetalById(validated.metal_id);
     if (!metal) {
@@ -171,6 +171,7 @@ export class InventoryService {
     const createdItem = withTransaction((db) => {
       const item = stockRepository.create({
         ...validated,
+        product_id: resolvedProductId,
         net_weight: netWeight,
         fine_weight: fineWeight,
         metal_value: metalValue,
@@ -204,7 +205,7 @@ export class InventoryService {
       entity_id: createdItem.id,
       metadata: {
         tag_no: createdItem.tag_no,
-        product: product.name,
+        product: validated.item_name || createdItem.tag_no,
         gross_weight: createdItem.gross_weight,
         net_weight: createdItem.net_weight,
         fine_weight: createdItem.fine_weight,
@@ -360,7 +361,15 @@ export class InventoryService {
           WHERE mr.metal_id = s.metal_id AND mr.purity_id = s.purity_id 
           ORDER BY mr.effective_from DESC, mr.created_at DESC 
           LIMIT 1
-        ) AS current_rate
+        ) AS current_rate,
+        (
+          SELECT mr.rate 
+          FROM metal_rates mr 
+          JOIN metal_purities mp2 ON mr.purity_id = mp2.id
+          WHERE mr.metal_id = s.metal_id AND (mp2.code IN ('24K', '999', 'FINE') OR mp2.tunch_percent >= 99)
+          ORDER BY mr.effective_from DESC, mr.created_at DESC 
+          LIMIT 1
+        ) AS base_fine_rate
       FROM stock_items s
       JOIN metals m ON s.metal_id = m.id
       JOIN metal_purities mp ON s.purity_id = mp.id
@@ -387,7 +396,15 @@ export class InventoryService {
       const fine = roundFineWeight(Number(r.total_fine || 0));
       const acqVal = roundCurrency(Number(r.total_acq_value || 0));
       const currentRate = Number(r.current_rate || 0);
-      const currentVal = roundCurrency(toDecimal(fine).mul(toDecimal(currentRate)));
+      const baseFineRate = Number(r.base_fine_rate || 0);
+      let currentVal = 0;
+      if (currentRate > 0) {
+        currentVal = roundCurrency(toDecimal(net).mul(toDecimal(currentRate)));
+      } else if (baseFineRate > 0) {
+        currentVal = roundCurrency(toDecimal(fine).mul(toDecimal(baseFineRate)));
+      } else {
+        currentVal = acqVal;
+      }
 
       grandItems += itemCount;
       grandGross = grandGross.plus(gross);

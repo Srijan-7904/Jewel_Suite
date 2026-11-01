@@ -314,7 +314,7 @@ export const RepairsPage: React.FC = () => {
                   <td>
                     {rep.ownership === 'CUSTOMER_OWNED' ? (
                       <div>
-                        <strong>{rep.customer_name || 'Walk-in Client'}</strong>
+                        <strong>{rep.customer_name || 'CASH CUSTOMER'}</strong>
                         {rep.customer_phone && (
                           <div style={{ fontSize: '0.75rem', color: '#8e95a5' }}>{rep.customer_phone}</div>
                         )}
@@ -485,7 +485,7 @@ export const RepairsPage: React.FC = () => {
                       value={customerId}
                       onChange={(e) => setCustomerId(e.target.value)}
                     >
-                      <option value="">Walk-in Customer / Select Customer</option>
+                      <option value="">CASH CUSTOMER / Select Customer</option>
                       {customers.map((c) => (
                         <option key={c.id} value={c.id}>
                           {c.name} ({c.phone || c.customer_code})

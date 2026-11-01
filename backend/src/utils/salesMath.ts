@@ -208,16 +208,23 @@ export function calculateSalesTotals(
   const round_off = roundCurrency(toDecimal(grand_total).minus(rawTotal));
 
   const exchange_amount = roundCurrency(Decimal.max(0, toDecimal(input.exchange_amount || 0)));
-  const net_payable = roundCurrency(Decimal.max(0, toDecimal(grand_total).minus(toDecimal(exchange_amount))));
+  const net_payable = roundCurrency(toDecimal(grand_total).minus(toDecimal(exchange_amount)));
 
   const amount_paid = roundCurrency(
     (input.payments || []).reduce((sum, p) => sum.plus(toDecimal(p.amount || 0)), new Decimal(0))
   );
 
+  const is_payable_to_customer = toDecimal(net_payable).isNegative();
   const rawBalance = toDecimal(net_payable).minus(toDecimal(amount_paid));
-  const balance_amount = roundCurrency(Decimal.max(0, rawBalance));
-  const change_due = roundCurrency(Decimal.max(0, toDecimal(amount_paid).minus(toDecimal(net_payable))));
-  const is_settled = net_payable > 0 ? toDecimal(amount_paid).gte(toDecimal(net_payable)) : false;
+  const balance_amount = is_payable_to_customer ? 0 : roundCurrency(Decimal.max(0, rawBalance));
+  const change_due = !is_payable_to_customer
+    ? roundCurrency(Decimal.max(0, toDecimal(amount_paid).minus(toDecimal(net_payable))))
+    : roundCurrency(Decimal.max(0, toDecimal(amount_paid).minus(toDecimal(net_payable).abs())));
+  const is_settled = is_payable_to_customer
+    ? toDecimal(amount_paid).gte(toDecimal(net_payable).abs())
+    : net_payable > 0
+    ? toDecimal(amount_paid).gte(toDecimal(net_payable))
+    : true;
 
   return {
     subtotal,

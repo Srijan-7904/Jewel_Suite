@@ -216,7 +216,7 @@ export const EstimatesPage: React.FC = () => {
         estimate_date: form.estimate_date,
         valid_until: validUntilDate.toISOString().split('T')[0],
         customer_id: form.customer_id,
-        customer_name: customer?.name || 'Walk-in Customer',
+        customer_name: customer?.name || 'CASH CUSTOMER',
         customer_phone: customer?.phone || undefined,
         item_name: form.item_name,
         metal_id: form.metal_id,

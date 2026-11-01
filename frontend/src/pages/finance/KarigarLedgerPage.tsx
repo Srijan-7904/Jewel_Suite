@@ -214,7 +214,7 @@ export const KarigarLedgerPage: React.FC = () => {
 
           <div className="finance-card">
             <div className="finance-card-title">
-              <span>Total Credited (Labour)</span>
+              <span>Total Jama / Credited (Labour)</span>
               <Sparkles size={16} className="text-rose" />
             </div>
             <div className="finance-card-value text-rose">
@@ -225,7 +225,7 @@ export const KarigarLedgerPage: React.FC = () => {
 
           <div className="finance-card">
             <div className="finance-card-title">
-              <span>Total Debited (Paid)</span>
+              <span>Total Baaki / Debited (Paid)</span>
               <ArrowUpRight size={16} className="text-emerald" />
             </div>
             <div className="finance-card-value text-emerald">
@@ -244,9 +244,9 @@ export const KarigarLedgerPage: React.FC = () => {
             </div>
             <div className="finance-card-sub">
               {statement.current_balance > 0
-                ? 'Labour Payable (Shop owes karigar)'
+                ? 'Labour Payable / Jama (Shop owes karigar - जमा)'
                 : statement.current_balance < 0
-                ? 'Artisan Advance Paid'
+                ? 'Artisan Advance Paid / Baaki (बाकी)'
                 : 'Artisan wages settled'}
             </div>
           </div>
@@ -262,8 +262,8 @@ export const KarigarLedgerPage: React.FC = () => {
               <th>Reference</th>
               <th>Description</th>
               <th>Payment Mode</th>
-              <th>Debit (Payment)</th>
-              <th>Credit (Labour)</th>
+              <th>Debit / Baaki (Payment - बाकी)</th>
+              <th>Credit / Jama (Labour - जमा)</th>
               <th>Payable Balance</th>
             </tr>
           </thead>
@@ -420,8 +420,8 @@ export const KarigarLedgerPage: React.FC = () => {
                       value={adjDirection}
                       onChange={(e) => setAdjDirection(e.target.value as any)}
                     >
-                      <option value="DEBIT">DEBIT (Reduces Shop Payable)</option>
-                      <option value="CREDIT">CREDIT (Increases Shop Payable)</option>
+                      <option value="DEBIT">Baaki / Debit (Payment / Reduces Shop Payable - बाकी)</option>
+                      <option value="CREDIT">Jama / Credit (Labour / Increases Shop Payable - जमा)</option>
                     </select>
                   </div>
                   <div className="form-group">

@@ -88,6 +88,8 @@
 .text-cyan { color: var(--info); }
 
 .party-selector-bar {
+  position: relative;
+  z-index: 20;
   display: flex;
   flex-wrap: wrap;
   align-items: center;

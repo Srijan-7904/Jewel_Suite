@@ -383,13 +383,27 @@ export interface ShopReportHeader {
 // Dashboard Metrics
 export interface DashboardMetricsData {
   todaySales: number;
+  todaySalesCount?: number;
+  todaySalesReturn?: number;
+  allTimeSales?: number;
+  allTimeSalesCount?: number;
   monthlySales: number;
+  todayPurchases?: number;
+  todayPurchasesCount?: number;
+  todayPurchasesReturn?: number;
+  allTimePurchases?: number;
+  allTimePurchasesCount?: number;
+  todayReceipts?: number;
+  allTimeReceipts?: number;
+  todayDue?: number;
+  allTimeDue?: number;
   receivables: number;
   payables: number;
   stockValuation: number;
   activeLoansCount: number;
   activeLoansAmount: number;
   monthlyGstCollected: number;
+  cashInDrawer?: number;
 }
 
 function buildQuery(params: Record<string, any>): string {

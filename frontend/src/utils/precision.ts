@@ -131,11 +131,15 @@ export function formatCurrency(
   try {
     const d = toDecimal(amount);
     if (d.isNaN()) return includeSymbol ? '₹0.00' : '0.00';
-    const num = d.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber();
-    const formatted = num.toLocaleString('en-IN', {
+    const isNeg = d.isNegative();
+    const absNum = d.abs().toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber();
+    const formatted = absNum.toLocaleString('en-IN', {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     });
+    if (isNeg) {
+      return includeSymbol ? `-₹${formatted}` : `-${formatted}`;
+    }
     return includeSymbol ? `₹${formatted}` : formatted;
   } catch {
     return includeSymbol ? '₹0.00' : '0.00';

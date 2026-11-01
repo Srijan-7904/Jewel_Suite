@@ -1,0 +1,224 @@
+/* CreateCustomerModal.css — Universal Luxury Customer Registration Modal */
+
+.customer-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.7);
+  backdrop-filter: blur(4px);
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.customer-modal-dialog,
+.customer-modal-dialog-wide {
+  background: var(--bg-surface, #ffffff);
+  border: 1px solid var(--border-gold, #d4af37);
+  border-radius: 12px;
+  width: 75vw !important;
+  max-width: 1120px !important;
+  min-width: min(95vw, 680px);
+  max-height: calc(100vh - 2rem);
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+  margin: auto;
+}
+
+.customer-modal-dialog form {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.customer-modal-dialog .modal-header {
+  flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--bg-surface, #ffffff);
+  border-bottom: 1px solid var(--border-subtle, #e2e8f0);
+  padding: 0.65rem 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.modal-header-icon-box {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  background: rgba(212, 175, 55, 0.12);
+  border: 1px solid rgba(212, 175, 55, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--gold-primary, #b45309);
+}
+
+.modal-title {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text-main, #0f172a);
+}
+
+.modal-subtitle {
+  margin: 2px 0 0 0;
+  font-size: 0.75rem;
+  color: var(--text-muted, #64748b);
+}
+
+.customer-modal-body {
+  padding: 1rem 1.25rem;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+  -webkit-overflow-scrolling: touch;
+}
+
+.customer-modal-body.compact-body {
+  padding: 0.75rem 1.15rem;
+}
+
+.customer-form-error-alert {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: rgba(239, 68, 68, 0.12);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  margin-bottom: 0.75rem;
+}
+
+.customer-modal-grid-compact {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.45rem 0.65rem;
+}
+
+.customer-modal-grid-compact .col-span-1 {
+  grid-column: span 1;
+}
+
+.customer-modal-grid-compact .col-span-2 {
+  grid-column: span 2;
+}
+
+.customer-modal-grid-compact .col-span-3 {
+  grid-column: span 3;
+}
+
+.customer-modal-grid-compact .col-span-4 {
+  grid-column: span 4;
+}
+
+.compact-field {
+  display: flex;
+  flex-direction: column;
+}
+
+.compact-field-label {
+  font-size: 0.67rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: var(--text-muted, #64748b);
+  margin-bottom: 0.15rem;
+  display: block;
+}
+
+.compact-field-input,
+.compact-field-select {
+  width: 100%;
+  height: 32px;
+  background: var(--bg-input, #f8fafc);
+  border: 1px solid var(--border-default, #cbd5e1);
+  border-radius: 5px;
+  padding: 0.2rem 0.5rem;
+  color: var(--text-main, #0f172a);
+  font-size: 0.8rem;
+  outline: none;
+  transition: all 0.15s ease;
+  box-sizing: border-box;
+}
+
+.compact-field-input:focus,
+.compact-field-select:focus {
+  border-color: var(--gold-primary, #b45309);
+  box-shadow: 0 0 0 2px rgba(212, 175, 55, 0.2);
+}
+
+/* Opening Section Header Bar */
+.opening-section-compact-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  padding: 0.45rem 0.65rem;
+  background: rgba(212, 175, 55, 0.08);
+  border: 1px solid rgba(212, 175, 55, 0.25);
+  border-radius: 6px;
+  margin-bottom: 0.5rem;
+}
+
+/* Compact Opening Ledger Cards */
+.opening-card-compact {
+  border: 1px solid var(--border-subtle, #e2e8f0);
+  background: var(--bg-surface, #ffffff);
+  border-radius: 6px;
+  padding: 0.45rem 0.65rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  transition: border-color 0.15s;
+}
+
+.opening-card-compact:hover {
+  border-color: var(--border-active, #94a3b8);
+}
+
+.opening-card-compact.card-gold {
+  border-left: 3px solid #d4af37;
+}
+
+.opening-card-compact.card-silver {
+  border-left: 3px solid #94a3b8;
+}
+
+.opening-card-compact.card-cash {
+  border-left: 3px solid #10b981;
+}
+
+.opening-card-compact.card-bank {
+  border-left: 3px solid #3b82f6;
+}
+
+.opening-card-compact .card-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.72rem;
+}
+
+.customer-modal-footer {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  padding: 0.65rem 1.25rem;
+  background: var(--bg-surface, #ffffff);
+  border-top: 1px solid var(--border-subtle, #e2e8f0);
+}

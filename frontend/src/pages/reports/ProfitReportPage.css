@@ -1,0 +1,289 @@
+/* frontend/src/pages/reports/ProfitReportPage.css */
+
+.profit-report-page-wrapper {
+  padding: 1.5rem;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.profit-report-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1.25rem;
+  border-bottom: 1px solid var(--border-default, #DDD2BA);
+}
+
+.profit-report-header-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: rgba(13, 130, 82, 0.12);
+  border: 1px solid rgba(13, 130, 82, 0.35);
+  color: #0D8252;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.profit-report-title {
+  font-size: 1.5rem;
+  color: var(--text-main, #211D17);
+  font-weight: 700;
+  margin: 0;
+}
+
+.profit-report-subtitle {
+  font-size: 0.85rem;
+  color: var(--text-muted, #685F53);
+  margin: 0.25rem 0 0;
+}
+
+.profit-report-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.6rem;
+  border-radius: 9999px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  background: rgba(13, 130, 82, 0.15);
+  color: #0D8252;
+  border: 1px solid rgba(13, 130, 82, 0.35);
+  text-transform: uppercase;
+}
+
+.profit-report-refresh-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.82rem;
+  padding: 0.5rem 0.9rem;
+}
+
+/* Filter Bar */
+.profit-filter-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.preset-tabs {
+  display: flex;
+  gap: 0.5rem;
+  background: var(--bg-surface-elevated, #FFFDF7);
+  padding: 0.3rem;
+  border-radius: 8px;
+  border: 1px solid var(--border-default, #DDD2BA);
+}
+
+.preset-btn {
+  padding: 0.45rem 0.9rem;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--text-muted, #685F53);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.preset-btn:hover {
+  color: var(--text-main, #211D17);
+}
+
+.preset-btn.active {
+  background: #B8860B;
+  color: #FFFFFF;
+  font-weight: 600;
+}
+
+.custom-date-inputs {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* Profit Metric Cards */
+.profit-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 1rem;
+  margin-bottom: 1.75rem;
+}
+
+@media (max-width: 1200px) {
+  .profit-cards-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .profit-cards-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.profit-metric-card {
+  background: var(--bg-surface, #FFFFFF);
+  border: 1px solid var(--border-default, #DDD2BA);
+  border-radius: 12px;
+  padding: 1.25rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--shadow-sm, 0 1px 3px rgba(130, 105, 50, 0.08));
+  transition: transform 150ms ease;
+}
+
+.profit-metric-card:hover {
+  transform: translateY(-2px);
+}
+
+.metric-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.metric-icon-box {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.metric-icon-box.blue {
+  background: rgba(29, 111, 184, 0.12);
+  color: #1D6FB8;
+}
+
+.metric-icon-box.amber {
+  background: rgba(194, 120, 3, 0.12);
+  color: #C27803;
+}
+
+.metric-icon-box.emerald {
+  background: rgba(13, 130, 82, 0.12);
+  color: #0D8252;
+}
+
+.metric-icon-box.gold {
+  background: rgba(184, 134, 11, 0.12);
+  color: #B8860B;
+}
+
+.metric-icon-box.purple {
+  background: rgba(124, 58, 237, 0.12);
+  color: #7C3AED;
+}
+
+.metric-tag {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
+}
+
+.metric-tag.blue { background: rgba(29, 111, 184, 0.12); color: #1D6FB8; }
+.metric-tag.amber { background: rgba(194, 120, 3, 0.12); color: #C27803; }
+.metric-tag.emerald { background: rgba(13, 130, 82, 0.12); color: #0D8252; }
+.metric-tag.gold { background: rgba(184, 134, 11, 0.12); color: #B8860B; }
+.metric-tag.purple { background: rgba(124, 58, 237, 0.12); color: #7C3AED; }
+
+.metric-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--text-muted, #685F53);
+  margin-bottom: 0.2rem;
+}
+
+.metric-value {
+  font-size: 1.45rem;
+  font-weight: 700;
+  color: var(--text-main, #211D17);
+  line-height: 1.2;
+}
+
+.metric-value.text-emerald { color: #0D8252; }
+.metric-value.text-amber { color: #C27803; }
+.metric-value.text-gold { color: #B8860B; }
+.metric-value.text-purple { color: #7C3AED; }
+
+.metric-sub {
+  font-size: 0.72rem;
+  margin-top: 0.35rem;
+}
+
+/* Profit Table Card */
+.profit-table-card {
+  background: var(--bg-surface, #FFFFFF);
+  border: 1px solid var(--border-default, #DDD2BA);
+  border-radius: 12px;
+  padding: 1.5rem;
+  box-shadow: var(--shadow-sm, 0 1px 3px rgba(130, 105, 50, 0.08));
+}
+
+.table-card-header {
+  margin-bottom: 1.25rem;
+}
+
+.table-search-box input {
+  min-width: 260px;
+}
+
+.profit-register-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.profit-register-table th {
+  background: var(--bg-surface-elevated, #FFFDF7);
+  padding: 0.75rem 0.85rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted, #685F53);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-bottom: 2px solid var(--border-default, #DDD2BA);
+}
+
+.profit-register-table td {
+  padding: 0.75rem 0.85rem;
+  border-bottom: 1px solid var(--border-subtle, #ECE4D2);
+  color: var(--text-main, #211D17);
+}
+
+.profit-register-table tbody tr:hover {
+  background: var(--bg-surface-hover, #F6EEDD);
+}
+
+.status-pill {
+  display: inline-block;
+  padding: 0.2rem 0.55rem;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+.status-pill.paid {
+  background: #ECFDF5;
+  color: #065F46;
+  border: 1px solid #A7F3D0;
+}
+
+.status-pill.partial {
+  background: #FEF3C7;
+  color: #92400E;
+  border: 1px solid #FDE68A;
+}

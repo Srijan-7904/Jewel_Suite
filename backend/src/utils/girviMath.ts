@@ -69,14 +69,20 @@ export function calculateInterest(
   const diffTime = end.getTime() - start.getTime();
   const diffDays = Math.max(0, Math.floor(diffTime / (1000 * 60 * 60 * 24)));
 
-  if (interestType === GirviInterestType.MONTHLY_PERCENT) {
+  if (interestType === GirviInterestType.DAILY_PERCENT || interestType === 'DAILY_PERCENT') {
+    // Days * (Rate / 100) per day
+    const interest = toDecimal(principal)
+      .times(toDecimal(rate).dividedBy(100))
+      .times(diffDays);
+    return interest.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber();
+  } else if (interestType === GirviInterestType.MONTHLY_PERCENT || interestType === 'MONTHLY_PERCENT') {
     // 30 days per standard financial month
     const interest = toDecimal(principal)
       .times(toDecimal(rate).dividedBy(100))
       .times(diffDays)
       .dividedBy(30);
     return interest.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber();
-  } else if (interestType === GirviInterestType.ANNUAL_PERCENT) {
+  } else if (interestType === GirviInterestType.ANNUAL_PERCENT || interestType === 'ANNUAL_PERCENT') {
     // 365 days per annual basis
     const interest = toDecimal(principal)
       .times(toDecimal(rate).dividedBy(100))

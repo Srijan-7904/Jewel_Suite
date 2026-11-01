@@ -1851,23 +1851,50 @@ export class ReportsRepository {
 
   getDashboardMetrics(): {
     todaySales: number;
+    todaySalesCount: number;
+    todaySalesReturn: number;
+    allTimeSales: number;
+    allTimeSalesCount: number;
     monthlySales: number;
+    todayPurchases: number;
+    todayPurchasesCount: number;
+    todayPurchasesReturn: number;
+    allTimePurchases: number;
+    allTimePurchasesCount: number;
+    todayReceipts: number;
+    allTimeReceipts: number;
+    todayDue: number;
+    allTimeDue: number;
     receivables: number;
     payables: number;
     stockValuation: number;
     activeLoansCount: number;
     activeLoansAmount: number;
     monthlyGstCollected: number;
+    cashInDrawer: number;
   } {
     const db = getDb();
 
-    // Today's finalized sales
+    // 1. Sales (Today, Monthly, All-time & Returns)
     const todaySql = `
-      SELECT COALESCE(SUM(grand_total), 0) as today_sales 
+      SELECT 
+        COALESCE(SUM(grand_total), 0) as today_sales,
+        COALESCE(SUM(exchange_amount), 0) as today_sales_return,
+        COUNT(id) as today_sales_count
       FROM sales_invoices 
       WHERE status = 'FINALIZED' AND invoice_date = date('now')
     `;
     const todayRow = db.prepare(todaySql).get() as any;
+
+    const allTimeSalesSql = `
+      SELECT 
+        COALESCE(SUM(grand_total), 0) as all_time_sales,
+        COALESCE(SUM(exchange_amount), 0) as all_time_sales_return,
+        COUNT(id) as all_time_sales_count
+      FROM sales_invoices 
+      WHERE status = 'FINALIZED'
+    `;
+    const allTimeSalesRow = db.prepare(allTimeSalesSql).get() as any;
 
     // Monthly finalized sales
     const monthSql = `
@@ -1879,15 +1906,83 @@ export class ReportsRepository {
     `;
     const monthRow = db.prepare(monthSql).get() as any;
 
-    // Receivables
+    // 2. Purchases (Today & All-time)
+    const todayPurchaseSql = `
+      SELECT 
+        COALESCE(SUM(grand_total), 0) as today_purchases,
+        COUNT(id) as today_purchases_count
+      FROM purchase_bills 
+      WHERE status = 'FINALIZED' AND purchase_date = date('now')
+    `;
+    const todayPurchaseRow = db.prepare(todayPurchaseSql).get() as any;
+
+    const allTimePurchaseSql = `
+      SELECT 
+        COALESCE(SUM(grand_total), 0) as all_time_purchases,
+        COUNT(id) as all_time_purchases_count
+      FROM purchase_bills 
+      WHERE status = 'FINALIZED'
+    `;
+    const allTimePurchaseRow = db.prepare(allTimePurchaseSql).get() as any;
+
+    // 3. Receipts / Collections (Today & All-Time)
+    const todayRecRow = db
+      .prepare(
+        `SELECT COALESCE(SUM(amount), 0) as today_receipts 
+         FROM payments 
+         WHERE payment_type = 'RECEIPT' AND payment_date = date('now')`
+      )
+      .get() as any;
+    const invoiceTodayPaid = db
+      .prepare(
+        `SELECT COALESCE(SUM(amount_paid), 0) as today_paid 
+         FROM sales_invoices 
+         WHERE status = 'FINALIZED' AND invoice_date = date('now')`
+      )
+      .get() as any;
+    const todayReceipts = Math.max(
+      Number(todayRecRow?.today_receipts || 0),
+      Number(invoiceTodayPaid?.today_paid || 0)
+    );
+
+    const allTimeRecRow = db
+      .prepare(
+        `SELECT COALESCE(SUM(amount), 0) as all_time_receipts 
+         FROM payments 
+         WHERE payment_type = 'RECEIPT'`
+      )
+      .get() as any;
+    const invoiceAllTimePaid = db
+      .prepare(
+        `SELECT COALESCE(SUM(amount_paid), 0) as all_time_paid 
+         FROM sales_invoices 
+         WHERE status = 'FINALIZED'`
+      )
+      .get() as any;
+    const allTimeReceipts = Math.max(
+      Number(allTimeRecRow?.all_time_receipts || 0),
+      Number(invoiceAllTimePaid?.all_time_paid || 0)
+    );
+
+    // 4. Receivables & Today's Due
+    const todayDueRow = db
+      .prepare(
+        `SELECT COALESCE(SUM(balance_amount), 0) as today_due 
+         FROM sales_invoices 
+         WHERE status = 'FINALIZED' AND invoice_date = date('now') AND balance_amount > 0`
+      )
+      .get() as any;
+    const todayDue = Number(todayDueRow?.today_due || 0);
+
     const recSql = `
       SELECT COALESCE(SUM(balance_amount), 0) as receivables 
       FROM sales_invoices 
       WHERE status = 'FINALIZED' AND balance_amount > 0
     `;
     const recRow = db.prepare(recSql).get() as any;
+    const allTimeDue = Number(recRow?.receivables || 0);
 
-    // Payables
+    // 5. Payables
     const paySql = `
       SELECT COALESCE(SUM(balance_amount), 0) as payables 
       FROM purchase_bills 
@@ -1895,10 +1990,10 @@ export class ReportsRepository {
     `;
     const payRow = db.prepare(paySql).get() as any;
 
-    // Stock valuation
+    // 6. Stock valuation
     const stockValuation = this.getStockValuationReport().totalStockValue;
 
-    // Girvi loans
+    // 7. Girvi loans
     const girviSql = `
       SELECT 
         COUNT(id) as cnt,
@@ -1908,15 +2003,58 @@ export class ReportsRepository {
     `;
     const girviRow = db.prepare(girviSql).get() as any;
 
+    // 8. Cash in Drawer
+    const cashRow = db
+      .prepare(
+        `SELECT 
+          SUM(CASE 
+            WHEN entry_type = 'SALE_PAYMENT' THEN amount 
+            WHEN party_type = 'CUSTOMER' AND debit_credit = 'CREDIT' THEN amount 
+            ELSE 0 
+          END) AS total_in,
+          SUM(CASE 
+            WHEN entry_type IN ('PURCHASE_PAYMENT', 'KARIGAR_PAYMENT') THEN amount 
+            WHEN party_type IN ('SUPPLIER', 'KARIGAR') AND debit_credit = 'DEBIT' THEN amount 
+            ELSE 0 
+          END) AS total_out
+         FROM ledger_entries
+         WHERE payment_method = 'CASH'`
+      )
+      .get() as { total_in: number | null; total_out: number | null };
+
+    const totalCashIn = Number(cashRow?.total_in || 0);
+    const totalCashOut = Number(cashRow?.total_out || 0);
+    const ledgerCashBalance = Number((totalCashIn - totalCashOut).toFixed(2));
+
+    const directCashRow = db
+      .prepare(`SELECT COALESCE(SUM(amount), 0) as cash_sum FROM sales_invoice_payments WHERE payment_mode = 'CASH'`)
+      .get() as any;
+    const directCashSum = Number(directCashRow?.cash_sum || 0);
+    const cashInDrawer = Math.max(ledgerCashBalance, directCashSum);
+
     return {
       todaySales: Number(todayRow?.today_sales || 0),
+      todaySalesCount: Number(todayRow?.today_sales_count || 0),
+      todaySalesReturn: Number(todayRow?.today_sales_return || 0),
+      allTimeSales: Number(allTimeSalesRow?.all_time_sales || 0),
+      allTimeSalesCount: Number(allTimeSalesRow?.all_time_sales_count || 0),
       monthlySales: Number(monthRow?.monthly_sales || 0),
-      receivables: Number(recRow?.receivables || 0),
+      todayPurchases: Number(todayPurchaseRow?.today_purchases || 0),
+      todayPurchasesCount: Number(todayPurchaseRow?.today_purchases_count || 0),
+      todayPurchasesReturn: 0,
+      allTimePurchases: Number(allTimePurchaseRow?.all_time_purchases || 0),
+      allTimePurchasesCount: Number(allTimePurchaseRow?.all_time_purchases_count || 0),
+      todayReceipts,
+      allTimeReceipts,
+      todayDue,
+      allTimeDue,
+      receivables: allTimeDue,
       payables: Number(payRow?.payables || 0),
       stockValuation,
       activeLoansCount: Number(girviRow?.cnt || 0),
       activeLoansAmount: Number(girviRow?.outstanding || 0),
       monthlyGstCollected: Number(monthRow?.monthly_gst || 0),
+      cashInDrawer,
     };
   }
 }

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { financeApi, CreatePaymentInput, CreateAdjustmentInput } from '../../services/finance';
 import { customerApi } from '../../services/masters';
 import { Customer, LedgerEntry, PartyStatementSummary, PartyMetalLedgerRecord, PartyMetalBalanceSummary } from '../../types';
+import { CustomerSearchSelect } from '../../components/CustomerSearchSelect';
 import {
   Users,
   SlidersHorizontal,
@@ -45,7 +46,7 @@ export const CustomerLedgerPage: React.FC = () => {
   const [adjNotes, setAdjNotes] = useState('');
 
   useEffect(() => {
-    customerApi.list({ pageSize: 100 })
+    customerApi.list({ pageSize: 500 })
       .then((res) => {
         setCustomers(res.items);
         if (res.items.length > 0) {
@@ -150,7 +151,7 @@ export const CustomerLedgerPage: React.FC = () => {
             Customer Receivables Ledger
           </h1>
           <div className="finance-subtitle">
-            Party-wise debit/credit statement, invoice payments, and outstanding balances
+            Party-wise Baaki / Jama statement (खाता बही), invoice payments, and outstanding balances
           </div>
         </div>
         <div className="workshop-actions">
@@ -176,19 +177,20 @@ export const CustomerLedgerPage: React.FC = () => {
 
       {/* Party Selector & Filters */}
       <div className="party-selector-bar">
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', minWidth: '280px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', minWidth: '320px', position: 'relative', zIndex: 10 }}>
           <label style={{ fontSize: '0.75rem', color: '#9da4b3' }}>Select Customer Party</label>
-          <select
-            className="filter-input"
-            value={selectedCustomerId}
-            onChange={(e) => setSelectedCustomerId(e.target.value)}
-          >
-            {customers.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name} ({c.phone || c.customer_code})
-              </option>
-            ))}
-          </select>
+          <CustomerSearchSelect
+            customers={customers}
+            selectedCustomerId={selectedCustomerId}
+            onSelectCustomer={(c) => setSelectedCustomerId(c.id)}
+            onCustomerDiscovered={(newCust) => {
+              setCustomers((prev) => {
+                if (prev.some((c) => c.id === newCust.id)) return prev;
+                return [...prev, newCust];
+              });
+            }}
+            placeholder="Search party by name or phone..."
+          />
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: 'auto' }}>
@@ -229,24 +231,24 @@ export const CustomerLedgerPage: React.FC = () => {
 
           <div className="finance-card">
             <div className="finance-card-title">
-              <span>Total Debited (Sales)</span>
+              <span>Total Baaki / Debited (Sales)</span>
               <Receipt size={16} className="text-rose" />
             </div>
             <div className="finance-card-value text-rose">
               ₹{statement.total_debit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
             </div>
-            <div className="finance-card-sub">Total purchases by customer</div>
+            <div className="finance-card-sub">Total purchases / Baaki by customer</div>
           </div>
 
           <div className="finance-card">
             <div className="finance-card-title">
-              <span>Total Credited (Paid)</span>
+              <span>Total Jama / Credited (Paid)</span>
               <ArrowDownLeft size={16} className="text-emerald" />
             </div>
             <div className="finance-card-value text-emerald">
               ₹{statement.total_credit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
             </div>
-            <div className="finance-card-sub">Total payments received</div>
+            <div className="finance-card-sub">Total payments / Jama received</div>
           </div>
 
           <div className="finance-card" style={{ borderLeft: '3px solid #d4af37' }}>
@@ -259,9 +261,9 @@ export const CustomerLedgerPage: React.FC = () => {
             </div>
             <div className="finance-card-sub">
               {statement.current_balance > 0
-                ? 'Receivable (Customer owes shop)'
+                ? 'Receivable / Baaki (Customer owes shop - बाकी)'
                 : statement.current_balance < 0
-                ? 'Advance Credit Balance'
+                ? 'Advance Jama / Credit Balance (जमा)'
                 : 'Account fully settled'}
             </div>
           </div>
@@ -374,8 +376,8 @@ export const CustomerLedgerPage: React.FC = () => {
                 <th>Reference</th>
                 <th>Description</th>
                 <th>Payment Mode</th>
-                <th>Debit (Dr)</th>
-                <th>Credit (Cr)</th>
+                <th>Debit / Baaki (Dr - बाकी)</th>
+                <th>Credit / Jama (Cr - जमा)</th>
                 <th>Balance</th>
               </tr>
             </thead>
@@ -437,8 +439,8 @@ export const CustomerLedgerPage: React.FC = () => {
                 <th>Reference</th>
                 <th>Metal & Purity</th>
                 <th>Description</th>
-                <th>Debit / Given (Dr g)</th>
-                <th>Credit / Received (Cr g)</th>
+                <th>Debit / Baaki Given (Dr g - बाकी)</th>
+                <th>Credit / Jama Received (Cr g - जमा)</th>
                 <th>Balance (g)</th>
                 <th>Valuation Rate & Amount</th>
               </tr>
@@ -615,8 +617,8 @@ export const CustomerLedgerPage: React.FC = () => {
                       value={adjDirection}
                       onChange={(e) => setAdjDirection(e.target.value as any)}
                     >
-                      <option value="CREDIT">CREDIT (Reduces Customer Debt)</option>
-                      <option value="DEBIT">DEBIT (Increases Customer Debt)</option>
+                      <option value="CREDIT">Jama / Credit (Reduces Customer Debt - जमा)</option>
+                      <option value="DEBIT">Baaki / Debit (Increases Customer Debt - बाकी)</option>
                     </select>
                   </div>
                   <div className="form-group">
@@ -638,7 +640,7 @@ export const CustomerLedgerPage: React.FC = () => {
                   <input
                     type="text"
                     className="form-input"
-                    placeholder="e.g. Rounding waiver, dispute resolution, goodwill credit"
+                    placeholder="e.g. Rounding waiver, dispute resolution, goodwill jama / credit"
                     value={adjReason}
                     onChange={(e) => setAdjReason(e.target.value)}
                     required

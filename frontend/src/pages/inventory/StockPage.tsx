@@ -128,19 +128,14 @@ export const StockPage: React.FC = () => {
   const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Add Stock Form State
+  // Add Metal Stock Form State
   const [addForm, setAddForm] = useState({
     tag_no: '',
-    product_id: '',
     metal_id: '',
     purity_id: '',
     gross_weight: '',
     less_weight: '0',
     tunch_percent: '',
-    wastage_percent: '0',
-    making_charge: '0',
-    making_charge_type: 'FIXED' as 'FIXED' | 'PER_PIECE' | 'PER_GRAM' | 'PERCENTAGE',
-    making_rate: '0',
     rate_per_gram: '',
     huid: '',
     notes: '',
@@ -190,6 +185,35 @@ export const StockPage: React.FC = () => {
   useEffect(() => {
     fetchStockData();
   }, [fetchStockData]);
+
+  // Separated Gold and Silver Bullion Stock Statistics (Fine Wt & Live Valuation)
+  const goldStats = useMemo(() => {
+    const groups =
+      valuation?.groups.filter(
+        (g) => g.metal_code?.toUpperCase() === 'GOLD' || g.metal_name?.toUpperCase().includes('GOLD')
+      ) || [];
+    return {
+      fine: groups.reduce((acc, g) => acc + (g.fine_weight || 0), 0),
+      gross: groups.reduce((acc, g) => acc + (g.gross_weight || 0), 0),
+      net: groups.reduce((acc, g) => acc + (g.net_weight || 0), 0),
+      items: groups.reduce((acc, g) => acc + (g.item_count || 0), 0),
+      valuation: groups.reduce((acc, g) => acc + (g.current_valuation || 0), 0),
+    };
+  }, [valuation]);
+
+  const silverStats = useMemo(() => {
+    const groups =
+      valuation?.groups.filter(
+        (g) => g.metal_code?.toUpperCase() === 'SILVER' || g.metal_name?.toUpperCase().includes('SILVER')
+      ) || [];
+    return {
+      fine: groups.reduce((acc, g) => acc + (g.fine_weight || 0), 0),
+      gross: groups.reduce((acc, g) => acc + (g.gross_weight || 0), 0),
+      net: groups.reduce((acc, g) => acc + (g.net_weight || 0), 0),
+      items: groups.reduce((acc, g) => acc + (g.item_count || 0), 0),
+      valuation: groups.reduce((acc, g) => acc + (g.current_valuation || 0), 0),
+    };
+  }, [valuation]);
 
   // Filter purities by selected metal in add form
   const availablePurities = useMemo(() => {
@@ -299,7 +323,6 @@ export const StockPage: React.FC = () => {
 
   // Open Add Modal
   const handleOpenAdd = () => {
-    const firstProd = products[0];
     const firstMetal = metals.find((m) => m.code === 'GOLD') || metals[0];
     const defaultPurity = firstMetal
       ? purities.find((p) => p.metal_id === firstMetal.id && p.code === '22K') || purities.find((p) => p.metal_id === firstMetal.id)
@@ -311,22 +334,17 @@ export const StockPage: React.FC = () => {
       if (cr) defaultRate = cr.rate.toString();
     }
 
-    // Auto-generate tag suggestion (e.g. TAG-XXXX)
+    // Auto-generate tag suggestion (e.g. TAG-GXXXX)
     const randomSuffix = Math.floor(1000 + Math.random() * 9000);
     const suggestedTag = `TAG-G${randomSuffix}`;
 
     setAddForm({
       tag_no: suggestedTag,
-      product_id: firstProd ? firstProd.id : '',
       metal_id: firstMetal ? firstMetal.id : '',
       purity_id: defaultPurity ? defaultPurity.id : '',
       gross_weight: '',
       less_weight: '0',
       tunch_percent: defaultPurity && defaultPurity.tunch_percent !== null ? defaultPurity.tunch_percent.toString() : '91.67',
-      wastage_percent: '0',
-      making_charge: '0',
-      making_charge_type: 'FIXED',
-      making_rate: '0',
       rate_per_gram: defaultRate,
       huid: '',
       notes: '',
@@ -378,9 +396,6 @@ export const StockPage: React.FC = () => {
       if (!addForm.tag_no.trim()) {
         throw new Error('Tag number is required');
       }
-      if (!addForm.product_id) {
-        throw new Error('Please select a product');
-      }
       if (grossD.lte(0)) {
         throw new Error('Gross weight must be greater than zero');
       }
@@ -391,16 +406,21 @@ export const StockPage: React.FC = () => {
         throw new Error('Tunch % must be between 0 and 100');
       }
 
+      const metalObj = metals.find((m) => m.id === addForm.metal_id);
+      const isGold = metalObj?.code === 'GOLD' || metalObj?.name?.toLowerCase().includes('gold');
+      const defaultStockName = isGold ? 'Gold Stock' : 'Silver Stock';
+
       await inventoryApi.create({
         tag_no: addForm.tag_no.trim().toUpperCase(),
-        product_id: addForm.product_id,
+        product_id: undefined,
+        item_name: defaultStockName,
         metal_id: addForm.metal_id,
         purity_id: addForm.purity_id,
         gross_weight: grossD.toNumber(),
         less_weight: lessD.toNumber(),
         tunch_percent: tunchD.toNumber(),
-        wastage_percent: toDecimal(addForm.wastage_percent).toNumber(),
-        making_charge: toDecimal(addForm.making_charge).toNumber(),
+        wastage_percent: 0,
+        making_charge: 0,
         rate_per_gram: rateD.toNumber(),
         huid: addForm.huid.trim() || undefined,
         notes: addForm.notes.trim() || undefined,
@@ -487,36 +507,54 @@ export const StockPage: React.FC = () => {
         </div>
 
         <div className="valuation-grid">
-          <div className="valuation-metric">
+          {/* 1. Grand Live Total Stock Valuation */}
+          <div className="valuation-metric valuation-card-total">
             <span className="valuation-label">Total Stock Valuation</span>
             <span className="valuation-val emerald font-mono">
               ₹{valuation ? valuation.total_current_valuation.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '0.00'}
             </span>
             <span className="valuation-sub font-mono">
-              Acquisition Value: ₹{valuation ? valuation.total_acquisition_value.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '0.00'}
+              Live Rates: Au ₹{goldStats.valuation.toLocaleString('en-IN', { maximumFractionDigits: 0 })} • Ag ₹{silverStats.valuation.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
             </span>
           </div>
 
-          <div className="valuation-metric">
-            <span className="valuation-label">Total Stock Items</span>
-            <span className="valuation-val font-mono">{valuation?.total_items || 0}</span>
-            <span className="valuation-sub">Physical Tagged Items</span>
-          </div>
-
-          <div className="valuation-metric">
-            <span className="valuation-label">Total Gross Weight</span>
-            <span className="valuation-val font-mono">
-              {formatWeight(valuation?.total_gross_weight)} <span className="text-sm font-normal">g</span>
-            </span>
-            <span className="valuation-sub font-mono">Net Wt: {formatWeight(valuation?.total_net_weight)} g</span>
-          </div>
-
-          <div className="valuation-metric">
-            <span className="valuation-label">Total Fine Bullion Wt</span>
+          {/* 2. Physical Gold Stock Summary (Fine Bullion Wt & Live Valuation) */}
+          <div className="valuation-metric valuation-card-gold">
+            <div className="flex items-center justify-between">
+              <span className="valuation-label text-gold font-bold">✦ GOLD STOCK (शुद्ध सोना)</span>
+              <span className="text-[11px] font-mono text-muted">{goldStats.items} pcs</span>
+            </div>
             <span className="valuation-val gold font-mono">
-              {formatFineWeight(valuation?.total_fine_weight)} <span className="text-sm font-normal">g</span>
+              {goldStats.fine.toFixed(3)} <span className="text-sm font-normal">g fine</span>
             </span>
-            <span className="valuation-sub">Calculated via Tunch %</span>
+            <div className="valuation-sub font-mono flex items-center justify-between">
+              <span>Gross: {goldStats.gross.toFixed(3)}g</span>
+              <span className="font-semibold text-emerald-700">₹{goldStats.valuation.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+            </div>
+          </div>
+
+          {/* 3. Physical Silver Stock Summary (Fine Bullion Wt & Live Valuation) */}
+          <div className="valuation-metric valuation-card-silver">
+            <div className="flex items-center justify-between">
+              <span className="valuation-label text-blue-600 font-bold">◈ SILVER STOCK (शुद्ध चांदी)</span>
+              <span className="text-[11px] font-mono text-muted">{silverStats.items} pcs</span>
+            </div>
+            <span className="valuation-val silver font-mono" style={{ color: '#0369A1' }}>
+              {silverStats.fine.toFixed(3)} <span className="text-sm font-normal">g fine</span>
+            </span>
+            <div className="valuation-sub font-mono flex items-center justify-between">
+              <span>Gross: {silverStats.gross.toFixed(3)}g</span>
+              <span className="font-semibold text-emerald-700">₹{silverStats.valuation.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+            </div>
+          </div>
+
+          {/* 4. Physical Showcase Pieces */}
+          <div className="valuation-metric">
+            <span className="valuation-label">Physical Showcase Pieces</span>
+            <span className="valuation-val font-mono">{valuation?.total_items || 0} <span className="text-sm font-normal">Items</span></span>
+            <span className="valuation-sub font-mono">
+              Gross: {formatWeight(valuation?.total_gross_weight)}g • Net: {formatWeight(valuation?.total_net_weight)}g
+            </span>
           </div>
         </div>
 
@@ -547,8 +585,8 @@ export const StockPage: React.FC = () => {
             setPage(1);
           }}
         >
-          <span>All Showcase Items</span>
-          <span className="metal-tab-count font-mono">{valuation?.total_items || total}</span>
+          <span>All Stock</span>
+          <span className="metal-tab-count font-mono">{valuation?.total_items || total} pcs</span>
         </button>
         <button
           type="button"
@@ -559,11 +597,9 @@ export const StockPage: React.FC = () => {
           }}
         >
           <span className="metal-tab-dot gold"></span>
-          <span>✦ Gold Showcase</span>
+          <span>✦ Gold Stock (शुद्ध सोना)</span>
           <span className="metal-tab-count font-mono">
-            {valuation?.groups
-              ?.filter((g) => g.metal_code === 'GOLD')
-              .reduce((acc, curr) => acc + curr.item_count, 0) || 0}
+            {goldStats.fine.toFixed(3)}g fine • {goldStats.items} pcs
           </span>
         </button>
         <button
@@ -575,27 +611,9 @@ export const StockPage: React.FC = () => {
           }}
         >
           <span className="metal-tab-dot silver"></span>
-          <span>◈ Silver Showcase</span>
+          <span>◈ Silver Stock (शुद्ध चांदी)</span>
           <span className="metal-tab-count font-mono">
-            {valuation?.groups
-              ?.filter((g) => g.metal_code === 'SILVER')
-              .reduce((acc, curr) => acc + curr.item_count, 0) || 0}
-          </span>
-        </button>
-        <button
-          type="button"
-          className={`metal-tab-pill platinum ${metalFilter === 'PLATINUM' ? 'active' : ''}`}
-          onClick={() => {
-            setMetalFilter(metalFilter === 'PLATINUM' ? 'ALL' : 'PLATINUM');
-            setPage(1);
-          }}
-        >
-          <span className="metal-tab-dot platinum"></span>
-          <span>❖ Platinum Showcase</span>
-          <span className="metal-tab-count font-mono">
-            {valuation?.groups
-              ?.filter((g) => g.metal_code === 'PLATINUM')
-              .reduce((acc, curr) => acc + curr.item_count, 0) || 0}
+            {silverStats.fine.toFixed(3)}g fine • {silverStats.items} pcs
           </span>
         </button>
       </div>
@@ -646,20 +664,6 @@ export const StockPage: React.FC = () => {
             ))}
           </select>
 
-          {/* Category Filter */}
-          <select
-            className="filter-select"
-            value={categoryFilter}
-            onChange={(e) => {
-              setCategoryFilter(e.target.value);
-              setPage(1);
-            }}
-          >
-            <option value="ALL">All Categories</option>
-            {categories.map((c) => (
-              <option key={c.id} value={c.id}>{c.name}</option>
-            ))}
-          </select>
 
           {/* Status Filter */}
           <select
@@ -705,7 +709,7 @@ export const StockPage: React.FC = () => {
 
           <button type="button" className="btn btn-primary" onClick={handleOpenAdd}>
             <Plus size={16} />
-            <span>Add Stock Item</span>
+            <span>Add Metal Stock</span>
           </button>
         </div>
       </div>
@@ -750,22 +754,28 @@ export const StockPage: React.FC = () => {
                     <div className="showcase-body">
                       <div className="showcase-title-row">
                         <div>
-                          <h4 className="showcase-product-name">{item.product_name}</h4>
-                          <span className="showcase-cat-name">{item.category_name}</span>
+                          <h4 className="showcase-product-name flex items-center gap-1.5 font-bold">
+                            {item.metal_name || item.metal_code} {item.purity_code}
+                          </h4>
+                          {item.product_name && item.product_name !== 'General Jewellery' && (
+                            <span className="showcase-item-label font-mono text-xs text-muted">
+                              Item: {item.product_name}
+                            </span>
+                          )}
                         </div>
-                        <span className={`metal-pill ${theme.type}`}>
-                          {item.metal_code} • {item.purity_code}
+                        <span className={`metal-pill ${theme.type} font-mono font-bold`}>
+                          {item.tunch_percent ? `${formatPercentage(item.tunch_percent)} Tunch` : item.purity_code}
                         </span>
                       </div>
 
                       <div className="showcase-specs-table">
                         <div className="showcase-spec-item">
                           <span className="showcase-spec-label">Gross Wt</span>
-                          <span className="showcase-spec-val">{formatWeight(item.gross_weight)}g</span>
+                          <span className="showcase-spec-val font-mono">{formatWeight(item.gross_weight)}g</span>
                         </div>
                         <div className="showcase-spec-item">
                           <span className="showcase-spec-label">Net Wt</span>
-                          <span className="showcase-spec-val">{formatWeight(item.net_weight)}g</span>
+                          <span className="showcase-spec-val font-mono">{formatWeight(item.net_weight)}g</span>
                         </div>
                         <div className="showcase-spec-item">
                           <span className="showcase-spec-label">Tunch / Touch</span>
@@ -773,7 +783,7 @@ export const StockPage: React.FC = () => {
                         </div>
                         <div className="showcase-spec-item">
                           <span className="showcase-spec-label">Fine Metal Wt</span>
-                          <span className={`showcase-spec-val text-fine-${theme.type}`}>
+                          <span className={`showcase-spec-val font-bold text-fine-${theme.type}`}>
                             {formatFineWeight(item.fine_weight)}g
                           </span>
                         </div>
@@ -787,8 +797,15 @@ export const StockPage: React.FC = () => {
                       )}
 
                       <div className="showcase-val-row">
-                        <span className="showcase-val-label">Live Valuation:</span>
-                        <span className="showcase-val-amount font-mono">
+                        <div className="flex flex-col">
+                          <span className="showcase-val-label">Live Valuation:</span>
+                          <span className="text-[10px] text-muted font-mono">
+                            {item.live_benchmark_rate
+                              ? `@ ₹${item.live_benchmark_rate.toLocaleString('en-IN')}/g (Live ${item.metal_code === 'GOLD' ? '24K' : '999'})`
+                              : item.current_rate ? `@ ₹${item.current_rate.toLocaleString('en-IN')}/g` : ''}
+                          </span>
+                        </div>
+                        <span className="showcase-val-amount font-mono text-emerald-700 font-bold">
                           {formatCurrency(item.current_valuation || item.metal_value)}
                         </span>
                       </div>
@@ -796,7 +813,11 @@ export const StockPage: React.FC = () => {
 
                     <div className="showcase-footer">
                       <div className="text-xs text-muted font-mono">
-                        @ {formatMetalRate(item.rate_per_gram)}
+                        {item.rate_per_gram > 0 && (
+                          <span title="Acquisition / Inward Purchase Rate">
+                            Pur. Cost: ₹{item.rate_per_gram.toLocaleString('en-IN')}/g
+                          </span>
+                        )}
                       </div>
                       <div className="flex gap-1.5">
                         <button
@@ -831,14 +852,13 @@ export const StockPage: React.FC = () => {
           <table className="masters-table">
             <thead>
               <tr>
-                <th>Tag No</th>
-                <th>Product</th>
+                <th>Tag / Item</th>
                 <th>Metal & Purity</th>
                 <th className="text-right">Gross Wt</th>
                 <th className="text-right">Net Wt</th>
                 <th className="text-right">Tunch %</th>
                 <th className="text-right">Fine Wt</th>
-                <th className="text-right">Rate/g</th>
+                <th className="text-right">Pur. Rate</th>
                 <th className="text-right">Metal Value</th>
                 <th className="text-right">Live Valuation</th>
                 <th className="text-center">Status</th>
@@ -848,13 +868,13 @@ export const StockPage: React.FC = () => {
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={12} className="table-empty font-mono">
+                  <td colSpan={11} className="table-empty font-mono">
                     Loading jewellery stock records...
                   </td>
                 </tr>
               ) : stockItems.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="table-empty py-12">
+                  <td colSpan={11} className="table-empty py-12">
                     <div className="flex flex-col items-center justify-center">
                       <Boxes size={48} className="text-muted mb-3 opacity-40" />
                       <p className="text-secondary font-medium">No jewellery stock items found.</p>
@@ -875,18 +895,22 @@ export const StockPage: React.FC = () => {
                     <tr key={item.id} className={`stock-row metal-${theme.type}`}>
                       <td>
                         <span className={`tag-pill ${theme.type}`}>{item.tag_no}</span>
+                        {item.product_name && item.product_name !== 'General Jewellery' && (
+                          <div className="font-semibold text-main text-xs mt-0.5">{item.product_name}</div>
+                        )}
                         {item.huid && (
                           <div className="text-xs text-muted font-mono mt-0.5">HUID: {item.huid}</div>
                         )}
                       </td>
                       <td>
-                        <div className="font-medium text-main">{item.product_name}</div>
-                        <div className="text-xs text-muted">{item.category_name}</div>
-                      </td>
-                      <td>
                         <span className={`metal-pill ${theme.type}`}>
                           {item.metal_code} • {item.purity_code}
                         </span>
+                        {item.tunch_percent && (
+                          <div className="text-[11px] font-mono text-muted mt-0.5">
+                            {formatPercentage(item.tunch_percent)} Tunch
+                          </div>
+                        )}
                       </td>
                       <td className="text-right font-mono font-medium">
                         {formatWeight(item.gross_weight)}g
@@ -908,6 +932,11 @@ export const StockPage: React.FC = () => {
                       </td>
                       <td className="text-right font-mono font-bold text-emerald">
                         {formatCurrency(item.current_valuation || item.metal_value)}
+                        {item.live_benchmark_rate && (
+                          <div className="text-[10px] text-muted font-normal">
+                            @ ₹{item.live_benchmark_rate.toLocaleString('en-IN')}/g ({item.metal_code === 'GOLD' ? '24K' : '999'})
+                          </div>
+                        )}
                       </td>
                       <td className="text-center">
                         <span className={`status-badge ${item.status.toLowerCase()}`}>
@@ -973,14 +1002,14 @@ export const StockPage: React.FC = () => {
         </div>
       )}
 
-      {/* Modal 1: Add Stock Item */}
+      {/* Modal 1: Add Metal Stock (Opening / Direct Inward) */}
       {showAddModal && (
         <div className="modal-backdrop">
-          <div className="modal-content modal-lg">
+          <div className="modal-content modal-md">
             <div className="modal-header">
               <div className="flex items-center gap-2">
                 <Boxes size={20} className="text-gold" />
-                <h3 className="modal-title font-serif">Add New Jewellery Item (Opening Stock)</h3>
+                <h3 className="modal-title font-serif">Add Metal Stock (Gold / Silver Inward)</h3>
               </div>
               <button type="button" className="btn-icon" onClick={() => setShowAddModal(false)}>
                 <X size={18} />
@@ -997,48 +1026,13 @@ export const StockPage: React.FC = () => {
                 )}
 
                 <div className="form-grid">
-                  {/* Tag Number */}
-                  <div className="form-group">
-                    <label className="form-label">
-                      Tag No <span className="text-gold">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      className="form-input font-mono font-bold uppercase"
-                      required
-                      placeholder="e.g. GOLD-R-1025"
-                      value={addForm.tag_no}
-                      onChange={(e) => setAddForm({ ...addForm, tag_no: e.target.value.toUpperCase() })}
-                    />
-                  </div>
-
-                  {/* Product Definition */}
-                  <div className="form-group">
-                    <label className="form-label">
-                      Product Definition <span className="text-gold">*</span>
-                    </label>
-                    <select
-                      className="form-select"
-                      required
-                      value={addForm.product_id}
-                      onChange={(e) => handleProductChange(e.target.value)}
-                    >
-                      <option value="" disabled>Select Product Design</option>
-                      {products.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.product_code} — {p.name} ({p.category_name})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
                   {/* Metal */}
                   <div className="form-group">
                     <label className="form-label">
                       Metal <span className="text-gold">*</span>
                     </label>
                     <select
-                      className="form-select"
+                      className="form-select font-bold"
                       required
                       value={addForm.metal_id}
                       onChange={(e) => handleMetalChange(e.target.value)}
@@ -1055,14 +1049,14 @@ export const StockPage: React.FC = () => {
                       Purity / Grade <span className="text-gold">*</span>
                     </label>
                     <select
-                      className="form-select"
+                      className="form-select font-mono"
                       required
                       value={addForm.purity_id}
                       onChange={(e) => handlePurityChange(e.target.value)}
                     >
                       {availablePurities.map((p) => (
                         <option key={p.id} value={p.id}>
-                          {p.name} ({p.tunch_percent ? `${p.tunch_percent}%` : 'Stone/Carat'})
+                          {p.name} ({p.tunch_percent ? `${p.tunch_percent}% Tunch` : ''})
                         </option>
                       ))}
                     </select>
@@ -1076,7 +1070,7 @@ export const StockPage: React.FC = () => {
                     <input
                       type="text"
                       inputMode="decimal"
-                      className="form-input font-mono font-medium"
+                      className="form-input font-mono font-bold text-base"
                       required
                       placeholder="0.000"
                       value={addForm.gross_weight}
@@ -1105,7 +1099,7 @@ export const StockPage: React.FC = () => {
                     <input
                       type="text"
                       inputMode="decimal"
-                      className="form-input font-mono"
+                      className="form-input font-mono font-semibold"
                       required
                       placeholder="e.g. 91.67"
                       value={addForm.tunch_percent}
@@ -1115,88 +1109,51 @@ export const StockPage: React.FC = () => {
 
                   {/* Acquisition Rate per gram */}
                   <div className="form-group">
-                    <label className="form-label">Acquisition Rate / gram (₹)</label>
+                    <label className="form-label">Valuation Rate ₹/g</label>
                     <input
                       type="text"
                       inputMode="decimal"
                       className="form-input font-mono"
-                      placeholder="7250.00"
+                      placeholder="e.g. 9167.00"
                       value={addForm.rate_per_gram}
                       onChange={(e) => setAddForm({ ...addForm, rate_per_gram: parseDecimalInput(e.target.value, 2) })}
                     />
                   </div>
 
-                  {/* Making Charge */}
+                  {/* Tag Number */}
                   <div className="form-group">
-                    <label className="form-label flex items-center justify-between">
-                      <span>Making Charge</span>
-                      <span className="text-xs text-gold font-mono">
-                        ₹{toDecimal(addForm.making_charge).toFixed(2)}
-                      </span>
+                    <label className="form-label">
+                      Stock Tag No <span className="text-gold">*</span>
                     </label>
-                    <div className="flex gap-2">
-                      <select
-                        className="form-select font-mono text-xs w-28"
-                        value={addForm.making_charge_type}
-                        onChange={(e) => handleMakingChange(addForm.making_rate, e.target.value as any)}
-                        title="Making Charge Mode: /g (Per Gram), /pc (Per Piece), Fix (Fixed Amount), or % (Percentage)"
-                      >
-                        <option value="PER_GRAM">/g (Per Gram)</option>
-                        <option value="PER_PIECE">/pc (Per Piece)</option>
-                        <option value="FIXED">Fix (Fixed)</option>
-                        <option value="PERCENTAGE">% (Percent)</option>
-                      </select>
-                      <input
-                        type="text"
-                        inputMode="decimal"
-                        className="form-input font-mono flex-1"
-                        placeholder={
-                          addForm.making_charge_type === 'PER_PIECE'
-                            ? '₹/pc'
-                            : addForm.making_charge_type === 'FIXED'
-                            ? '₹ Fix'
-                            : addForm.making_charge_type === 'PERCENTAGE'
-                            ? '%'
-                            : '₹/g'
-                        }
-                        value={addForm.making_rate}
-                        onChange={(e) => handleMakingChange(parseDecimalInput(e.target.value, 2), addForm.making_charge_type)}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Wastage % */}
-                  <div className="form-group">
-                    <label className="form-label">Wastage %</label>
                     <input
                       type="text"
-                      inputMode="decimal"
-                      className="form-input font-mono"
-                      placeholder="0.0"
-                      value={addForm.wastage_percent}
-                      onChange={(e) => setAddForm({ ...addForm, wastage_percent: parseDecimalInput(e.target.value, 2) })}
+                      className="form-input font-mono font-bold uppercase"
+                      required
+                      placeholder="e.g. TAG-G1025"
+                      value={addForm.tag_no}
+                      onChange={(e) => setAddForm({ ...addForm, tag_no: e.target.value.toUpperCase() })}
                     />
                   </div>
 
                   {/* HUID */}
                   <div className="form-group">
-                    <label className="form-label">HUID (Hallmark Unique ID)</label>
+                    <label className="form-label">HUID (Hallmark ID - Optional)</label>
                     <input
                       type="text"
                       className="form-input font-mono uppercase"
-                      placeholder="e.g. HD9281"
+                      placeholder="e.g. HD9281 (Optional)"
                       value={addForm.huid}
                       onChange={(e) => setAddForm({ ...addForm, huid: e.target.value.toUpperCase() })}
                     />
                   </div>
 
-                  {/* Notes */}
-                  <div className="form-group">
-                    <label className="form-label">Notes / Description</label>
+                  {/* Remarks / Notes */}
+                  <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                    <label className="form-label">Remarks / Description (Optional)</label>
                     <input
                       type="text"
                       className="form-input"
-                      placeholder="e.g. 22K CZ Designer Ring"
+                      placeholder="e.g. Opening Balance Bullion / Safe Vault (Optional)"
                       value={addForm.notes}
                       onChange={(e) => setAddForm({ ...addForm, notes: e.target.value })}
                     />
@@ -1227,7 +1184,7 @@ export const StockPage: React.FC = () => {
                   Cancel
                 </button>
                 <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
-                  {isSubmitting ? 'Saving to Database...' : 'Save Stock Item & Log Movement'}
+                  {isSubmitting ? 'Saving to Database...' : 'Save Metal Stock'}
                 </button>
               </div>
             </form>
@@ -1260,8 +1217,8 @@ export const StockPage: React.FC = () => {
                 <div className="detail-card">
                   <div className="detail-card-title">Specification</div>
                   <div className="detail-row">
-                    <span className="detail-row-label">Category</span>
-                    <span className="detail-row-value">{selectedItem.category_name}</span>
+                    <span className="detail-row-label">Item / Note</span>
+                    <span className="detail-row-value">{selectedItem.product_name || 'General Jewellery'}</span>
                   </div>
                   <div className="detail-row">
                     <span className="detail-row-label">Metal</span>

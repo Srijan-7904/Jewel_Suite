@@ -1,5 +1,5 @@
 // frontend/src/pages/settings/SettingsPage.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   settingsApi,
@@ -17,7 +17,10 @@ import {
   ShopReceivingAccount,
 } from '../../services/settings';
 import { rateApi } from '../../services/masters';
-import { CurrentRate } from '../../types';
+import { inventoryApi } from '../../services/inventory';
+import { CurrentRate, Metal, MetalPurity, StockItem, StockValuationResponse } from '../../types';
+import { toDecimal, formatWeight, formatFineWeight, formatCurrency } from '../../utils/precision';
+import Decimal from 'decimal.js';
 import { useAuth } from '../../context/AuthContext';
 import {
   Sliders,
@@ -43,6 +46,10 @@ import {
   Trash2,
   Edit2,
   Building2,
+  Boxes,
+  Scale,
+  Coins,
+  CheckCircle2,
 } from 'lucide-react';
 import './SettingsPage.css';
 
@@ -769,7 +776,7 @@ export const SettingsPage: React.FC = () => {
               onClick={() => handleTabChange('shop')}
             >
               <Store size={18} />
-              <span>Shop Profile</span>
+              <span>Shop Profile & Metal Stock</span>
             </button>
 
             <button

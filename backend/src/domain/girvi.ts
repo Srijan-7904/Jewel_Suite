@@ -12,6 +12,7 @@ export enum GirviLoanStatus {
 }
 
 export enum GirviInterestType {
+  DAILY_PERCENT = 'DAILY_PERCENT',
   MONTHLY_PERCENT = 'MONTHLY_PERCENT',
   ANNUAL_PERCENT = 'ANNUAL_PERCENT',
   FLAT_AMOUNT = 'FLAT_AMOUNT',
@@ -115,6 +116,10 @@ export interface GirviLoan {
   override_reason?: string | null;
   disbursement_date?: string | null;
   disbursed_by?: string | null;
+  disbursed_amount?: number | null;
+  upfront_deduction?: number;
+  tenure_days?: number | null;
+  tenure_period?: string | null;
   closure_date?: string | null;
   closed_by?: string | null;
   closure_notes?: string | null;

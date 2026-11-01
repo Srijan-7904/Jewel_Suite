@@ -214,18 +214,18 @@ export const SupplierLedgerPage: React.FC = () => {
 
           <div className="finance-card">
             <div className="finance-card-title">
-              <span>Total Credited (Purchases)</span>
+              <span>Total Jama / Credited (Purchases)</span>
               <ShoppingBag size={16} className="text-rose" />
             </div>
             <div className="finance-card-value text-rose">
               ₹{statement.total_credit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
             </div>
-            <div className="finance-card-sub">Shop purchases / liability</div>
+            <div className="finance-card-sub">Shop purchases / Jama liability</div>
           </div>
 
           <div className="finance-card">
             <div className="finance-card-title">
-              <span>Total Debited (Paid)</span>
+              <span>Total Baaki / Debited (Paid)</span>
               <ArrowUpRight size={16} className="text-emerald" />
             </div>
             <div className="finance-card-value text-emerald">
@@ -244,9 +244,9 @@ export const SupplierLedgerPage: React.FC = () => {
             </div>
             <div className="finance-card-sub">
               {statement.current_balance > 0
-                ? 'Payable (Shop owes supplier)'
+                ? 'Payable / Jama (Shop owes supplier - जमा)'
                 : statement.current_balance < 0
-                ? 'Advance Paid'
+                ? 'Advance Paid / Baaki (बाकी)'
                 : 'Account settled'}
             </div>
           </div>
@@ -262,8 +262,8 @@ export const SupplierLedgerPage: React.FC = () => {
               <th>Reference</th>
               <th>Description</th>
               <th>Payment Mode</th>
-              <th>Debit (Payment)</th>
-              <th>Credit (Purchase)</th>
+              <th>Debit / Baaki (Payment - बाकी)</th>
+              <th>Credit / Jama (Purchase - जमा)</th>
               <th>Payable Balance</th>
             </tr>
           </thead>
@@ -421,8 +421,8 @@ export const SupplierLedgerPage: React.FC = () => {
                       value={adjDirection}
                       onChange={(e) => setAdjDirection(e.target.value as any)}
                     >
-                      <option value="DEBIT">DEBIT (Reduces Shop Payable)</option>
-                      <option value="CREDIT">CREDIT (Increases Shop Payable)</option>
+                      <option value="DEBIT">Baaki / Debit (Payment / Reduces Shop Payable - बाकी)</option>
+                      <option value="CREDIT">Jama / Credit (Purchase / Increases Shop Payable - जमा)</option>
                     </select>
                   </div>
                   <div className="form-group">

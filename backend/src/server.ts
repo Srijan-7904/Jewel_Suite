@@ -16,7 +16,7 @@ export async function bootstrapApp(): Promise<express.Application> {
   console.log(`[Jewel Suite] Initializing backend in ${config.env} mode...`);
   console.log(`[Jewel Suite] Database path: ${config.dbPath}`);
 
-  // 1. Initialize DB and run migrations
+  // 1. Initialize DB and run migrations (including 016_add_girvi_daily_interest_and_tenure with foreign key fix)
   const db = getDb();
   const migrationResult = runMigrations(db);
   if (migrationResult.appliedCount > 0) {

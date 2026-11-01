@@ -319,9 +319,9 @@ export const PaymentsPage: React.FC = () => {
                       value={partyType}
                       onChange={(e) => handlePartyTypeChange(e.target.value as any)}
                     >
-                      <option value="CUSTOMER">Customer (Receipt / Credit)</option>
-                      <option value="SUPPLIER">Supplier (Payment / Debit)</option>
-                      <option value="KARIGAR">Karigar Artisan (Wages / Debit)</option>
+                      <option value="CUSTOMER">Customer (Receipt / Jama - जमा)</option>
+                      <option value="SUPPLIER">Supplier (Payment / Baaki - बाकी)</option>
+                      <option value="KARIGAR">Karigar Artisan (Wages / Baaki - बाकी)</option>
                     </select>
                   </div>
 

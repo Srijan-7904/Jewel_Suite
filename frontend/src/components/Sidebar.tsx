@@ -89,6 +89,7 @@ export const Sidebar: React.FC = () => {
       icon: <Boxes size={18} />,
       items: [
         { label: 'Stock & Showcase', path: '/inventory/stock' },
+        { label: 'Metal Stock Inward', path: '/inventory/metal-inward', badge: 'Inward' },
       ],
     },
     {
@@ -96,6 +97,7 @@ export const Sidebar: React.FC = () => {
       icon: <FileBarChart size={18} />,
       items: [
         { label: 'Daybook & Reports', path: '/reports' },
+        { label: 'Profit & Margin Analysis', path: '/reports/profit', badge: 'P&L' },
       ],
     },
     {
@@ -104,8 +106,6 @@ export const Sidebar: React.FC = () => {
       items: [
         { label: 'Customers', path: '/masters/customers' },
         { label: 'Suppliers', path: '/masters/suppliers' },
-        { label: 'Categories', path: '/masters/categories' },
-        { label: 'Products', path: '/masters/products' },
         { label: 'Au/Ag Rates', path: '/masters/rates', badge: 'Live' },
       ],
     },

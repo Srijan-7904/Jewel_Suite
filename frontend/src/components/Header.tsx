@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Database, ShieldCheck, LogOut, User as UserIcon, Clock } from 'lucide-react';
 import './Header.css';
 
 export const Header: React.FC = () => {
+  const navigate = useNavigate();
   const { user, logout, health } = useAuth();
   const [time, setTime] = useState<string>('');
 
@@ -46,7 +48,12 @@ export const Header: React.FC = () => {
           <span>{time}</span>
         </div>
 
-        <div className="user-profile-pill">
+        <div
+          className="user-profile-pill"
+          onClick={() => navigate('/system/settings?tab=shop')}
+          title="Open Shop Profile Settings"
+          style={{ cursor: 'pointer' }}
+        >
           <div className="user-avatar">
             <UserIcon size={14} />
           </div>

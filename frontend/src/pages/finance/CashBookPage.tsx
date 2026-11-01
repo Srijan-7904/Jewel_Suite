@@ -72,24 +72,24 @@ export const CashBookPage: React.FC = () => {
 
           <div className="finance-card">
             <div className="finance-card-title">
-              <span>Total Cash In (Receipts)</span>
+              <span>Total Cash In (Receipts / Jama - जमा)</span>
               <ArrowDownLeft size={16} className="text-emerald" />
             </div>
             <div className="finance-card-value text-emerald">
               ₹{data.total_cash_in.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
             </div>
-            <div className="finance-card-sub">Customer cash collections</div>
+            <div className="finance-card-sub">Customer cash collections (Jama)</div>
           </div>
 
           <div className="finance-card">
             <div className="finance-card-title">
-              <span>Total Cash Out (Paid)</span>
+              <span>Total Cash Out (Paid / Baaki - बाकी)</span>
               <ArrowUpRight size={16} className="text-rose" />
             </div>
             <div className="finance-card-value text-rose">
               ₹{data.total_cash_out.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
             </div>
-            <div className="finance-card-sub">Cash paid to karigars & vendors</div>
+            <div className="finance-card-sub">Cash paid to karigars & vendors (Baaki)</div>
           </div>
 
           <div className="finance-card" style={{ borderLeft: '3px solid #10b981' }}>
@@ -146,8 +146,8 @@ export const CashBookPage: React.FC = () => {
               <th>Voucher / Ref No</th>
               <th>Description</th>
               <th>Counter Party</th>
-              <th>Cash In (+)</th>
-              <th>Cash Out (-)</th>
+              <th>Cash In / Jama (जमा +)</th>
+              <th>Cash Out / Baaki (बाकी -)</th>
               <th>Running Drawer Balance</th>
             </tr>
           </thead>

@@ -41,6 +41,7 @@ export const createGirviLoanItemSchema = z.object({
   less_weight: z.number().nonnegative('Less weight cannot be negative').default(0),
   tunch_percent: z.number().min(0).max(100, 'Tunch % must be between 0 and 100'),
   valuation_rate: z.number().positive('Valuation rate per gram must be greater than zero'),
+  valuation_amount: z.number().nonnegative().optional(),
   pledged_value: z.number().nonnegative().optional(),
   notes: z.string().trim().nullable().optional(),
 });
@@ -50,8 +51,12 @@ export const createGirviLoanSchema = z.object({
   loan_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD').optional(),
   due_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Due date must be YYYY-MM-DD'),
   principal_amount: z.number().positive('Principal amount must be greater than zero'),
+  disbursed_amount: z.number().positive().optional(),
+  upfront_deduction: z.number().nonnegative().optional(),
+  tenure_days: z.number().int().positive().optional(),
+  tenure_period: z.string().trim().optional(),
   interest_rate: z.number().nonnegative('Interest rate cannot be negative'),
-  interest_type: z.enum(['MONTHLY_PERCENT', 'ANNUAL_PERCENT', 'FLAT_AMOUNT']).default('MONTHLY_PERCENT'),
+  interest_type: z.enum(['DAILY_PERCENT', 'MONTHLY_PERCENT', 'ANNUAL_PERCENT', 'FLAT_AMOUNT']).default('MONTHLY_PERCENT'),
   processing_fee: z.number().nonnegative().default(0),
   other_charges: z.number().nonnegative().default(0),
   ltv_percent: z.number().min(1).max(100).default(75.0),
@@ -103,7 +108,9 @@ export class GirviService {
         throw new BadRequestError(`Item '${item.description}' has invalid net weight (${netWeight}g)`);
       }
       const fineWeight = calculateFineWeight(netWeight, item.tunch_percent);
-      const valuationAmount = calculateItemValuation(fineWeight, item.valuation_rate);
+      const valuationAmount = item.valuation_amount && item.valuation_amount > 0
+        ? item.valuation_amount
+        : calculateItemValuation(fineWeight, item.valuation_rate);
       totalValuation += valuationAmount;
 
       return {
@@ -142,6 +149,9 @@ export class GirviService {
       0
     );
 
+    const disbursedAmount = validated.disbursed_amount ?? validated.principal_amount;
+    const upfrontDeduction = validated.upfront_deduction ?? Math.max(0, validated.principal_amount - disbursedAmount);
+
     return withTransaction(() => {
       // 4. Create Loan
       const loan = girviRepository.createLoan({
@@ -162,6 +172,10 @@ export class GirviService {
         max_allowed_loan: maxAllowedLoan,
         is_overridden: validated.override_ltv ? 1 : 0,
         override_reason: validated.override_reason || null,
+        disbursed_amount: disbursedAmount,
+        upfront_deduction: upfrontDeduction,
+        tenure_days: validated.tenure_days || null,
+        tenure_period: validated.tenure_period || null,
         notes: validated.notes || null,
         created_by: userId || null,
       });
@@ -241,22 +255,24 @@ export class GirviService {
     const now = new Date().toISOString();
     const today = now.substring(0, 10);
 
+    const payoutAmount = (loan.disbursed_amount && loan.disbursed_amount > 0) ? loan.disbursed_amount : loan.principal_amount;
+
     return withTransaction(() => {
-      // 1. Create Finance Payment Voucher (Shop pays customer)
+      // 1. Create Finance Payment Voucher (Shop pays customer the net disbursed cash amount)
       const pmt = financeRepository.createPayment({
         party_type: PartyType.CUSTOMER,
         party_id: loan.customer_id,
         payment_type: PaymentType.PAYMENT,
         payment_mode: paymentMode,
-        amount: loan.principal_amount,
+        amount: payoutAmount,
         payment_date: today,
         reference_type: 'GIRVI_LOAN',
         reference_id: loan.id,
-        notes: `Disbursement for Girvi Loan ${loan.loan_number}`,
+        notes: `Disbursement for Girvi Loan ${loan.loan_number} (Principal: ₹${loan.principal_amount}, Net Disbursed: ₹${payoutAmount})`,
         created_by: userId || null,
       });
 
-      // 2. Create Customer Ledger Debit entry (Customer owes shop this loan amount)
+      // 2. Create Customer Ledger Debit entry (Customer owes shop the sanctioned principal amount)
       financeRepository.createLedgerEntry({
         party_type: PartyType.CUSTOMER,
         party_id: loan.customer_id,
@@ -266,10 +282,27 @@ export class GirviService {
         reference_type: 'GIRVI_LOAN',
         reference_id: loan.id,
         reference_number: loan.loan_number,
-        description: `Girvi Loan Disbursement - ${loan.loan_number}`,
+        description: `Girvi Loan Disbursement - ${loan.loan_number} (Principal: ₹${loan.principal_amount})`,
         payment_method: paymentMode,
         created_by: userId || null,
       });
+
+      // 3. Record upfront deduction credit if applicable (e.g. advance interest or processing deduction)
+      if (loan.upfront_deduction && loan.upfront_deduction > 0) {
+        financeRepository.createLedgerEntry({
+          party_type: PartyType.CUSTOMER,
+          party_id: loan.customer_id,
+          entry_type: EntryType.OTHER,
+          debit_credit: DebitCredit.CREDIT,
+          amount: loan.upfront_deduction,
+          reference_type: 'GIRVI_LOAN',
+          reference_id: loan.id,
+          reference_number: loan.loan_number,
+          description: `Girvi Loan Upfront Interest/Deduction - ${loan.loan_number}`,
+          payment_method: paymentMode,
+          created_by: userId || null,
+        });
+      }
 
       // 3. Update Loan status to ACTIVE
       const updated = girviRepository.updateLoan(loan.id, {

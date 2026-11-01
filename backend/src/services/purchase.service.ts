@@ -11,7 +11,8 @@ import { metalRepository } from '../repositories/metal.repository.js';
 import { stockRepository } from '../repositories/stock.repository.js';
 import { stockMovementRepository } from '../repositories/stock_movement.repository.js';
 import { auditRepository } from '../repositories/audit.repository.js';
-import { withTransaction } from '../database/connection/db.js';
+import { v4 as uuidv4 } from 'uuid';
+import { getDb, withTransaction } from '../database/connection/db.js';
 import { calculatePurchaseItem, calculatePurchaseTotals } from '../utils/purchaseMath.js';
 import { toDecimal } from '../utils/precision.js';
 import { MovementType, StockStatus } from '../domain/stockStatus.js';
@@ -20,8 +21,42 @@ import { PartyType, EntryType, DebitCredit, PaymentType } from '../domain/financ
 import { BadRequestError, NotFoundError, ConflictError } from '../utils/errors.js';
 import { PaginatedResult } from '../repositories/customer.repository.js';
 
+export function resolveOrCreateProduct(productId?: string | null, itemName?: string | null): string {
+  const db = getDb();
+  if (productId && productId.trim()) {
+    const existing = productRepository.findById(productId.trim());
+    if (existing) return existing.id;
+  }
+  const cleanName = itemName?.trim() || '';
+  if (cleanName) {
+    const byName = db.prepare('SELECT id FROM products WHERE name = ? COLLATE NOCASE').get(cleanName) as
+      | { id: string }
+      | undefined;
+    if (byName) return byName.id;
+  } else {
+    const anyProd = db.prepare('SELECT id FROM products LIMIT 1').get() as { id: string } | undefined;
+    if (anyProd) return anyProd.id;
+  }
+
+  let cat = db.prepare('SELECT id FROM categories LIMIT 1').get() as { id: string } | undefined;
+  if (!cat) {
+    const catId = uuidv4();
+    db.prepare(`INSERT INTO categories (id, code, name, is_active) VALUES (?, 'GEN', 'General Jewellery', 1)`).run(catId);
+    cat = { id: catId };
+  }
+  const newProdId = uuidv4();
+  const displayName = cleanName || 'General Jewellery';
+  const safeCode = `ITM-${displayName.replace(/[^a-zA-Z0-9]/g, '').substring(0, 4).toUpperCase() || 'GEN'}-${Math.floor(1000 + Math.random() * 9000)}`;
+  db.prepare(`
+    INSERT INTO products (id, product_code, name, category_id, default_unit, is_active)
+    VALUES (?, ?, ?, ?, 'GMS', 1)
+  `).run(newProdId, safeCode, displayName, cat.id);
+  return newProdId;
+}
+
 export const purchaseItemSchema = z.object({
-  product_id: z.string().min(1, 'Product is required'),
+  product_id: z.string().trim().optional().default(''),
+  item_name: z.string().trim().optional().default('Jewellery Item'),
   metal_id: z.string().min(1, 'Metal is required'),
   purity_id: z.string().min(1, 'Purity is required'),
   tag_no: z.string().min(1, 'Tag number is required').trim().toUpperCase(),
@@ -96,8 +131,7 @@ export class PurchaseService {
       // Insert items if provided
       if (validated.items && validated.items.length > 0) {
         for (const itemInput of validated.items) {
-          const product = productRepository.findById(itemInput.product_id);
-          if (!product) throw new NotFoundError(`Product '${itemInput.product_id}' not found`);
+          const resolvedProductId = resolveOrCreateProduct(itemInput.product_id, itemInput.item_name);
 
           const calc = calculatePurchaseItem({
             gross_weight: itemInput.gross_weight,
@@ -111,11 +145,11 @@ export class PurchaseService {
 
           purchaseRepository.createItem({
             purchase_bill_id: bill.id,
-            product_id: itemInput.product_id,
+            product_id: resolvedProductId,
             metal_id: itemInput.metal_id,
             purity_id: itemInput.purity_id,
             tag_no: itemInput.tag_no,
-            item_name: product.name,
+            item_name: itemInput.item_name?.trim() || 'Jewellery Item',
             gross_weight: itemInput.gross_weight,
             less_weight: itemInput.less_weight,
             net_weight: calc.net_weight,
@@ -220,8 +254,7 @@ export class PurchaseService {
     }
 
     // Verify master records
-    const product = productRepository.findById(validated.product_id);
-    if (!product) throw new NotFoundError(`Product '${validated.product_id}' does not exist`);
+    const resolvedProductId = resolveOrCreateProduct(validated.product_id, validated.item_name);
 
     const metal = metalRepository.getMetalById(validated.metal_id);
     if (!metal) throw new NotFoundError(`Metal '${validated.metal_id}' does not exist`);
@@ -255,11 +288,11 @@ export class PurchaseService {
 
     purchaseRepository.createItem({
       purchase_bill_id: billId,
-      product_id: validated.product_id,
+      product_id: resolvedProductId,
       metal_id: validated.metal_id,
       purity_id: validated.purity_id,
       tag_no: validated.tag_no,
-      item_name: product.name,
+      item_name: validated.item_name?.trim() || 'Jewellery Item',
       gross_weight: validated.gross_weight,
       less_weight: validated.less_weight,
       net_weight: calc.net_weight,

@@ -86,6 +86,7 @@ html, body, #root {
   height: 100%;
   width: 100%;
   overflow: hidden;
+  text-transform: uppercase;
 }
 
 body {
@@ -95,6 +96,43 @@ body {
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  text-transform: uppercase;
+}
+
+/* ==========================================================================
+   GLOBAL UPPERCASE / ALL-CAPS SYSTEM (Jewellery ERP & POS Standard)
+   Enforces capital letters everywhere: from all form inputs & typing to all display text
+   ========================================================================== */
+input:not([type="password"]),
+textarea,
+select,
+button,
+optgroup,
+option {
+  text-transform: uppercase !important;
+}
+
+input::placeholder,
+textarea::placeholder,
+::placeholder {
+  text-transform: uppercase !important;
+}
+
+/* Ensure all text nodes, containers, tables, modals, badges & chips cascade uppercase */
+h1, h2, h3, h4, h5, h6,
+p, span, a, label, li,
+th, td, table,
+div, section, header, footer,
+nav, aside, main, article,
+.badge, .btn, .modal-dialog,
+.dropdown-menu, .search-results {
+  text-transform: uppercase;
+}
+
+@media print {
+  * {
+    text-transform: uppercase !important;
+  }
 }
 
 /* Custom Scrollbars for High-Density Tables */

@@ -84,13 +84,24 @@ export const salesPaymentSchema = z.object({
   purity_id: z.string().trim().nullable().optional(),
   reference_number: z.string().trim().nullable().optional(),
   notes: z.string().trim().nullable().optional(),
-  payer_type: z.enum(['CUSTOMER', 'EXISTING_PARTY', 'SUPPLIER', 'OTHER_PARTY', 'MANUAL_EXTERNAL']).default('CUSTOMER').optional(),
+  payer_type: z.enum([
+    'CUSTOMER',
+    'EXISTING_PARTY',
+    'SUPPLIER',
+    'OTHER_PARTY',
+    'MANUAL_EXTERNAL',
+    'CR_PARTY',
+    'DR_PARTY',
+    'SELF',
+    'ANOTHER_CUSTOMER',
+  ]).default('CUSTOMER').optional(),
   payer_name: z.string().trim().nullable().optional(),
   payer_bank: z.string().trim().nullable().optional(),
   received_in: z.string().trim().nullable().optional(),
   payer_party_id: z.string().trim().nullable().optional(),
 }).superRefine((val, ctx) => {
-  if (val.payer_type && val.payer_type !== 'CUSTOMER') {
+  const isSelf = !val.payer_type || val.payer_type === 'CUSTOMER' || val.payer_type === 'SELF';
+  if (!isSelf) {
     if (!val.payer_name || !val.payer_name.trim()) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -335,7 +346,7 @@ export class SalesService {
             reference_number: paymentInput.reference_number || null,
             notes: paymentNotes,
             payer_type: paymentInput.payer_type || 'CUSTOMER',
-            payer_name: paymentInput.payer_name || (paymentInput.payer_type === 'CUSTOMER' ? customer.name : null),
+            payer_name: paymentInput.payer_name || (!paymentInput.payer_type || paymentInput.payer_type === 'CUSTOMER' || paymentInput.payer_type === 'SELF' ? customer.name : null),
             payer_bank: paymentInput.payer_bank || null,
             received_in: paymentInput.received_in || null,
             payer_party_id: paymentInput.payer_party_id || null,
@@ -631,51 +642,68 @@ export class SalesService {
           payment_method: null,
           created_by: userId || null,
         });
+      }
 
-        // Credit customer for any upfront payments recorded on the invoice
-        if (updated.payments && updated.payments.length > 0) {
-          for (const pay of updated.payments) {
-            let voucherNotes = pay.notes || '';
-            const payerLabel = pay.payer_name && pay.payer_name !== updated.customer_name
-              ? `Paid by: ${pay.payer_name}${pay.payer_bank ? ` (${pay.payer_bank})` : ''}`
-              : '';
-            const recvLabel = pay.received_in ? `Received in: ${pay.received_in}` : '';
-            const parts = [payerLabel, recvLabel].filter(Boolean).join(' | ');
-            if (parts) {
-              voucherNotes = voucherNotes ? `${voucherNotes} [${parts}]` : parts;
-            }
+      // Customer is credited for old metal exchange inward purchase (reduces receivable or creates payable to customer)
+      if (updated.exchange_amount > 0) {
+        financeRepository.createLedgerEntry({
+          party_type: PartyType.CUSTOMER,
+          party_id: updated.customer_id,
+          entry_type: EntryType.PURCHASE,
+          debit_credit: DebitCredit.CREDIT,
+          amount: updated.exchange_amount,
+          reference_type: 'SALES_INVOICE',
+          reference_id: updated.id,
+          reference_number: updated.invoice_number,
+          description: `Old Metal Exchange Inward Purchase on Invoice ${updated.invoice_number}`,
+          payment_method: null,
+          created_by: userId || null,
+        });
+      }
 
-            const pmtRecord = financeRepository.createPayment({
-              party_type: PartyType.CUSTOMER,
-              party_id: updated.customer_id,
-              payment_type: PaymentType.RECEIPT,
-              payment_mode: pay.payment_mode as any,
-              amount: pay.amount,
-              reference_number: pay.reference_number || null,
-              payment_date: updated.invoice_date,
-              reference_type: 'SALES_INVOICE',
-              reference_id: updated.id,
-              payer_name: pay.payer_name || null,
-              payer_bank: pay.payer_bank || null,
-              received_in: pay.received_in || null,
-              notes: voucherNotes || `Upfront tender on invoice ${updated.invoice_number}`,
-              created_by: userId || null,
-            });
-
-            financeRepository.createLedgerEntry({
-              party_type: PartyType.CUSTOMER,
-              party_id: updated.customer_id,
-              entry_type: EntryType.SALE_PAYMENT,
-              debit_credit: DebitCredit.CREDIT,
-              amount: pay.amount,
-              reference_type: 'SALES_INVOICE',
-              reference_id: updated.id,
-              reference_number: pmtRecord.payment_number,
-              description: `Payment received (${pay.payment_mode}) - ${pmtRecord.payment_number}`,
-              payment_method: pay.payment_mode as any,
-              created_by: userId || null,
-            });
+      // Record payments
+      if (updated.payments && updated.payments.length > 0) {
+        for (const pay of updated.payments) {
+          let voucherNotes = pay.notes || '';
+          const payerLabel = pay.payer_name && pay.payer_name !== updated.customer_name
+            ? `Paid by: ${pay.payer_name}${pay.payer_bank ? ` (${pay.payer_bank})` : ''}`
+            : '';
+          const recvLabel = pay.received_in ? `Received in: ${pay.received_in}` : '';
+          const parts = [payerLabel, recvLabel].filter(Boolean).join(' | ');
+          if (parts) {
+            voucherNotes = voucherNotes ? `${voucherNotes} [${parts}]` : parts;
           }
+
+          const pmtRecord = financeRepository.createPayment({
+            party_type: PartyType.CUSTOMER,
+            party_id: updated.customer_id,
+            payment_type: PaymentType.RECEIPT,
+            payment_mode: pay.payment_mode as any,
+            amount: pay.amount,
+            reference_number: pay.reference_number || null,
+            payment_date: updated.invoice_date,
+            reference_type: 'SALES_INVOICE',
+            reference_id: updated.id,
+            payer_name: pay.payer_name || null,
+            payer_bank: pay.payer_bank || null,
+            received_in: pay.received_in || null,
+            notes: voucherNotes || `Upfront tender on invoice ${updated.invoice_number}`,
+            created_by: userId || null,
+          });
+
+          financeRepository.createLedgerEntry({
+            party_type: PartyType.CUSTOMER,
+            party_id: updated.customer_id,
+            entry_type: EntryType.SALE_PAYMENT,
+            debit_credit: DebitCredit.CREDIT,
+            amount: pay.amount,
+            reference_type: 'SALES_INVOICE',
+            reference_id: updated.id,
+            reference_number: pmtRecord.payment_number,
+            description: `Payment received (${pay.payment_mode}) - ${pmtRecord.payment_number}`,
+            payment_method: pay.payment_mode as any,
+            created_by: userId || null,
+          });
         }
       }
 
