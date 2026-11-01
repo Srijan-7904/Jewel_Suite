@@ -8,33 +8,24 @@ import { reportsApi, DashboardMetricsData } from '../services/reports';
 import { CurrentRate, StockValuationResponse, FinanceSummary, Metal, MetalPurity } from '../types';
 import {
   TrendingUp,
-  Receipt,
   Scale,
   ShieldCheck,
   Database,
   Layers,
   Sparkles,
   Wallet,
-  ArrowDownLeft,
-  ArrowUpRight,
   Coins,
-  BadgePercent,
   Plus,
   Edit3,
-  Calendar,
   RefreshCw,
   X,
   CheckCircle2,
   ArrowRight,
-  Calculator,
   Flame,
   Check,
   SlidersHorizontal,
   Eye,
   EyeOff,
-  ShoppingBag,
-  ShoppingCart,
-  ArrowLeftRight,
   ChevronDown,
   ChevronUp,
 } from 'lucide-react';
@@ -217,16 +208,6 @@ export const DashboardPage: React.FC = () => {
     }
   };
 
-  const handleInlineGold10gChange = (val: string) => {
-    setInlineGold10g(val);
-    const num = parseFloat(val);
-    if (!isNaN(num) && num > 0) {
-      setInlineGoldGram(String(Math.round((num / 10) * 100) / 100));
-    } else {
-      setInlineGoldGram('');
-    }
-  };
-
   const handleInlineSilverGramChange = (val: string) => {
     setInlineSilverGram(val);
     const num = parseFloat(val);
@@ -234,16 +215,6 @@ export const DashboardPage: React.FC = () => {
       setInlineSilver1kg(String(Math.round(num * 1000 * 100) / 100));
     } else {
       setInlineSilver1kg('');
-    }
-  };
-
-  const handleInlineSilver1kgChange = (val: string) => {
-    setInlineSilver1kg(val);
-    const num = parseFloat(val);
-    if (!isNaN(num) && num > 0) {
-      setInlineSilverGram(String(Math.round((num / 1000) * 100) / 100));
-    } else {
-      setInlineSilverGram('');
     }
   };
 
@@ -302,7 +273,7 @@ export const DashboardPage: React.FC = () => {
       if (silverNum > 0) {
         const silverMetal = metals.find((m) => m.code?.toUpperCase() === 'SILVER' || m.name?.toLowerCase().includes('silver'));
         const silverPurities = purities.filter((p) => p.metal_id === silverMetal?.id);
-        const targetSilverPurity = silverPurities.find((p) => p.code === '999' || p.purity_name?.includes('999') || p.name?.includes('999')) || silverPurities[0];
+        const targetSilverPurity = silverPurities.find((p) => p.code === '999' || p.name?.includes('999')) || silverPurities[0];
 
         if (silverMetal && targetSilverPurity) {
           await rateApi.createRate({

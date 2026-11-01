@@ -3,14 +3,12 @@ import {
   StockItem,
   StockMovement,
   StockValuationResponse,
-  Product,
-  Category,
   Metal,
   MetalPurity,
   CurrentRate,
 } from '../../types';
 import { inventoryApi } from '../../services/inventory';
-import { productApi, categoryApi, rateApi } from '../../services/masters';
+import { rateApi } from '../../services/masters';
 import {
   Boxes,
   Plus,
@@ -101,8 +99,6 @@ export const StockPage: React.FC = () => {
   const [valuation, setValuation] = useState<StockValuationResponse | null>(null);
 
   // Reference Masters for Dropdowns
-  const [products, setProducts] = useState<Product[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
   const [metals, setMetals] = useState<Metal[]>([]);
   const [purities, setPurities] = useState<MetalPurity[]>([]);
   const [currentRates, setCurrentRates] = useState<CurrentRate[]>([]);
@@ -113,7 +109,7 @@ export const StockPage: React.FC = () => {
   const [pageSize] = useState(15);
   const [totalPages, setTotalPages] = useState(1);
   const [search, setSearch] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState('ALL');
+  const [categoryFilter] = useState('ALL');
   const [metalFilter, setMetalFilter] = useState('ALL');
   const [purityFilter, setPurityFilter] = useState('ALL');
   const [statusFilter, setStatusFilter] = useState('ALL');
@@ -147,8 +143,6 @@ export const StockPage: React.FC = () => {
 
   // Initial Data Fetch
   useEffect(() => {
-    productApi.list({ pageSize: 100 }).then((res) => setProducts(res.items)).catch(console.error);
-    categoryApi.getAll(true).then(setCategories).catch(console.error);
     rateApi.getMetals().then(setMetals).catch(console.error);
     rateApi.getAllPurities().then(setPurities).catch(console.error);
     rateApi.getCurrentRates().then(setCurrentRates).catch(console.error);
@@ -243,42 +237,6 @@ export const StockPage: React.FC = () => {
     }
   }, [addForm.gross_weight, addForm.less_weight, addForm.tunch_percent, addForm.rate_per_gram]);
 
-  // Handle Product Select in Add Form (Auto-fills defaults)
-  const handleProductChange = (productId: string) => {
-    const prod = products.find((p) => p.id === productId);
-    if (!prod) return;
-
-    let targetMetalId = addForm.metal_id;
-    if (prod.default_metal) {
-      const m = metals.find((met) => met.code === prod.default_metal);
-      if (m) targetMetalId = m.id;
-    }
-
-    let targetPurityId = addForm.purity_id;
-    let tunch = addForm.tunch_percent;
-    let rate = addForm.rate_per_gram;
-
-    if (targetMetalId && prod.default_purity) {
-      const p = purities.find((pur) => pur.metal_id === targetMetalId && pur.code === prod.default_purity);
-      if (p) {
-        targetPurityId = p.id;
-        if (p.tunch_percent !== null) tunch = p.tunch_percent.toString();
-
-        const cr = currentRates.find((r) => r.metal_id === targetMetalId && r.purity_id === p.id);
-        if (cr) rate = cr.rate.toString();
-      }
-    }
-
-    setAddForm((prev) => ({
-      ...prev,
-      product_id: productId,
-      metal_id: targetMetalId,
-      purity_id: targetPurityId,
-      tunch_percent: tunch,
-      rate_per_gram: rate,
-    }));
-  };
-
   // Handle Metal Change
   const handleMetalChange = (metalId: string) => {
     const pList = purities.filter((p) => p.metal_id === metalId);
@@ -352,33 +310,6 @@ export const StockPage: React.FC = () => {
 
     setFormError(null);
     setShowAddModal(true);
-  };
-
-  const handleMakingChange = (rateStr: string, type: 'FIXED' | 'PER_PIECE' | 'PER_GRAM' | 'PERCENTAGE') => {
-    const rateDec = toDecimal(rateStr);
-    const gross = toDecimal(addForm.gross_weight);
-    const less = toDecimal(addForm.less_weight);
-    const net = Decimal.max(0, gross.minus(less));
-    const tunch = toDecimal(addForm.tunch_percent);
-    const rate = toDecimal(addForm.rate_per_gram);
-    const fine = net.times(tunch).dividedBy(100);
-    const metalVal = fine.times(rate);
-
-    let calculatedMaking = rateDec;
-    if (type === 'PER_GRAM') {
-      calculatedMaking = net.times(rateDec);
-    } else if (type === 'PERCENTAGE') {
-      calculatedMaking = metalVal.times(rateDec).dividedBy(100);
-    } else if (type === 'PER_PIECE' || type === 'FIXED') {
-      calculatedMaking = rateDec;
-    }
-
-    setAddForm((prev) => ({
-      ...prev,
-      making_charge_type: type,
-      making_rate: rateStr,
-      making_charge: calculatedMaking.toDecimalPlaces(2).toString(),
-    }));
   };
 
   // Submit Add Stock

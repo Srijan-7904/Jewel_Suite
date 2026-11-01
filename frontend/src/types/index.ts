@@ -439,7 +439,7 @@ export interface CreatePurchaseInput {
 }
 
 export interface AddPurchaseItemInput {
-  product_id: string;
+  product_id?: string;
   item_name?: string;
   metal_id: string;
   purity_id: string;

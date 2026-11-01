@@ -4,7 +4,6 @@ import {
   User,
   Phone,
   MapPin,
-  Mail,
   Receipt,
   ArrowDownLeft,
   Scale,
@@ -12,10 +11,8 @@ import {
   FileText,
   ExternalLink,
   Loader2,
-  Calendar,
   AlertTriangle,
   CheckCircle,
-  Building,
 } from 'lucide-react';
 import { Customer, LedgerEntry, PartyStatementSummary, PartyMetalBalanceSummary } from '../types';
 import { financeApi } from '../services/finance';
@@ -81,7 +78,6 @@ export const CustomerDetailsModal: React.FC<CustomerDetailsModalProps> = ({
 
   const isDebit = netBalance > 0;
   const isCredit = netBalance < 0;
-  const isSettled = netBalance === 0;
 
   const totalDebit =
     statement?.total_debit !== undefined
@@ -303,16 +299,16 @@ export const CustomerDetailsModal: React.FC<CustomerDetailsModalProps> = ({
                         return (
                           <tr key={entry.id}>
                             <td className="font-mono text-xs whitespace-nowrap">
-                              {entry.entry_date || entry.created_at?.split('T')[0] || '—'}
+                              {entry.created_at?.split('T')[0] || '—'}
                             </td>
                             <td className="font-mono text-xs">
-                              <span className="voucher-pill">{entry.reference_number || entry.voucher_no || '—'}</span>
+                              <span className="voucher-pill">{entry.reference_number || '—'}</span>
                             </td>
                             <td className="particulars-cell">
-                              <span className="entry-desc">{entry.description || entry.notes || entry.entry_type}</span>
+                              <span className="entry-desc">{entry.description || entry.entry_type}</span>
                             </td>
                             <td className="font-mono text-xs">
-                              {entry.payment_method || entry.payment_mode || '—'}
+                              {entry.payment_method || '—'}
                             </td>
                             <td className="text-right font-mono text-rose font-semibold">
                               {isDebitEntry ? `₹${Number(entry.amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}

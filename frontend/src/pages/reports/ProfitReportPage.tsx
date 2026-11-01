@@ -5,7 +5,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { reportsApi, SalesSummaryData, SalesRegisterItem, PurchaseSummaryData } from '../../services/reports';
 import { inventoryApi } from '../../services/inventory';
 import { StockValuationResponse } from '../../types';
-import { toDecimal, formatCurrency, formatWeight } from '../../utils/precision';
+import { toDecimal, formatCurrency } from '../../utils/precision';
 import Decimal from 'decimal.js';
 import {
   TrendingUp,
@@ -13,11 +13,8 @@ import {
   Wallet,
   ArrowUpRight,
   Receipt,
-  FileSpreadsheet,
-  Calendar,
   RefreshCw,
   Coins,
-  ShieldCheck,
 } from 'lucide-react';
 import './ProfitReportPage.css';
 
@@ -68,7 +65,7 @@ export const ProfitReportPage: React.FC = () => {
   // Profit Metrics Calculations
   const metrics = useMemo(() => {
     const netSales = toDecimal(salesSummary?.netSales || 0);
-    const purchases = toDecimal(purchaseSummary?.netPurchases || 0);
+    const purchases = toDecimal(purchaseSummary?.taxablePurchase || purchaseSummary?.totalPurchase || 0);
 
     // In retail jewellery, typical cost of goods is estimated from invoice items or purchase base
     // If purchases are recorded for the period, use purchase cost; otherwise benchmark standard 85-88% raw bullion cost

@@ -45,7 +45,6 @@ import {
   Banknote,
   MapPin,
   Phone,
-  AlertTriangle,
   Scale,
 } from 'lucide-react';
 import './CreateInvoicePage.css';
@@ -347,26 +346,15 @@ export const PurchaseBillsPage: React.FC = () => {
         setSupplierId(supList[0].id);
       }
 
-      // Find standard 22K 916 gold rate
-      const goldRate =
-        currentRates.find(
-          (r) =>
-            (r.metal_name?.toUpperCase().includes('GOLD') || r.metal_code === 'GOLD') &&
-            (r.purity_name?.includes('22') || r.purity_name?.includes('916'))
-        ) ||
-        currentRates.find((r) => r.metal_name?.toUpperCase().includes('GOLD') || r.metal_code === 'GOLD') ||
-        currentRates[0];
-
-      const defaultMetalId = goldRate?.metal_id || allMetals[0]?.id || '';
-      const defGoldMetal = metalList.find(
+      const defGoldMetal = allMetals.find(
         (m: any) => m.code?.toUpperCase() === 'GOLD' || m.name?.toLowerCase().includes('gold')
-      ) || metalList[0];
+      ) || allMetals[0];
       const defGoldPurity = allPurities.find(
         (p: any) =>
           p.metal_id === defGoldMetal?.id &&
           (p.code?.toUpperCase() === '24K' || p.name?.toLowerCase().includes('24k') || p.code === '999')
       ) || allPurities.find((p: any) => p.metal_id === defGoldMetal?.id);
-      const defRateObj = rateList.find((r: any) => r.purity_id === defGoldPurity?.id);
+      const defRateObj = currentRates.find((r: any) => r.purity_id === defGoldPurity?.id);
       const defRate = defRateObj?.rate ? defRateObj.rate : '';
 
       // Ensure initial purchase row is defaulted with today's 24K rate and weights/charges 0
