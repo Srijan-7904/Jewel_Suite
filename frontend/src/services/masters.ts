@@ -206,8 +206,8 @@ export const productApi = {
 };
 
 export const rateApi = {
-  getMetals(): Promise<Metal[]> {
-    return request<Metal[]>('/api/rates/metals');
+  getMetals(all = false): Promise<Metal[]> {
+    return request<Metal[]>(`/api/rates/metals${all ? '?all=true' : ''}`);
   },
 
   getPuritiesByMetal(metalId: string): Promise<MetalPurity[]> {

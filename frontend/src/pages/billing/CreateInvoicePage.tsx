@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import Decimal from 'decimal.js';
 import { salesApi, SalesInvoiceDetails } from '../../services/sales';
 import { customerApi, rateApi, supplierApi } from '../../services/masters';
+import { inventoryApi } from '../../services/inventory';
 import { settingsApi, ShopProfile, ShopReceivingAccount } from '../../services/settings';
-import { Customer, CurrentRate, Metal, MetalPurity, Supplier } from '../../types';
+import { Customer, CurrentRate, Metal, MetalPurity, Supplier, StockItem } from '../../types';
 import {
   toDecimal,
   formatWeight,
@@ -72,6 +73,7 @@ export const COMMON_INDIAN_BANKS = [
 
 interface SaleItemRow {
   id: string;
+  stock_item_id?: string;
   tag_no: string;
   item_name: string;
   metal_id: string;
@@ -165,11 +167,40 @@ export const CreateInvoicePage: React.FC = () => {
   const [notes, setNotes] = useState('');
 
   // Notifications
-  const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
-  const showToast = (type: 'success' | 'error', message: string) => {
+  const [toast, setToast] = useState<{ type: 'success' | 'error' | 'warning' | 'info'; message: string } | null>(null);
+  const showToast = (type: 'success' | 'error' | 'warning' | 'info', message: string) => {
     setToast({ type, message });
     setTimeout(() => setToast(null), 4000);
   };
+
+  // In-Stock Inventory Tracking & Tag Selection
+  const [stockItems, setStockItems] = useState<StockItem[]>([]);
+  const [activeTagDropdownRowId, setActiveTagDropdownRowId] = useState<string | null>(null);
+  const tagDropdownRef = useRef<HTMLDivElement | null>(null);
+
+  const fetchInStockItems = useCallback(async () => {
+    try {
+      const res = await inventoryApi.list({ status: 'IN_STOCK', pageSize: 200 });
+      setStockItems(res.items || []);
+    } catch (err) {
+      console.warn('Failed to load in-stock items', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchInStockItems();
+  }, [fetchInStockItems]);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('.tag-input-cell')) {
+        setActiveTagDropdownRowId(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Submission State
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -376,6 +407,7 @@ export const CreateInvoicePage: React.FC = () => {
           setSaleItems(
             inv.items.map((it, idx) => ({
               id: it.id || `item-draft-${idx}`,
+              stock_item_id: (it as any).stock_item_id || undefined,
               tag_no: it.tag_no || '',
               item_name: it.item_name,
               metal_id: it.metal_id || '',
@@ -813,6 +845,80 @@ export const CreateInvoicePage: React.FC = () => {
         return updated;
       })
     );
+  };
+
+  // Select In-Stock inventory item and populate all fields
+  const handleSelectStockItem = (rowId: string, stock: StockItem) => {
+    const metal = metals.find((m) => m.id === stock.metal_id || m.code?.toUpperCase() === stock.metal_code?.toUpperCase());
+    const purity = purities.find((p) => p.id === stock.purity_id || p.code?.toUpperCase() === stock.purity_code?.toUpperCase());
+
+    const isGold = (stock.metal_code || metal?.code || '').toUpperCase().includes('GOLD');
+    const baseBenchmark = isGold
+      ? rates.find((r) => r.metal_code?.toUpperCase() === 'GOLD' && (r.purity_code?.toUpperCase() === '24K' || r.purity_name?.includes('24K') || r.purity_name?.includes('999')))
+      : rates.find((r) => r.metal_code?.toUpperCase() === 'SILVER' && (r.purity_code === '999' || r.purity_name?.includes('999')));
+
+    const rateVal = baseBenchmark && baseBenchmark.rate > 0
+      ? baseBenchmark.rate
+      : (rates.find((r) => r.purity_id === stock.purity_id)?.rate || stock.rate_per_gram || '');
+
+    handleUpdateSaleRow(rowId, {
+      stock_item_id: stock.id,
+      tag_no: stock.tag_no,
+      item_name: stock.product_name || stock.notes || stock.tag_no,
+      metal_id: metal?.id || stock.metal_id,
+      metal_name: metal?.name || stock.metal_name || 'Gold',
+      purity_id: purity?.id || stock.purity_id,
+      purity_name: purity?.name || stock.purity_name || '',
+      tunch_percent: stock.tunch_percent || purity?.tunch_percent || 91.6,
+      gross_weight: stock.gross_weight,
+      less_weight: stock.less_weight || 0,
+      wastage_percent: stock.wastage_percent || 0,
+      making_rate: stock.making_charge || 0,
+      rate_per_gram: billType === 'WHOLESALE' ? 0 : rateVal,
+      huid: stock.huid || '',
+      notes: stock.notes || undefined,
+    });
+
+    setActiveTagDropdownRowId(null);
+    showToast('success', `Tag ${stock.tag_no} selected from Stock Inventory!`);
+  };
+
+  // Lookup tag on blur / barcode scan
+  const handleTagInputBlur = async (rowId: string, typedTag: string) => {
+    const trimmed = (typedTag || '').trim().toUpperCase();
+    if (!trimmed) {
+      handleUpdateSaleRow(rowId, { stock_item_id: undefined });
+      return;
+    }
+
+    // 1. Check local loaded in-stock cache
+    const localMatch = stockItems.find((s) => s.tag_no.toUpperCase() === trimmed);
+    if (localMatch) {
+      handleSelectStockItem(rowId, localMatch);
+      return;
+    }
+
+    // 2. Query remote API
+    try {
+      const remoteStock = await inventoryApi.getByTag(trimmed);
+      if (remoteStock) {
+        if (remoteStock.status === 'IN_STOCK') {
+          handleSelectStockItem(rowId, remoteStock);
+        } else if (remoteStock.status === 'SOLD') {
+          showToast('error', `⚠️ Warning: Tag ${trimmed} is already marked as SOLD in inventory!`);
+        } else {
+          showToast('warning', `Tag ${trimmed} has status: ${remoteStock.status}`);
+          handleSelectStockItem(rowId, remoteStock);
+        }
+      }
+    } catch {
+      // Custom counter tag
+    }
+  };
+
+  const handleUnlinkStock = (rowId: string) => {
+    handleUpdateSaleRow(rowId, { stock_item_id: undefined });
+    showToast('info', 'Unlinked from stock item. Line item is now an unlinked custom item.');
   };
 
   // Helper to add exchange row - defaults to today's active 24K board rate, all weights & charges default to 0
@@ -2076,6 +2182,7 @@ export const CreateInvoicePage: React.FC = () => {
           }
 
           return {
+            stock_item_id: item.stock_item_id || undefined,
             tag_no: item.tag_no.trim(),
             item_name: item.item_name.trim(),
             metal_id: item.metal_id,
@@ -2150,6 +2257,7 @@ export const CreateInvoicePage: React.FC = () => {
       if (finalize) {
         try {
           await salesApi.finalize(created.id);
+          fetchInStockItems();
           const finalizedDetails = await salesApi.getDetails(created.id);
           showToast('success', `Invoice ${created.invoice_number} finalized and stock updated!`);
           setCreatedInvoice(finalizedDetails);
@@ -2547,15 +2655,130 @@ export const CreateInvoicePage: React.FC = () => {
                       <td className="text-center">
                         <div className="grid-index-cell font-mono text-muted text-xs">{idx + 1}</div>
                       </td>
-                      <td>
-                        <input
-                          type="text"
-                          className={`grid-input font-mono text-xs text-gold uppercase ${!item.tag_no?.trim() ? 'input-field-required' : ''}`}
-                          value={item.tag_no ?? ''}
-                          onChange={(e) => handleUpdateSaleRow(item.id, { tag_no: e.target.value })}
-                          placeholder="TAG NO *"
-                          required
-                        />
+                      <td className="tag-input-cell">
+                        <div className="tag-field-container">
+                          <input
+                            type="text"
+                            className={`grid-input font-mono text-xs text-gold uppercase ${!item.tag_no?.trim() ? 'input-field-required' : ''} ${item.stock_item_id ? 'input-stock-linked' : ''}`}
+                            value={item.tag_no ?? ''}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              handleUpdateSaleRow(item.id, { tag_no: val });
+                              setActiveTagDropdownRowId(item.id);
+                            }}
+                            onFocus={() => setActiveTagDropdownRowId(item.id)}
+                            onBlur={(e) => {
+                              const val = e.target.value;
+                              setTimeout(() => {
+                                handleTagInputBlur(item.id, val);
+                              }, 200);
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                handleTagInputBlur(item.id, item.tag_no);
+                                setActiveTagDropdownRowId(null);
+                              } else if (e.key === 'Escape') {
+                                setActiveTagDropdownRowId(null);
+                              }
+                            }}
+                            placeholder="TAG NO *"
+                            title="Enter or select an in-stock tag from inventory"
+                            required
+                          />
+                          {item.stock_item_id && (
+                            <div
+                              className="tag-stock-badge in-stock"
+                              title="Linked to in-stock inventory. Stock will be marked SOLD on invoice finalization."
+                            >
+                              <span>✓ In-Stock</span>
+                              <button
+                                type="button"
+                                className="tag-unlink-btn"
+                                title="Unlink from inventory item"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleUnlinkStock(item.id);
+                                }}
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* In-Stock Autocomplete Suggestions Flyout */}
+                        {activeTagDropdownRowId === item.id && (
+                          <div className="tag-suggestions-flyout" ref={tagDropdownRef}>
+                            <div className="tag-flyout-header">
+                              <span>📦 Available In-Stock ({stockItems.length})</span>
+                              <button
+                                type="button"
+                                className="tag-flyout-close"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setActiveTagDropdownRowId(null);
+                                }}
+                              >
+                                ✕
+                              </button>
+                            </div>
+                            <div className="tag-flyout-list">
+                              {stockItems
+                                .filter((s) => {
+                                  const q = (item.tag_no || '').trim().toUpperCase();
+                                  if (!q) return true;
+                                  return (
+                                    s.tag_no.toUpperCase().includes(q) ||
+                                    (s.product_name && s.product_name.toUpperCase().includes(q)) ||
+                                    (s.metal_name && s.metal_name.toUpperCase().includes(q))
+                                  );
+                                })
+                                .slice(0, 8)
+                                .map((stock) => (
+                                  <div
+                                    key={stock.id}
+                                    className="tag-suggestion-item"
+                                    onMouseDown={(e) => {
+                                      e.preventDefault();
+                                      handleSelectStockItem(item.id, stock);
+                                    }}
+                                  >
+                                    <div>
+                                      <div className="tag-suggestion-title">
+                                        <span className="font-mono font-bold text-gold">{stock.tag_no}</span>
+                                        <span className="font-semibold text-main text-xs">
+                                          {stock.product_name || stock.notes || 'Jewellery Item'}
+                                        </span>
+                                      </div>
+                                      <div className="tag-suggestion-meta">
+                                        {stock.metal_name || 'Gold'} • {stock.purity_name || `${stock.tunch_percent}%`} • Gross: {stock.gross_weight}g | Net: {stock.net_weight}g
+                                      </div>
+                                    </div>
+                                    <span className="badge-in-stock-pill">
+                                      In Stock
+                                    </span>
+                                  </div>
+                                ))}
+                              {stockItems.filter((s) => {
+                                const q = (item.tag_no || '').trim().toUpperCase();
+                                if (!q) return true;
+                                return (
+                                  s.tag_no.toUpperCase().includes(q) ||
+                                  (s.product_name && s.product_name.toUpperCase().includes(q)) ||
+                                  (s.metal_name && s.metal_name.toUpperCase().includes(q))
+                                );
+                              }).length === 0 && (
+                                <div className="p-3 text-center text-xs text-muted">
+                                  No matching in-stock tags.
+                                  <div className="text-[10px] mt-1 text-amber-400">
+                                    Custom tag will be recorded as direct counter sale.
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
                       </td>
                       <td>
                         <input

@@ -1,10 +1,33 @@
 // frontend/src/services/settings.ts
 import { request, getApiUrl } from './api';
+import { Metal } from '../types';
 
 export type UserRole = 'ADMIN' | 'STAFF';
 export type TaxMode = 'INCLUSIVE' | 'EXCLUSIVE' | 'NO_TAX';
 export type PageSize = 'A4' | 'A5' | 'THERMAL';
 export type AMCStatus = 'ACTIVE' | 'EXPIRING_SOON' | 'EXPIRED' | 'GRACE_PERIOD' | 'SUSPENDED';
+
+export interface InvoiceColumnSettings {
+  show_tag_no: boolean;
+  show_tunch: boolean;
+  show_less_weight: boolean;
+  show_net_weight: boolean;
+  show_badla: boolean;
+  show_wastage: boolean;
+  show_making_charge: boolean;
+  show_fine_weight: boolean;
+}
+
+export const DEFAULT_INVOICE_COLUMN_SETTINGS: InvoiceColumnSettings = {
+  show_tag_no: true,
+  show_tunch: true,
+  show_less_weight: true,
+  show_net_weight: true,
+  show_badla: true,
+  show_wastage: true,
+  show_making_charge: true,
+  show_fine_weight: true,
+};
 
 export interface ShopProfile {
   id: string;
@@ -258,6 +281,25 @@ export const settingsApi = {
     });
   },
 
+  // Store Dealing Metals Configuration (Gold, Silver, Diamond, Platinum)
+  getMetals(activeOnly = false): Promise<Metal[]> {
+    return request<Metal[]>(`/api/settings/metals${activeOnly ? '?activeOnly=true' : ''}`);
+  },
+
+  toggleMetal(code: string, is_active: boolean): Promise<Metal> {
+    return request<Metal>(`/api/settings/metals/${code}/toggle`, {
+      method: 'PUT',
+      body: JSON.stringify({ is_active }),
+    });
+  },
+
+  updateActiveMetals(enabled_metals: string[]): Promise<Metal[]> {
+    return request<Metal[]>('/api/settings/metals', {
+      method: 'PUT',
+      body: JSON.stringify({ enabled_metals }),
+    });
+  },
+
   // Shop Receiving Accounts
   getReceivingAccounts(): Promise<ShopReceivingAccount[]> {
     return request<ShopReceivingAccount[]>('/api/settings/receiving-accounts');
@@ -277,6 +319,18 @@ export const settingsApi = {
 
   updatePrinting(data: Partial<PrintSettings>): Promise<PrintSettings> {
     return request<PrintSettings>('/api/settings/printing', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+
+  // Invoice Columns & Optional Fields Configuration
+  getInvoiceColumns(): Promise<InvoiceColumnSettings> {
+    return request<InvoiceColumnSettings>('/api/settings/invoice-columns');
+  },
+
+  updateInvoiceColumns(data: Partial<InvoiceColumnSettings>): Promise<InvoiceColumnSettings> {
+    return request<InvoiceColumnSettings>('/api/settings/invoice-columns', {
       method: 'PUT',
       body: JSON.stringify(data),
     });

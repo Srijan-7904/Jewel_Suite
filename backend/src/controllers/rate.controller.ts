@@ -3,9 +3,10 @@ import { rateService } from '../services/rate.service.js';
 import { sendSuccess } from '../utils/response.js';
 
 export class RateController {
-  async getMetals(_req: Request, res: Response, next: NextFunction): Promise<void> {
+  async getMetals(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const metals = rateService.getMetals();
+      const all = req.query.all === 'true' || req.query.activeOnly === 'false';
+      const metals = rateService.getMetals(!all);
       sendSuccess(res, metals);
     } catch (err) {
       next(err);

@@ -14,9 +14,11 @@ import {
   AboutSystemInfo,
   UserDetail,
   ShopReceivingAccount,
+  InvoiceColumnSettings,
+  DEFAULT_INVOICE_COLUMN_SETTINGS,
 } from '../../services/settings';
 import { rateApi } from '../../services/masters';
-import { CurrentRate } from '../../types';
+import { CurrentRate, Metal } from '../../types';
 import { useAuth } from '../../context/AuthContext';
 import {
   Sliders,
@@ -42,6 +44,8 @@ import {
   Trash2,
   Edit2,
   Building2,
+  Sparkles,
+  Columns,
 } from 'lucide-react';
 import './SettingsPage.css';
 
@@ -91,6 +95,10 @@ export const SettingsPage: React.FC = () => {
   const [about, setAbout] = useState<AboutSystemInfo | null>(null);
   const [userList, setUserList] = useState<UserDetail[]>([]);
   const [receivingAccounts, setReceivingAccounts] = useState<ShopReceivingAccount[]>([]);
+  const [storeMetals, setStoreMetals] = useState<Metal[]>([]);
+  const [togglingMetal, setTogglingMetal] = useState<string | null>(null);
+  const [invoiceColumns, setInvoiceColumns] = useState<InvoiceColumnSettings>(DEFAULT_INVOICE_COLUMN_SETTINGS);
+  const [togglingColumn, setTogglingColumn] = useState<string | null>(null);
   const [showAccountModal, setShowAccountModal] = useState<boolean>(false);
   const [editingAccount, setEditingAccount] = useState<ShopReceivingAccount | null>(null);
   const [accountForm, setAccountForm] = useState<{
@@ -173,6 +181,8 @@ export const SettingsPage: React.FC = () => {
         amcData,
         aboutData,
         receivingAccountsData,
+        metalsData,
+        invoiceColumnsData,
       ] = await Promise.all([
         settingsApi.getShopProfile().catch((e) => {
           console.warn('Failed to load shop profile:', e);
@@ -214,7 +224,18 @@ export const SettingsPage: React.FC = () => {
           console.warn('Failed to load receiving accounts:', e);
           return [] as ShopReceivingAccount[];
         }),
+        settingsApi.getMetals(false).catch((e) => {
+          console.warn('Failed to load metals configuration:', e);
+          return [] as Metal[];
+        }),
+        settingsApi.getInvoiceColumns().catch((e) => {
+          console.warn('Failed to load invoice column configuration:', e);
+          return DEFAULT_INVOICE_COLUMN_SETTINGS;
+        }),
       ]);
+
+      setStoreMetals(metalsData || []);
+      setInvoiceColumns(invoiceColumnsData || DEFAULT_INVOICE_COLUMN_SETTINGS);
 
       setShop(
         shopData || {
@@ -493,6 +514,63 @@ export const SettingsPage: React.FC = () => {
       showNotification('success', `Payment mode '${code}' status toggled`);
     } catch (err: any) {
       showNotification('error', err.message || 'Failed to toggle payment mode');
+    }
+  };
+
+  // Toggle Store Metal (Gold, Silver, Diamond, Platinum)
+  const handleToggleStoreMetal = async (metal: Metal) => {
+    const isCurrentlyActive = metal.is_active === 1;
+    const newActiveState = !isCurrentlyActive;
+
+    if (!newActiveState) {
+      const activeCount = storeMetals.filter((m) => m.is_active === 1).length;
+      if (activeCount <= 1) {
+        showNotification('error', 'At least one metal type (e.g. Gold) must remain active for the shop.');
+        return;
+      }
+    }
+
+    setTogglingMetal(metal.code);
+    try {
+      await settingsApi.toggleMetal(metal.code, newActiveState);
+      setStoreMetals((prev) =>
+        prev.map((m) => (m.code.toUpperCase() === metal.code.toUpperCase() ? { ...m, is_active: newActiveState ? 1 : 0 } : m))
+      );
+      // Refresh current board rates so the table reflects only active metals
+      const updatedRates = await rateApi.getCurrentRates().catch(() => []);
+      setRates(updatedRates);
+
+      showNotification(
+        'success',
+        newActiveState
+          ? `🟢 ${metal.name} is now ACTIVE. It is enabled in Billing, Purchases, Inventory, and Board Rates.`
+          : `⚪ ${metal.name} is now INACTIVE. It is hidden from Billing, Purchases, and Rate Tickers.`
+      );
+    } catch (err: any) {
+      showNotification('error', err.message || `Failed to update ${metal.name} status`);
+    } finally {
+      setTogglingMetal(null);
+    }
+  };
+
+  // Toggle Invoice Column
+  const handleToggleInvoiceColumn = async (columnKey: keyof InvoiceColumnSettings, label: string) => {
+    const currentVal = !!invoiceColumns[columnKey];
+    const newVal = !currentVal;
+    setTogglingColumn(columnKey);
+    try {
+      const updated = await settingsApi.updateInvoiceColumns({ [columnKey]: newVal });
+      setInvoiceColumns(updated);
+      showNotification(
+        'success',
+        newVal
+          ? `🟢 Column '${label}' is now VISIBLE on Invoices.`
+          : `⚪ Column '${label}' is now HIDDEN from Invoices and defaulted to zero.`
+      );
+    } catch (err: any) {
+      showNotification('error', err.message || `Failed to update '${label}' setting`);
+    } finally {
+      setTogglingColumn(null);
     }
   };
 
@@ -1085,6 +1163,206 @@ export const SettingsPage: React.FC = () => {
                   </button>
                 </div>
               </form>
+
+              {/* STORE DEALING METALS CONFIGURATION */}
+              <div className="settings-card mt-6">
+                <div className="card-header flex justify-between items-center">
+                  <div>
+                    <h3 className="card-title font-serif flex items-center gap-2">
+                      <Sparkles size={18} className="text-gold" />
+                      <span>Store Dealing Metals (व्यापार की धातुएँ)</span>
+                    </h3>
+                    <p className="card-desc">
+                      Configure which metals your shop trades in (Gold, Silver, Diamond, Platinum). Unchecked metals are automatically hidden from Invoices, Purchases, Inventory, Dropdowns, and Rate Tickers.
+                    </p>
+                  </div>
+                  <div className="active-metals-counter badge-gold font-mono text-xs px-2.5 py-1 rounded">
+                    {storeMetals.filter((m) => m.is_active === 1).length} / {storeMetals.length} Active
+                  </div>
+                </div>
+
+                <div className="store-metals-grid">
+                  {storeMetals.map((m) => {
+                    const isSilver = m.code?.toUpperCase() === 'SILVER';
+                    const isDiamond = m.code?.toUpperCase() === 'DIAMOND';
+                    const isPlatinum = m.code?.toUpperCase() === 'PLATINUM';
+                    const isActive = m.is_active === 1;
+                    const isToggling = togglingMetal === m.code;
+
+                    let icon = '🟡';
+                    let subtitle = '24K, 22K, 18K, 14K Jewellery & Bullion';
+                    let badgeClass = 'metal-gold';
+                    if (isSilver) {
+                      icon = '⚪';
+                      subtitle = '999 Fine Silver, 925 Sterling & Utensils';
+                      badgeClass = 'metal-silver';
+                    } else if (isDiamond) {
+                      icon = '💎';
+                      subtitle = 'Solitaires, Studded Jewellery & Polki';
+                      badgeClass = 'metal-diamond';
+                    } else if (isPlatinum) {
+                      icon = '🔘';
+                      subtitle = '950 Platinum Rings, Chains & Bands';
+                      badgeClass = 'metal-platinum';
+                    }
+
+                    return (
+                      <div key={m.id} className={`store-metal-card ${badgeClass} ${isActive ? 'is-active' : 'is-inactive'}`}>
+                        <div className="metal-card-header">
+                          <div className="flex items-center gap-2">
+                            <span className="text-2xl">{icon}</span>
+                            <div>
+                              <h4 className="font-bold text-sm text-main">{m.name}</h4>
+                              <span className="font-mono text-xs text-muted uppercase">{m.code}</span>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            className={`btn btn-xs ${isActive ? 'btn-danger-outline' : 'btn-primary'}`}
+                            disabled={isToggling}
+                            onClick={() => handleToggleStoreMetal(m)}
+                          >
+                            {isToggling ? 'Updating...' : isActive ? 'Deactivate' : 'Activate'}
+                          </button>
+                        </div>
+                        <p className="metal-card-desc">{subtitle}</p>
+                        <div className="metal-card-footer">
+                          <span className={`status-pill ${isActive ? 'active' : 'inactive'}`}>
+                            {isActive ? '✓ Active in Store' : '✕ Hidden / Disabled'}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* INVOICE COLUMNS CONFIGURATION */}
+              <div className="settings-card mt-6">
+                <div className="card-header flex justify-between items-center">
+                  <div>
+                    <h3 className="card-title font-serif flex items-center gap-2">
+                      <Columns size={18} className="text-gold" />
+                      <span>Invoice Columns & Field Visibility (बिल एवं चालान कॉलम विन्यास)</span>
+                    </h3>
+                    <p className="card-desc">
+                      Configure which item columns and calculations appear on your Invoices (Badla%, Waste%, Fine Wt, Less Wt, Tunch%, Making Charge, Tag No).
+                      Disabled columns are automatically hidden from Invoice tables and defaulted safely to zero.
+                    </p>
+                  </div>
+                  <div className="active-metals-counter badge-gold font-mono text-xs px-2.5 py-1 rounded">
+                    {[
+                      invoiceColumns.show_tag_no,
+                      invoiceColumns.show_tunch,
+                      invoiceColumns.show_less_weight,
+                      invoiceColumns.show_net_weight,
+                      invoiceColumns.show_badla,
+                      invoiceColumns.show_wastage,
+                      invoiceColumns.show_making_charge,
+                      invoiceColumns.show_fine_weight,
+                    ].filter(Boolean).length} / 8 Active
+                  </div>
+                </div>
+
+                <div className="store-metals-grid">
+                  {[
+                    {
+                      key: 'show_tag_no' as keyof InvoiceColumnSettings,
+                      label: 'Tag No / Barcode',
+                      code: 'TAG_NO',
+                      icon: '🏷️',
+                      subtitle: 'Barcode tag or serial item code on invoice lines',
+                      badgeClass: 'metal-silver',
+                    },
+                    {
+                      key: 'show_tunch' as keyof InvoiceColumnSettings,
+                      label: 'Tunch% (Purity)',
+                      code: 'TUNCH_PERCENT',
+                      icon: '🎯',
+                      subtitle: 'Purity percentage (e.g. 91.6%) for pure fine weight calculation',
+                      badgeClass: 'metal-gold',
+                    },
+                    {
+                      key: 'show_less_weight' as keyof InvoiceColumnSettings,
+                      label: 'Less Weight (g)',
+                      code: 'LESS_WEIGHT',
+                      icon: '⚖️',
+                      subtitle: 'Deductions for stones, wax, enamel, and impurities',
+                      badgeClass: 'metal-silver',
+                    },
+                    {
+                      key: 'show_net_weight' as keyof InvoiceColumnSettings,
+                      label: 'Net Weight (g)',
+                      code: 'NET_WEIGHT',
+                      icon: '📊',
+                      subtitle: 'Calculated metal weight (Gross minus Less weight)',
+                      badgeClass: 'metal-gold',
+                    },
+                    {
+                      key: 'show_badla' as keyof InvoiceColumnSettings,
+                      label: 'Badla % (Fine Surcharge)',
+                      code: 'BADLA_PERCENT',
+                      icon: '🔄',
+                      subtitle: 'Commercial margin, market premium or fine weight addition %',
+                      badgeClass: 'metal-diamond',
+                    },
+                    {
+                      key: 'show_wastage' as keyof InvoiceColumnSettings,
+                      label: 'Waste % (Wastage / Kadhai)',
+                      code: 'WASTE_PERCENT',
+                      icon: '🧪',
+                      subtitle: 'Refining loss & casting wastage % added to fine weight',
+                      badgeClass: 'metal-platinum',
+                    },
+                    {
+                      key: 'show_making_charge' as keyof InvoiceColumnSettings,
+                      label: 'Making Charge / Labour',
+                      code: 'MAKING_CHARGE',
+                      icon: '🔨',
+                      subtitle: 'Labour charges (per gram, percentage, or flat amount)',
+                      badgeClass: 'metal-gold',
+                    },
+                    {
+                      key: 'show_fine_weight' as keyof InvoiceColumnSettings,
+                      label: 'Fine Weight (शुद्ध वजन)',
+                      code: 'FINE_WEIGHT',
+                      icon: '💎',
+                      subtitle: '24K calculated pure gold/silver weight column (Fine to Fine)',
+                      badgeClass: 'metal-diamond',
+                    },
+                  ].map((col) => {
+                    const isActive = !!invoiceColumns[col.key];
+                    const isToggling = togglingColumn === col.key;
+                    return (
+                      <div key={col.key} className={`store-metal-card ${col.badgeClass} ${isActive ? 'is-active' : 'is-inactive'}`}>
+                        <div className="metal-card-header">
+                          <div className="flex items-center gap-2">
+                            <span className="text-2xl">{col.icon}</span>
+                            <div>
+                              <h4 className="font-bold text-sm text-main">{col.label}</h4>
+                              <span className="font-mono text-xs text-muted uppercase">{col.code}</span>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            className={`btn btn-xs ${isActive ? 'btn-danger-outline' : 'btn-primary'}`}
+                            disabled={isToggling}
+                            onClick={() => handleToggleInvoiceColumn(col.key, col.label)}
+                          >
+                            {isToggling ? 'Updating...' : isActive ? 'Hide' : 'Show'}
+                          </button>
+                        </div>
+                        <p className="metal-card-desc">{col.subtitle}</p>
+                        <div className="metal-card-footer">
+                          <span className={`status-pill ${isActive ? 'active' : 'inactive'}`}>
+                            {isActive ? '✓ Visible on Invoices' : '✕ Hidden from Invoices'}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
           )}
 
@@ -1608,6 +1886,40 @@ export const SettingsPage: React.FC = () => {
                   <h3 className="card-title font-serif">Gold & Silver Board Rates</h3>
                   <p className="card-desc">Current valuation board rates for inventory, billing, and pledge calculations.</p>
                 </div>
+              </div>
+
+              {/* DEALING METALS QUICK TOGGLE BAR */}
+              <div className="dealing-metals-bar mb-4 p-3 rounded-lg border border-amber-200/70 bg-amber-50/50 flex items-center justify-between flex-wrap gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs font-bold uppercase tracking-wider text-amber-900 flex items-center gap-1">
+                    <Sparkles size={14} className="text-gold" />
+                    <span>Store Dealing Metals:</span>
+                  </span>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {storeMetals.map((m) => {
+                      const isActive = m.is_active === 1;
+                      const isGold = m.code === 'GOLD';
+                      const isSilver = m.code === 'SILVER';
+                      const icon = isGold ? '🟡' : isSilver ? '⚪' : m.code === 'DIAMOND' ? '💎' : '🔘';
+                      return (
+                        <button
+                          key={m.id}
+                          type="button"
+                          className={`dealing-metal-pill-btn ${isActive ? 'active' : 'inactive'}`}
+                          onClick={() => handleToggleStoreMetal(m)}
+                          disabled={togglingMetal === m.code}
+                          title={`Click to ${isActive ? 'Deactivate' : 'Activate'} ${m.name}`}
+                        >
+                          <span className="pill-name">{icon} {m.name}</span>
+                          <span className="pill-status">{isActive ? '✓ ON' : '✕ OFF'}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+                <span className="text-3xs text-muted">
+                  Toggle metals to show or hide them from Board Rates & Invoices
+                </span>
               </div>
 
               <div className="table-responsive mb-6">

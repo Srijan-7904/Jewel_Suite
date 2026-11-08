@@ -65,6 +65,31 @@ export class MetalRepository {
     return row || null;
   }
 
+  getMetalByCode(code: string): MetalRecord | null {
+    const db = getDb();
+    const row = db.prepare('SELECT * FROM metals WHERE UPPER(code) = UPPER(?)').get(code) as MetalRecord | undefined;
+    return row || null;
+  }
+
+  toggleMetalActive(idOrCode: string, isActive: boolean): MetalRecord | null {
+    const db = getDb();
+    db.prepare('UPDATE metals SET is_active = ? WHERE id = ? OR UPPER(code) = UPPER(?)').run(
+      isActive ? 1 : 0,
+      idOrCode,
+      idOrCode
+    );
+    return (
+      (db.prepare('SELECT * FROM metals WHERE id = ? OR UPPER(code) = UPPER(?)').get(idOrCode, idOrCode) as MetalRecord | undefined) ||
+      null
+    );
+  }
+
+  getActiveMetalsCount(): number {
+    const db = getDb();
+    const row = db.prepare('SELECT COUNT(*) as count FROM metals WHERE is_active = 1').get() as { count: number } | undefined;
+    return row?.count || 0;
+  }
+
   // Purities
   getPuritiesByMetal(metalId: string, activeOnly = true): MetalPurityRecord[] {
     const db = getDb();

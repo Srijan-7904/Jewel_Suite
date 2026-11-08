@@ -59,7 +59,7 @@ export const purchaseItemSchema = z.object({
   item_name: z.string().trim().optional().default('Jewellery Item'),
   metal_id: z.string().min(1, 'Metal is required'),
   purity_id: z.string().min(1, 'Purity is required'),
-  tag_no: z.string().min(1, 'Tag number is required').trim().toUpperCase(),
+  tag_no: z.string().trim().toUpperCase().optional(),
   gross_weight: z.number().positive('Gross weight must be greater than zero'),
   less_weight: z.number().nonnegative('Less weight cannot be negative').default(0),
   tunch_percent: z
@@ -76,13 +76,19 @@ export const purchaseItemSchema = z.object({
 
 export const purchasePaymentSchema = z.object({
   payment_mode: z.enum(['CASH', 'CARD', 'UPI', 'BANK', 'CREDIT', 'GOLD', 'SILVER', 'OTHER']),
-  amount: z.number().positive('Payment amount must be greater than zero'),
+  amount: z.number().nonnegative().default(0),
   metal_weight: z.number().nonnegative().optional(),
   metal_rate: z.number().nonnegative().optional(),
   metal_id: z.string().optional(),
   purity_id: z.string().optional(),
   reference_number: z.string().trim().nullable().optional(),
   notes: z.string().trim().nullable().optional(),
+  payment_source_type: z.enum(['CR_PARTY', 'DR_PARTY', 'SELF']).optional(),
+  payer_party_id: z.string().nullable().optional(),
+  payer_name: z.string().nullable().optional(),
+  payer_phone: z.string().nullable().optional(),
+  payer_bank: z.string().nullable().optional(),
+  received_in: z.string().nullable().optional(),
 });
 
 export const createPurchaseSchema = z.object({
@@ -143,12 +149,16 @@ export class PurchaseService {
             badla_percent: itemInput.badla_percent,
           });
 
+          const itemTag = itemInput.tag_no && itemInput.tag_no.trim()
+            ? itemInput.tag_no.trim().toUpperCase()
+            : `PUR-${metalRepository.getMetalById(itemInput.metal_id)?.code || 'G'}-${Date.now().toString(36).toUpperCase()}-${Math.floor(Math.random() * 1000)}`;
+
           purchaseRepository.createItem({
             purchase_bill_id: bill.id,
             product_id: resolvedProductId,
             metal_id: itemInput.metal_id,
             purity_id: itemInput.purity_id,
-            tag_no: itemInput.tag_no,
+            tag_no: itemTag,
             item_name: itemInput.item_name?.trim() || 'Jewellery Item',
             gross_weight: itemInput.gross_weight,
             less_weight: itemInput.less_weight,
@@ -262,18 +272,22 @@ export class PurchaseService {
     const purity = metalRepository.getPurityById(validated.purity_id);
     if (!purity) throw new NotFoundError(`Purity '${validated.purity_id}' does not exist`);
 
+    const itemTag = validated.tag_no && validated.tag_no.trim()
+      ? validated.tag_no.trim().toUpperCase()
+      : `PUR-${metalRepository.getMetalById(validated.metal_id)?.code || 'G'}-${Date.now().toString(36).toUpperCase()}-${Math.floor(Math.random() * 1000)}`;
+
     // Check duplicate tag within existing draft items
     const duplicateDraftTag = existing.items.some(
-      (it) => it.tag_no.toUpperCase() === validated.tag_no.toUpperCase()
+      (it) => it.tag_no.toUpperCase() === itemTag.toUpperCase()
     );
     if (duplicateDraftTag) {
-      throw new ConflictError(`Tag '${validated.tag_no}' is already in this purchase bill`);
+      throw new ConflictError(`Tag '${itemTag}' is already in this purchase bill`);
     }
 
     // Check if tag already exists in stock
-    const existingStock = stockRepository.findByTag(validated.tag_no);
+    const existingStock = stockRepository.findByTag(itemTag);
     if (existingStock) {
-      throw new ConflictError(`Tag '${validated.tag_no}' already exists in inventory`);
+      throw new ConflictError(`Tag '${itemTag}' already exists in inventory`);
     }
 
     const calc = calculatePurchaseItem({
@@ -291,7 +305,7 @@ export class PurchaseService {
       product_id: resolvedProductId,
       metal_id: validated.metal_id,
       purity_id: validated.purity_id,
-      tag_no: validated.tag_no,
+      tag_no: itemTag,
       item_name: validated.item_name?.trim() || 'Jewellery Item',
       gross_weight: validated.gross_weight,
       less_weight: validated.less_weight,

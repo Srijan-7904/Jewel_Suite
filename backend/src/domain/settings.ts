@@ -198,3 +198,26 @@ export interface AboutSystemInfo {
   support_phone: string;
   support_email: string;
 }
+
+export interface InvoiceColumnSettings {
+  show_tag_no: boolean;
+  show_tunch: boolean;
+  show_less_weight: boolean;
+  show_net_weight: boolean;
+  show_badla: boolean;
+  show_wastage: boolean;
+  show_making_charge: boolean;
+  show_fine_weight: boolean;
+}
+
+export const DEFAULT_INVOICE_COLUMN_SETTINGS: InvoiceColumnSettings = {
+  show_tag_no: true,
+  show_tunch: true,
+  show_less_weight: true,
+  show_net_weight: true,
+  show_badla: true,
+  show_wastage: true,
+  show_making_charge: true,
+  show_fine_weight: true,
+};
+

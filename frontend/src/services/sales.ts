@@ -7,6 +7,7 @@ export interface SalesInvoice {
   invoice_number: string;
   customer_id: string;
   customer_name?: string;
+  customer_type?: 'RETAIL' | 'WHOLESALE' | 'GIRVI_CLIENT';
   customer_phone?: string;
   customer_address?: string;
   invoice_date: string;

@@ -37,6 +37,11 @@ settingsRoutes.put('/gst', requireRole('ADMIN'), (req, res, next) => settingsCon
 settingsRoutes.get('/payment-modes', (req, res, next) => settingsController.getPaymentModes(req, res, next));
 settingsRoutes.put('/payment-modes/:code/toggle', requireRole('ADMIN'), (req, res, next) => settingsController.togglePaymentMode(req, res, next));
 
+// Store Active Metals Configuration (Gold, Silver, Diamond, Platinum)
+settingsRoutes.get('/metals', (req, res, next) => settingsController.getMetals(req, res, next));
+settingsRoutes.put('/metals/:code/toggle', requireRole('ADMIN'), (req, res, next) => settingsController.toggleMetal(req, res, next));
+settingsRoutes.put('/metals', requireRole('ADMIN'), (req, res, next) => settingsController.updateActiveMetals(req, res, next));
+
 // Shop Receiving Accounts
 settingsRoutes.get('/receiving-accounts', (req, res, next) => settingsController.getReceivingAccounts(req, res, next));
 settingsRoutes.put('/receiving-accounts', requireRole('ADMIN'), (req, res, next) => settingsController.updateReceivingAccounts(req, res, next));
@@ -44,6 +49,10 @@ settingsRoutes.put('/receiving-accounts', requireRole('ADMIN'), (req, res, next)
 // Printing Settings
 settingsRoutes.get('/printing', (req, res, next) => settingsController.getPrintSettings(req, res, next));
 settingsRoutes.put('/printing', requireRole('ADMIN'), (req, res, next) => settingsController.updatePrintSettings(req, res, next));
+
+// Invoice Columns & Optional Fields Configuration
+settingsRoutes.get('/invoice-columns', (req, res, next) => settingsController.getInvoiceColumns(req, res, next));
+settingsRoutes.put('/invoice-columns', requireRole('ADMIN'), (req, res, next) => settingsController.updateInvoiceColumns(req, res, next));
 
 // AMC & License Status
 settingsRoutes.get('/amc', (req, res, next) => settingsController.getAMCStatus(req, res, next));

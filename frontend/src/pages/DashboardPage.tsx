@@ -103,6 +103,9 @@ export const DashboardPage: React.FC = () => {
   const gold24 = rates.find((r) => r.metal_code?.toUpperCase() === 'GOLD' && (r.purity_code?.toUpperCase() === '24K' || r.purity_name?.toLowerCase().includes('24k') || r.purity_code === '999'));
   const silver999 = rates.find((r) => r.metal_code?.toUpperCase() === 'SILVER' && (r.purity_code === '999' || r.purity_name?.includes('999') || r.purity_code?.toUpperCase() === '24K'));
 
+  const hasActiveGold = metals.some((m) => m.code?.toUpperCase() === 'GOLD' || m.name?.toLowerCase().includes('gold'));
+  const hasActiveSilver = metals.some((m) => m.code?.toUpperCase() === 'SILVER' || m.name?.toLowerCase().includes('silver'));
+
   // Sync inline rate inputs when rates load from DB
   useEffect(() => {
     if (gold24?.rate && !inlineGoldGram) {
@@ -670,15 +673,19 @@ export const DashboardPage: React.FC = () => {
 
             {/* Hand-drawn Top-Right Subbox: Gold Rate / Silver Rate */}
             <div className="rates-mini-badge-box font-mono" onClick={() => handleOpenRateModal()}>
-              <div className="mini-rate-item gold-rate">
-                <span className="mini-rate-label">Gold Rate:</span>
-                <span className="mini-rate-val">{formatRate(gold24)}</span>
-              </div>
-              <div className="mini-rate-divider" />
-              <div className="mini-rate-item silver-rate">
-                <span className="mini-rate-label">Silver Rate:</span>
-                <span className="mini-rate-val">{formatRate(silver999)}</span>
-              </div>
+              {hasActiveGold && (
+                <div className="mini-rate-item gold-rate">
+                  <span className="mini-rate-label">Gold Rate:</span>
+                  <span className="mini-rate-val">{formatRate(gold24)}</span>
+                </div>
+              )}
+              {hasActiveGold && hasActiveSilver && <div className="mini-rate-divider" />}
+              {hasActiveSilver && (
+                <div className="mini-rate-item silver-rate">
+                  <span className="mini-rate-label">Silver Rate:</span>
+                  <span className="mini-rate-val">{formatRate(silver999)}</span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -838,58 +845,62 @@ export const DashboardPage: React.FC = () => {
             <form onSubmit={handleSaveInlineRates} className="bottom-line-form">
               <div className="rate-inputs-row">
                 {/* Gold Rate Input */}
-                <div className="rate-input-cell">
-                  <div className="cell-top">
-                    <span className="cell-metal gold">GOLD 24K (PURE)</span>
-                    <span className="cell-current font-mono">Current: {formatRate(gold24)}</span>
+                {hasActiveGold && (
+                  <div className="rate-input-cell">
+                    <div className="cell-top">
+                      <span className="cell-metal gold">GOLD 24K (PURE)</span>
+                      <span className="cell-current font-mono">Current: {formatRate(gold24)}</span>
+                    </div>
+                    <div className="input-group">
+                      <span className="input-prefix font-mono">₹</span>
+                      <input
+                        type="number"
+                        step="any"
+                        min="0"
+                        className="form-control font-mono inline-rate-input"
+                        placeholder="Gold ₹/g"
+                        value={inlineGoldGram}
+                        onChange={(e) => handleInlineGoldGramChange(e.target.value)}
+                      />
+                      <span className="input-suffix font-mono">/g</span>
+                    </div>
+                    <div className="sub-unit-rate font-mono">
+                      <span className="text-muted">10g (Tola):</span>
+                      <span className="text-gold font-bold">
+                        ₹{inlineGold10g ? Number(inlineGold10g).toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '0.00'}
+                      </span>
+                    </div>
                   </div>
-                  <div className="input-group">
-                    <span className="input-prefix font-mono">₹</span>
-                    <input
-                      type="number"
-                      step="any"
-                      min="0"
-                      className="form-control font-mono inline-rate-input"
-                      placeholder="Gold ₹/g"
-                      value={inlineGoldGram}
-                      onChange={(e) => handleInlineGoldGramChange(e.target.value)}
-                    />
-                    <span className="input-suffix font-mono">/g</span>
-                  </div>
-                  <div className="sub-unit-rate font-mono">
-                    <span className="text-muted">10g (Tola):</span>
-                    <span className="text-gold font-bold">
-                      ₹{inlineGold10g ? Number(inlineGold10g).toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '0.00'}
-                    </span>
-                  </div>
-                </div>
+                )}
 
                 {/* Silver Rate Input */}
-                <div className="rate-input-cell">
-                  <div className="cell-top">
-                    <span className="cell-metal silver">SILVER 999 (CHANDI)</span>
-                    <span className="cell-current font-mono">Current: {formatRate(silver999)}</span>
+                {hasActiveSilver && (
+                  <div className="rate-input-cell">
+                    <div className="cell-top">
+                      <span className="cell-metal silver">SILVER 999 (CHANDI)</span>
+                      <span className="cell-current font-mono">Current: {formatRate(silver999)}</span>
+                    </div>
+                    <div className="input-group">
+                      <span className="input-prefix font-mono">₹</span>
+                      <input
+                        type="number"
+                        step="any"
+                        min="0"
+                        className="form-control font-mono inline-rate-input"
+                        placeholder="Silver ₹/g"
+                        value={inlineSilverGram}
+                        onChange={(e) => handleInlineSilverGramChange(e.target.value)}
+                      />
+                      <span className="input-suffix font-mono">/g</span>
+                    </div>
+                    <div className="sub-unit-rate font-mono">
+                      <span className="text-muted">1 Kg (1000g):</span>
+                      <span className="text-blue-600 font-bold">
+                        ₹{inlineSilver1kg ? Number(inlineSilver1kg).toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '0.00'}
+                      </span>
+                    </div>
                   </div>
-                  <div className="input-group">
-                    <span className="input-prefix font-mono">₹</span>
-                    <input
-                      type="number"
-                      step="any"
-                      min="0"
-                      className="form-control font-mono inline-rate-input"
-                      placeholder="Silver ₹/g"
-                      value={inlineSilverGram}
-                      onChange={(e) => handleInlineSilverGramChange(e.target.value)}
-                    />
-                    <span className="input-suffix font-mono">/g</span>
-                  </div>
-                  <div className="sub-unit-rate font-mono">
-                    <span className="text-muted">1 Kg (1000g):</span>
-                    <span className="text-blue-600 font-bold">
-                      ₹{inlineSilver1kg ? Number(inlineSilver1kg).toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '0.00'}
-                    </span>
-                  </div>
-                </div>
+                )}
 
                 {/* Save Button right in the bottom line */}
                 <div className="rate-save-btn-cell">
@@ -955,102 +966,106 @@ export const DashboardPage: React.FC = () => {
           {/* Extended Board Rate Cards */}
           <div className="board-rates-grid">
             {/* Gold 24K */}
-            <div className="board-rate-card featured-default" onClick={() => handleOpenRateModal(gold24?.metal_id, gold24?.purity_id)}>
-              <div className="default-pill font-mono">
-                <Sparkles size={12} />
-                <span>DEFAULT RATE IN INVOICES & PURCHASES (24K GOLD)</span>
-              </div>
-              <div className="card-top">
-                <span className="metal-badge gold-hallmark">GOLD 24K (FINE BULLION)</span>
-                <span className="purity-badge font-mono">99.90% Pure Base • 100 Tunch</span>
-              </div>
-              <div className="card-rate-main font-mono highlight">
-                <span className="currency-symbol">₹</span>
-                <span className="rate-number">
-                  {gold24?.rate ? gold24.rate.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}
-                </span>
-                <span className="rate-unit">/ g</span>
-              </div>
-              <div className="card-secondary-rate font-mono">
-                <span className="label">10 Grams (Tola):</span>
-                <span className="value">
-                  ₹{gold24?.rate ? (gold24.rate * 10).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}
-                </span>
-              </div>
+            {hasActiveGold && (
+              <div className="board-rate-card featured-default" onClick={() => handleOpenRateModal(gold24?.metal_id, gold24?.purity_id)}>
+                <div className="default-pill font-mono">
+                  <Sparkles size={12} />
+                  <span>DEFAULT RATE IN INVOICES & PURCHASES (24K GOLD)</span>
+                </div>
+                <div className="card-top">
+                  <span className="metal-badge gold-hallmark">GOLD 24K (FINE BULLION)</span>
+                  <span className="purity-badge font-mono">99.90% Pure Base • 100 Tunch</span>
+                </div>
+                <div className="card-rate-main font-mono highlight">
+                  <span className="currency-symbol">₹</span>
+                  <span className="rate-number">
+                    {gold24?.rate ? gold24.rate.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}
+                  </span>
+                  <span className="rate-unit">/ g</span>
+                </div>
+                <div className="card-secondary-rate font-mono">
+                  <span className="label">10 Grams (Tola):</span>
+                  <span className="value">
+                    ₹{gold24?.rate ? (gold24.rate * 10).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}
+                  </span>
+                </div>
 
-              <div className="card-touch-breakdown">
-                <div className="touch-breakdown-title">
-                  <SlidersHorizontal size={13} />
-                  <span>Auto-Calculated by Touch (टंच) in Invoices:</span>
-                </div>
-                <div className="touch-rates-list">
-                  <div className="touch-rate-row">
-                    <span className="touch-name">22K (916 Hallmark) • 91.67% Tunch</span>
-                    <span className="touch-val font-mono">
-                      ₹{gold24?.rate ? (Math.round(gold24.rate * 0.9167 * 100) / 100).toFixed(2) : '0.00'}/g
-                    </span>
+                <div className="card-touch-breakdown">
+                  <div className="touch-breakdown-title">
+                    <SlidersHorizontal size={13} />
+                    <span>Auto-Calculated by Touch (टंच) in Invoices:</span>
                   </div>
-                  <div className="touch-rate-row">
-                    <span className="touch-name">18K (750 Studded) • 75.00% Tunch</span>
-                    <span className="touch-val font-mono">
-                      ₹{gold24?.rate ? (Math.round(gold24.rate * 0.75 * 100) / 100).toFixed(2) : '0.00'}/g
-                    </span>
-                  </div>
-                  <div className="touch-rate-row">
-                    <span className="touch-name">14K (585) • 58.50% Tunch</span>
-                    <span className="touch-val font-mono">
-                      ₹{gold24?.rate ? (Math.round(gold24.rate * 0.585 * 100) / 100).toFixed(2) : '0.00'}/g
-                    </span>
+                  <div className="touch-rates-list">
+                    <div className="touch-rate-row">
+                      <span className="touch-name">22K (916 Hallmark) • 91.67% Tunch</span>
+                      <span className="touch-val font-mono">
+                        ₹{gold24?.rate ? (Math.round(gold24.rate * 0.9167 * 100) / 100).toFixed(2) : '0.00'}/g
+                      </span>
+                    </div>
+                    <div className="touch-rate-row">
+                      <span className="touch-name">18K (750 Studded) • 75.00% Tunch</span>
+                      <span className="touch-val font-mono">
+                        ₹{gold24?.rate ? (Math.round(gold24.rate * 0.75 * 100) / 100).toFixed(2) : '0.00'}/g
+                      </span>
+                    </div>
+                    <div className="touch-rate-row">
+                      <span className="touch-name">14K (585) • 58.50% Tunch</span>
+                      <span className="touch-val font-mono">
+                        ₹{gold24?.rate ? (Math.round(gold24.rate * 0.585 * 100) / 100).toFixed(2) : '0.00'}/g
+                      </span>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
+            )}
 
             {/* Fine Silver 999 */}
-            <div className="board-rate-card featured-silver-default" onClick={() => handleOpenRateModal(silver999?.metal_id, silver999?.purity_id)}>
-              <div className="default-pill silver-pill font-mono">
-                <Sparkles size={12} />
-                <span>DEFAULT RATE IN INVOICES & PURCHASES (FINE SILVER)</span>
-              </div>
-              <div className="card-top">
-                <span className="metal-badge silver">FINE SILVER 999 (CHANDI)</span>
-                <span className="purity-badge font-mono">99.90% Pure Base • 100 Tunch</span>
-              </div>
-              <div className="card-rate-main font-mono">
-                <span className="currency-symbol">₹</span>
-                <span className="rate-number" style={{ color: '#0369A1' }}>
-                  {silver999?.rate ? silver999.rate.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}
-                </span>
-                <span className="rate-unit">/ g</span>
-              </div>
-              <div className="card-secondary-rate font-mono">
-                <span className="label">1 Kg (1000g):</span>
-                <span className="value highlight-silver">
-                  ₹{silver999?.rate ? (silver999.rate * 1000).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}
-                </span>
-              </div>
+            {hasActiveSilver && (
+              <div className="board-rate-card featured-silver-default" onClick={() => handleOpenRateModal(silver999?.metal_id, silver999?.purity_id)}>
+                <div className="default-pill silver-pill font-mono">
+                  <Sparkles size={12} />
+                  <span>DEFAULT RATE IN INVOICES & PURCHASES (FINE SILVER)</span>
+                </div>
+                <div className="card-top">
+                  <span className="metal-badge silver">FINE SILVER 999 (CHANDI)</span>
+                  <span className="purity-badge font-mono">99.90% Pure Base • 100 Tunch</span>
+                </div>
+                <div className="card-rate-main font-mono">
+                  <span className="currency-symbol">₹</span>
+                  <span className="rate-number" style={{ color: '#0369A1' }}>
+                    {silver999?.rate ? silver999.rate.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}
+                  </span>
+                  <span className="rate-unit">/ g</span>
+                </div>
+                <div className="card-secondary-rate font-mono">
+                  <span className="label">1 Kg (1000g):</span>
+                  <span className="value highlight-silver">
+                    ₹{silver999?.rate ? (silver999.rate * 1000).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}
+                  </span>
+                </div>
 
-              <div className="card-touch-breakdown">
-                <div className="touch-breakdown-title">
-                  <SlidersHorizontal size={13} />
-                  <span>Auto-Calculated by Touch (टंच) in Invoices:</span>
-                </div>
-                <div className="touch-rates-list">
-                  <div className="touch-rate-row">
-                    <span className="touch-name">Silver 925 (Sterling) • 92.50% Tunch</span>
-                    <span className="touch-val silver font-mono">
-                      ₹{silver999?.rate ? (Math.round(silver999.rate * 0.925 * 100) / 100).toFixed(2) : '0.00'}/g
-                    </span>
+                <div className="card-touch-breakdown">
+                  <div className="touch-breakdown-title">
+                    <SlidersHorizontal size={13} />
+                    <span>Auto-Calculated by Touch (टंच) in Invoices:</span>
                   </div>
-                  <div className="touch-rate-row">
-                    <span className="touch-name">Chandi 80 Tunch • 80.00% Tunch</span>
-                    <span className="touch-val silver font-mono">
-                      ₹{silver999?.rate ? (Math.round(silver999.rate * 0.80 * 100) / 100).toFixed(2) : '0.00'}/g
-                    </span>
+                  <div className="touch-rates-list">
+                    <div className="touch-rate-row">
+                      <span className="touch-name">Silver 925 (Sterling) • 92.50% Tunch</span>
+                      <span className="touch-val silver font-mono">
+                        ₹{silver999?.rate ? (Math.round(silver999.rate * 0.925 * 100) / 100).toFixed(2) : '0.00'}/g
+                      </span>
+                    </div>
+                    <div className="touch-rate-row">
+                      <span className="touch-name">Chandi 80 Tunch • 80.00% Tunch</span>
+                      <span className="touch-val silver font-mono">
+                        ₹{silver999?.rate ? (Math.round(silver999.rate * 0.80 * 100) / 100).toFixed(2) : '0.00'}/g
+                      </span>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
+            )}
           </div>
 
           {/* Part 1 Foundation Verification Panel */}

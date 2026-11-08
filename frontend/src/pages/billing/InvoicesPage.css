@@ -363,8 +363,8 @@
   border: 1px solid #d4af37;
   border-radius: 12px;
   width: 96vw;
-  max-width: 1140px;
-  max-height: 92vh;
+  max-width: 1180px;
+  max-height: 94vh;
   margin: auto;
   display: flex;
   flex-direction: column;
@@ -706,7 +706,7 @@
   color: #0f172a !important;
   padding: 1.25rem 1.25rem 2rem;
   overflow-y: auto;
-  overflow-x: hidden;
+  overflow-x: auto;
   flex: 1;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   line-height: 1.45;
@@ -842,15 +842,15 @@
   border: 1px solid #fde047;
 }
 
-/* Horizontal scroll wrapper for tables to prevent clipping */
-/* Table wrapper - no horizontal scroll, fits full width */
+/* Table wrapper - allows horizontal scrolling if needed, prevents clipping */
 .print-table-wrapper {
   width: 100%;
-  overflow-x: hidden;
+  overflow-x: auto;
   margin-bottom: 1rem;
   border-radius: 6px;
   border: 1px solid #cbd5e1;
   background: #ffffff;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* Items Table */
@@ -865,14 +865,15 @@
 .print-items-table th {
   background: #f1f5f9;
   color: #1e293b;
-  padding: 0.42rem 0.32rem;
+  padding: 0.45rem 0.35rem;
   border: 1px solid #cbd5e1;
   font-weight: 700;
   text-transform: uppercase;
   font-size: 0.67rem;
   letter-spacing: 0.2px;
   vertical-align: middle;
-  white-space: nowrap;
+  white-space: normal;
+  line-height: 1.25;
 }
 
 .print-items-table td {
@@ -1093,3 +1094,12 @@
     display: none !important;
   }
 }
+
+.print-metal-tally-box {
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  padding: 0.4rem 0.6rem;
+  font-size: 0.75rem;
+}
+

@@ -12,8 +12,8 @@ export const createRateSchema = z.object({
 });
 
 export class RateService {
-  getMetals(): MetalRecord[] {
-    return metalRepository.getMetals();
+  getMetals(activeOnly = true): MetalRecord[] {
+    return metalRepository.getMetals(activeOnly);
   }
 
   getPuritiesByMetal(metalId: string): MetalPurityRecord[] {

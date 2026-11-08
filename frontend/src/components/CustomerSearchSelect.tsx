@@ -441,7 +441,8 @@ export const CustomerSearchSelect: React.FC<CustomerSearchSelectProps> = ({
                         )}
                         {isSelected && (
                           <span className="item-selected-tag">
-                            <Check size={11} /> Current
+                            <Check size={12} strokeWidth={2.5} />
+                            <span>Current</span>
                           </span>
                         )}
                       </div>

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { salesApi, SalesInvoice, SalesInvoiceDetails } from '../../services/sales';
-import { settingsApi, ShopProfile } from '../../services/settings';
+import { settingsApi, ShopProfile, InvoiceColumnSettings, DEFAULT_INVOICE_COLUMN_SETTINGS } from '../../services/settings';
 import {
   formatWeight,
   formatFineWeight,
@@ -46,6 +46,7 @@ export const InvoicesPage: React.FC = () => {
   const [selectedInvoice, setSelectedInvoice] = useState<SalesInvoiceDetails | null>(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [shopProfile, setShopProfile] = useState<ShopProfile | null>(null);
+  const [invoiceColumns, setInvoiceColumns] = useState<InvoiceColumnSettings>(DEFAULT_INVOICE_COLUMN_SETTINGS);
 
   // Notification Toast
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -84,6 +85,7 @@ export const InvoicesPage: React.FC = () => {
 
   useEffect(() => {
     settingsApi.getShopProfile().then(setShopProfile).catch(() => {});
+    settingsApi.getInvoiceColumns().then(setInvoiceColumns).catch(() => {});
   }, []);
 
   // View Invoice Details
@@ -323,13 +325,19 @@ export const InvoicesPage: React.FC = () => {
                       {Number(inv.exchange_amount || 0) > 0 ? `-${formatCurrency(inv.exchange_amount)}` : '-'}
                     </td>
                     <td className="font-mono text-right font-bold text-main">
-                      {formatCurrency(inv.grand_total)}
+                      {inv.customer_type === 'WHOLESALE' || (Number(inv.grand_total) === 0 && Number(inv.taxable_amount) === 0) ? (
+                        <span className="badge-fine-wt">Fine-to-Fine</span>
+                      ) : (
+                        formatCurrency(inv.grand_total)
+                      )}
                     </td>
                     <td className="font-mono text-right text-emerald-400">
-                      {formatCurrency(inv.amount_paid)}
+                      {inv.customer_type === 'WHOLESALE' && Number(inv.amount_paid) === 0 ? '-' : formatCurrency(inv.amount_paid)}
                     </td>
                     <td className="font-mono text-right">
-                      {Number(inv.balance_amount || 0) > 0 ? (
+                      {inv.customer_type === 'WHOLESALE' && Number(inv.balance_amount) === 0 ? (
+                        <span className="badge-fine-wt">Fine Basis</span>
+                      ) : Number(inv.balance_amount || 0) > 0 ? (
                         <span className="text-rose-400 font-bold">
                           {formatCurrency(inv.balance_amount)}
                         </span>
@@ -424,234 +432,494 @@ export const InvoicesPage: React.FC = () => {
       </div>
 
       {/* MODAL 1: VIEW & PRINT INVOICE */}
-      {showDetailModal && selectedInvoice && (
-        <div className="modal-backdrop print-modal-backdrop">
-          <div className="modal-dialog print-modal-dialog">
-            <div className="modal-header no-print">
-              <div className="flex items-center gap-2">
-                <Receipt size={18} className="gold" />
-                <h3 className="modal-title font-serif">Tax Invoice: {selectedInvoice.invoice_number}</h3>
-                <span className={`status-pill ${selectedInvoice.status.toLowerCase()}`}>
-                  {selectedInvoice.status}
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <button type="button" className="btn btn-primary btn-sm" onClick={handlePrint}>
-                  <Printer size={15} />
-                  <span>Print Bill</span>
-                </button>
-                <button type="button" className="close-btn" onClick={() => setShowDetailModal(false)}>
-                  &times;
-                </button>
-              </div>
-            </div>
+      {showDetailModal && selectedInvoice && (() => {
+        const isWholesaleModal =
+          selectedInvoice.customer_type === 'WHOLESALE' ||
+          ((selectedInvoice.items || []).length > 0 &&
+            (selectedInvoice.items || []).every(
+              (it) => Number(it.rate_per_gram ?? it.metal_rate ?? 0) === 0
+            ));
 
-            <div className="printable-tax-invoice">
-              {/* Shop Header Letterhead */}
-              <div className="tax-invoice-shop-header">
-                <h1 className="tax-invoice-shop-title">
-                  {shopProfile?.name || 'JEWEL SUITE DEMO STORE'}
-                </h1>
-                {shopProfile?.legal_name && (
-                  <p className="tax-invoice-shop-subtitle">{shopProfile.legal_name}</p>
-                )}
-                <p className="tax-invoice-shop-address">
-                  {shopProfile?.address ? `${shopProfile.address}, ` : ''}
-                  {shopProfile?.city ? `${shopProfile.city}, ` : ''}
-                  {shopProfile?.state || 'Maharashtra'} - {shopProfile?.pincode || '400001'}
-                </p>
-                <div className="tax-invoice-shop-tax-bar">
-                  <span>Phone: <strong>{shopProfile?.phone || '+91 98765 43210'}</strong></span>
-                  <span>GSTIN: <strong>{shopProfile?.gstin || '27AAAAA0000A1Z5'}</strong></span>
-                  {shopProfile?.pan && <span>PAN: <strong>{shopProfile.pan}</strong></span>}
+        return (
+          <div className="modal-backdrop print-modal-backdrop">
+            <div className="modal-dialog print-modal-dialog">
+              <div className="modal-header no-print">
+                <div className="flex items-center gap-2">
+                  <Receipt size={18} className="gold" />
+                  <h3 className="modal-title font-serif">
+                    {isWholesaleModal ? 'Wholesale Memo (Fine to Fine):' : 'Tax Invoice:'} {selectedInvoice.invoice_number}
+                  </h3>
+                  <span className={`status-pill ${selectedInvoice.status.toLowerCase()}`}>
+                    {isWholesaleModal ? 'WHOLESALE (FINE TO FINE)' : selectedInvoice.status}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button type="button" className="btn btn-primary btn-sm" onClick={handlePrint}>
+                    <Printer size={15} />
+                    <span>Print Bill</span>
+                  </button>
+                  <button type="button" className="close-btn" onClick={() => setShowDetailModal(false)}>
+                    &times;
+                  </button>
                 </div>
               </div>
 
-              {/* Metadata Grid (Customer & Invoice Info) */}
-              <div className="tax-invoice-meta-grid">
-                {/* Left: Customer Info */}
-                <div className="invoice-meta-card">
-                  <div className="invoice-meta-header">BILLED TO (CUSTOMER DETAILS)</div>
-                  <div className="meta-customer-name">
-                    {selectedInvoice.customer_name || 'CASH CUSTOMER'}
-                  </div>
-                  <div className="meta-info-row">
-                    <span className="meta-info-label">Contact / Phone:</span>
-                    <span className="meta-info-val font-mono">
-                      {selectedInvoice.customer_phone || 'Counter Cash Sale'}
-                    </span>
-                  </div>
-                  <div className="meta-info-row">
-                    <span className="meta-info-label">Address:</span>
-                    <span className="meta-info-val">
-                      {selectedInvoice.customer_address || 'Counter Sale / In-Store'}
-                    </span>
-                  </div>
-                  <div className="meta-info-row">
-                    <span className="meta-info-label">Place of Supply:</span>
-                    <span className="meta-info-val">
-                      {shopProfile?.state || 'Maharashtra'} (State Code: 27)
-                    </span>
+              <div className="printable-tax-invoice">
+                {/* Shop Header Letterhead */}
+                <div className="tax-invoice-shop-header">
+                  <h1 className="tax-invoice-shop-title">
+                    {shopProfile?.name || 'JEWEL SUITE DEMO STORE'}
+                  </h1>
+                  {shopProfile?.legal_name && (
+                    <p className="tax-invoice-shop-subtitle">{shopProfile.legal_name}</p>
+                  )}
+                  <p className="tax-invoice-shop-address">
+                    {shopProfile?.address ? `${shopProfile.address}, ` : ''}
+                    {shopProfile?.city ? `${shopProfile.city}, ` : ''}
+                    {shopProfile?.state || 'Maharashtra'} - {shopProfile?.pincode || '400001'}
+                  </p>
+                  <div className="tax-invoice-shop-tax-bar">
+                    <span>Phone: <strong>{shopProfile?.phone || '+91 98765 43210'}</strong></span>
+                    <span>GSTIN: <strong>{shopProfile?.gstin || '27AAAAA0000A1Z5'}</strong></span>
+                    {shopProfile?.pan && <span>PAN: <strong>{shopProfile.pan}</strong></span>}
                   </div>
                 </div>
 
-                {/* Right: Invoice Info */}
-                <div className="invoice-meta-card">
-                  <div className="invoice-meta-header">TAX INVOICE DETAILS</div>
-                  <div className="meta-info-row">
-                    <span className="meta-info-label">Invoice Number:</span>
-                    <span className="invoice-number-highlight">
-                      {selectedInvoice.invoice_number}
-                    </span>
+                {/* Metadata Grid (Customer & Invoice Info) */}
+                <div className="tax-invoice-meta-grid">
+                  {/* Left: Customer Info */}
+                  <div className="invoice-meta-card">
+                    <div className="invoice-meta-header">BILLED TO (CUSTOMER DETAILS)</div>
+                    <div className="meta-customer-name">
+                      {selectedInvoice.customer_name || 'CASH CUSTOMER'}
+                    </div>
+                    <div className="meta-info-row">
+                      <span className="meta-info-label">Contact / Phone:</span>
+                      <span className="meta-info-val font-mono">
+                        {selectedInvoice.customer_phone || 'Counter Cash Sale'}
+                      </span>
+                    </div>
+                    <div className="meta-info-row">
+                      <span className="meta-info-label">Address:</span>
+                      <span className="meta-info-val">
+                        {selectedInvoice.customer_address || 'Counter Sale / In-Store'}
+                      </span>
+                    </div>
+                    <div className="meta-info-row">
+                      <span className="meta-info-label">Place of Supply:</span>
+                      <span className="meta-info-val">
+                        {shopProfile?.state || 'Maharashtra'} (State Code: 27)
+                      </span>
+                    </div>
                   </div>
-                  <div className="meta-info-row">
-                    <span className="meta-info-label">Invoice Date:</span>
-                    <span className="meta-info-val font-mono">
-                      {selectedInvoice.invoice_date}
-                    </span>
-                  </div>
-                  <div className="meta-info-row">
-                    <span className="meta-info-label">Invoice Status:</span>
-                    <span className={`invoice-status-tag ${selectedInvoice.status.toLowerCase()}`}>
-                      {selectedInvoice.status}
-                    </span>
-                  </div>
-                  <div className="meta-info-row">
-                    <span className="meta-info-label">Payment Status:</span>
-                    <span className="meta-info-val font-semibold">
-                      {Number(selectedInvoice.balance_amount || 0) <= 0 ? (
-                        <span className="text-emerald-700">● PAID IN FULL</span>
-                      ) : Number(selectedInvoice.amount_paid || 0) > 0 ? (
-                        <span className="text-amber-700">● PARTIALLY PAID</span>
-                      ) : (
-                        <span className="text-rose-700">● UNPAID / BALANCE DUE</span>
-                      )}
-                    </span>
+
+                  {/* Right: Invoice Info */}
+                  <div className="invoice-meta-card">
+                    <div className="invoice-meta-header">
+                      {isWholesaleModal ? 'WHOLESALE MEMO DETAILS' : 'TAX INVOICE DETAILS'}
+                    </div>
+                    <div className="meta-info-row">
+                      <span className="meta-info-label">Invoice Number:</span>
+                      <span className="invoice-number-highlight">
+                        {selectedInvoice.invoice_number}
+                      </span>
+                    </div>
+                    <div className="meta-info-row">
+                      <span className="meta-info-label">Invoice Date:</span>
+                      <span className="meta-info-val font-mono">
+                        {selectedInvoice.invoice_date}
+                      </span>
+                    </div>
+                    <div className="meta-info-row">
+                      <span className="meta-info-label">Invoice Status:</span>
+                      <span className={`invoice-status-tag ${selectedInvoice.status.toLowerCase()}`}>
+                        {selectedInvoice.status}
+                      </span>
+                    </div>
+                    <div className="meta-info-row">
+                      <span className="meta-info-label">Payment Status:</span>
+                      <span className="meta-info-val font-semibold">
+                        {Number(selectedInvoice.balance_amount || 0) <= 0 ? (
+                          <span className="text-emerald-700">● PAID IN FULL</span>
+                        ) : Number(selectedInvoice.amount_paid || 0) > 0 ? (
+                          <span className="text-amber-700">● PARTIALLY PAID</span>
+                        ) : (
+                          <span className="text-rose-700">● UNPAID / BALANCE DUE</span>
+                        )}
+                      </span>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              {/* Items Table with ALL Input Fields */}
-              <div className="print-table-wrapper">
-                <table className="print-items-table">
-                  <thead>
-                    <tr>
-                      <th style={{ width: '28px', textAlign: 'center' }}>#</th>
-                      <th>Tag #</th>
-                      <th>Item Description</th>
-                      <th>Purity</th>
-                      <th className="text-right">Gross (g)</th>
-                      <th className="text-right">Less (g)</th>
-                      <th className="text-right">Net (g)</th>
-                      <th className="text-right">Tunch %</th>
-                      <th className="text-right">Fine Wt</th>
-                      <th className="text-right">Badla/Waste</th>
-                      <th className="text-right">Rate (₹/g)</th>
-                      <th className="text-right">Making (₹)</th>
-                      <th className="text-right">Total (₹)</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(selectedInvoice.items || []).map((it, idx) => {
-                      const gross = Number(it.gross_weight || 0);
-                      const less = Number(it.less_weight || 0);
-                      const net = Number(it.net_weight || Math.max(0, gross - less));
-                      const tunch = Number(it.tunch_percent || 0);
-                      const pureFine = Number(it.fine_weight || (net * tunch) / 100);
-                      const metalRate = Number(it.rate_per_gram ?? it.metal_rate ?? 0);
-                      const wastagePercent = Number(it.wastage_percent ?? 0);
-                      const badlaPercent = Number(it.badla_percent ?? 0);
-                      const totalAdditionPercent = wastagePercent + badlaPercent;
-                      const wastageWeight = Number(it.wastage_weight ?? (totalAdditionPercent !== 0 ? (pureFine * totalAdditionPercent) / 100 : 0));
-                      const billableFine = Number(it.billable_weight ?? (totalAdditionPercent !== 0 ? Math.max(0, pureFine + wastageWeight) : pureFine));
-                      const makingCharge = Number(it.making_charge ?? it.making_charges ?? 0);
-                      const metalValue = Number(it.metal_value ?? (billableFine * metalRate));
-                      const itemTotal = Number(it.item_amount ?? it.item_total ?? (metalValue + makingCharge));
+                {/* Items Table with Responsive Column Visibility */}
+                {(() => {
+                  const hasRealTags = (selectedInvoice.items || []).some(
+                    (it) => it.tag_no && it.tag_no.trim() !== '' && !/^TAG-\d+-\d+$/i.test(it.tag_no.trim()) && !/^TAG-[A-Z0-9]+-\d+$/i.test(it.tag_no.trim())
+                  );
+                  const showPrintTagCol = invoiceColumns.show_tag_no && hasRealTags;
+                  const hasBadlaWaste = (invoiceColumns.show_badla || invoiceColumns.show_wastage) && (selectedInvoice.items || []).some(
+                    (it) => Number(it.badla_percent || 0) !== 0 || Number(it.wastage_percent || 0) !== 0
+                  );
+                  const printLeadColSpan = 1 + (showPrintTagCol ? 1 : 0) + 1 + 1; // # + (Tag) + Desc + Purity
 
-                      return (
-                        <tr key={it.id || idx}>
-                          <td style={{ textAlign: 'center' }} className="font-mono">{idx + 1}</td>
-                          <td className="font-mono text-xs font-semibold whitespace-nowrap">{it.tag_no || '-'}</td>
-                          <td>
-                            <div className="font-semibold leading-tight">{it.item_name || 'Jewellery Item'}</div>
-                            {it.metal_name && (
-                              <div className="text-[10px] text-muted">{it.metal_name}</div>
+                  return (
+                    <div className="print-table-wrapper">
+                      <table className="print-items-table">
+                        <thead>
+                          <tr>
+                            <th style={{ width: '28px', textAlign: 'center' }}>#</th>
+                            {showPrintTagCol && <th>Tag #</th>}
+                            <th>Item Description</th>
+                            <th>Purity</th>
+                            <th className="text-right">Gross (g)</th>
+                            {invoiceColumns.show_less_weight && <th className="text-right">Less (g)</th>}
+                            {invoiceColumns.show_net_weight && <th className="text-right">Net (g)</th>}
+                            {invoiceColumns.show_tunch && <th className="text-right">Tunch %</th>}
+                            {invoiceColumns.show_fine_weight && <th className="text-right">Fine Wt</th>}
+                            {hasBadlaWaste && <th className="text-right">Badla/Waste</th>}
+                            {!isWholesaleModal && <th className="text-right">Rate (₹/g)</th>}
+                            {invoiceColumns.show_making_charge && <th className="text-right">{isWholesaleModal ? 'Labour (₹)' : 'Making (₹)'}</th>}
+                            {!isWholesaleModal && <th className="text-right">Total (₹)</th>}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(selectedInvoice.items || []).map((it, idx) => {
+                            const gross = Number(it.gross_weight || 0);
+                            const less = Number(it.less_weight || 0);
+                            const net = Number(it.net_weight || Math.max(0, gross - less));
+                            const tunch = Number(it.tunch_percent || 0);
+                            const pureFine = Number(it.fine_weight || (net * tunch) / 100);
+                            const metalRate = Number(it.rate_per_gram ?? it.metal_rate ?? 0);
+                            const wastagePercent = Number(it.wastage_percent ?? 0);
+                            const badlaPercent = Number(it.badla_percent ?? 0);
+                            const totalAdditionPercent = wastagePercent + badlaPercent;
+                            const wastageWeight = Number(it.wastage_weight ?? (totalAdditionPercent !== 0 ? (pureFine * totalAdditionPercent) / 100 : 0));
+                            const billableFine = Number(it.billable_weight ?? (totalAdditionPercent !== 0 ? Math.max(0, pureFine + wastageWeight) : pureFine));
+                            const makingCharge = Number(it.making_charge ?? it.making_charges ?? 0);
+                            const metalValue = Number(it.metal_value ?? (billableFine * metalRate));
+                            const itemTotal = Number(it.item_amount ?? it.item_total ?? (metalValue + makingCharge));
+
+                            return (
+                              <tr key={it.id || idx}>
+                                <td style={{ textAlign: 'center' }} className="font-mono">{idx + 1}</td>
+                                {showPrintTagCol && <td className="font-mono text-xs font-semibold whitespace-nowrap">{it.tag_no || '-'}</td>}
+                                <td>
+                                  <div className="font-semibold leading-tight">{it.item_name || 'Jewellery Item'}</div>
+                                  {it.metal_name && (
+                                    <div className="text-[10px] text-muted">{it.metal_name}</div>
+                                  )}
+                                </td>
+                                <td className="whitespace-nowrap">
+                                  <div>{it.purity_name || '22K (916)'}</div>
+                                  {it.huid && (
+                                    <div className="text-[10px] text-muted font-mono">HUID: {it.huid}</div>
+                                  )}
+                                </td>
+                                <td className="text-right font-mono whitespace-nowrap">{formatWeight(gross, 3)}</td>
+                                {invoiceColumns.show_less_weight && <td className="text-right font-mono text-muted whitespace-nowrap">{formatWeight(less, 3)}</td>}
+                                {invoiceColumns.show_net_weight && <td className="text-right font-mono font-bold whitespace-nowrap">{formatWeight(net, 3)}</td>}
+                                {invoiceColumns.show_tunch && <td className="text-right font-mono whitespace-nowrap">{tunch > 0 ? `${tunch.toFixed(2)}%` : '-'}</td>}
+                                {invoiceColumns.show_fine_weight && (
+                                  <td className="text-right font-mono whitespace-nowrap">
+                                    <div className="font-semibold">{billableFine > 0 ? formatFineWeight(billableFine, 4) : '-'}</div>
+                                  </td>
+                                )}
+                                {hasBadlaWaste && (
+                                  <td className="text-right font-mono text-xs whitespace-nowrap">
+                                    {totalAdditionPercent !== 0 ? (
+                                      <div>
+                                        <div>{wastageWeight > 0 ? '+' : ''}{formatWeight(wastageWeight, 3)}g</div>
+                                        <div className="text-[10px] text-muted">
+                                          {badlaPercent !== 0 && <span>B:{badlaPercent > 0 ? '+' : ''}{badlaPercent}% </span>}
+                                          {wastagePercent !== 0 && <span>W:{wastagePercent > 0 ? '+' : ''}{wastagePercent}%</span>}
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <span className="text-muted">-</span>
+                                    )}
+                                  </td>
+                                )}
+                                {!isWholesaleModal && (
+                                  <td className="text-right font-mono whitespace-nowrap">{formatMetalRate(metalRate)}</td>
+                                )}
+                                {invoiceColumns.show_making_charge && (
+                                  <td className="text-right font-mono whitespace-nowrap">
+                                    <div className="font-semibold">{formatCurrency(makingCharge, false)}</div>
+                                    {it.making_rate ? (
+                                      <div className="text-[10px] text-muted">
+                                        {it.making_charge_type === 'PER_PIECE'
+                                          ? `(${it.pieces || 1} pc @ ₹${it.making_rate})`
+                                          : it.making_charge_type === 'FIXED'
+                                          ? '(Fix)'
+                                          : it.making_charge_type === 'PERCENTAGE'
+                                          ? `(${it.making_rate}%)`
+                                          : `(@₹${it.making_rate}/g)`}
+                                      </div>
+                                    ) : null}
+                                  </td>
+                                )}
+                                {!isWholesaleModal && (
+                                  <td className="text-right font-mono font-bold whitespace-nowrap">
+                                    {formatCurrency(itemTotal)}
+                                  </td>
+                                )}
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                        <tfoot>
+                          <tr className="print-totals-row">
+                            <td colSpan={printLeadColSpan} className="text-right font-bold uppercase whitespace-nowrap">
+                              Totals ({selectedInvoice.items?.length || 0} item{selectedInvoice.items?.length === 1 ? '' : 's'}):
+                            </td>
+                            <td className="text-right font-mono font-bold whitespace-nowrap">
+                              {formatWeight(
+                                (selectedInvoice.items || []).reduce((acc, it) => acc + Number(it.gross_weight || 0), 0),
+                                3
+                              )}
+                            </td>
+                            {invoiceColumns.show_less_weight && (
+                              <td className="text-right font-mono font-bold text-muted whitespace-nowrap">
+                                {formatWeight(
+                                  (selectedInvoice.items || []).reduce((acc, it) => acc + Number(it.less_weight || 0), 0),
+                                  3
+                                )}
+                              </td>
                             )}
-                          </td>
-                          <td className="whitespace-nowrap">
-                            <div>{it.purity_name || '22K (916)'}</div>
-                            {it.huid && (
-                              <div className="text-[10px] text-muted font-mono">HUID: {it.huid}</div>
+                            {invoiceColumns.show_net_weight && (
+                              <td className="text-right font-mono font-bold text-amber-700 whitespace-nowrap">
+                                {formatWeight(
+                                  (selectedInvoice.items || []).reduce((acc, it) => acc + Number(it.net_weight || 0), 0),
+                                  3
+                                )}
+                              </td>
                             )}
-                          </td>
-                          <td className="text-right font-mono whitespace-nowrap">{formatWeight(gross, 3)}</td>
-                          <td className="text-right font-mono text-muted whitespace-nowrap">{formatWeight(less, 3)}</td>
-                          <td className="text-right font-mono font-bold whitespace-nowrap">{formatWeight(net, 3)}</td>
-                          <td className="text-right font-mono whitespace-nowrap">{tunch > 0 ? `${tunch.toFixed(2)}%` : '-'}</td>
-                          <td className="text-right font-mono whitespace-nowrap">
-                            <div className="font-semibold">{billableFine > 0 ? formatFineWeight(billableFine, 4) : '-'}</div>
-                          </td>
-                          <td className="text-right font-mono text-xs whitespace-nowrap">
-                            {totalAdditionPercent !== 0 ? (
-                              <div>
-                                <div>{wastageWeight > 0 ? '+' : ''}{formatWeight(wastageWeight, 3)}g</div>
-                                <div className="text-[10px] text-muted">
-                                  {badlaPercent !== 0 && <span>B:{badlaPercent > 0 ? '+' : ''}{badlaPercent}% </span>}
-                                  {wastagePercent !== 0 && <span>W:{wastagePercent > 0 ? '+' : ''}{wastagePercent}%</span>}
+                            {invoiceColumns.show_tunch && <td></td>}
+                            {invoiceColumns.show_fine_weight && (
+                              <td className="text-right font-mono font-bold text-muted whitespace-nowrap">
+                                <div>
+                                  {formatFineWeight(
+                                    (selectedInvoice.items || []).reduce((acc, it) => {
+                                      const gross = Number(it.gross_weight || 0);
+                                      const less = Number(it.less_weight || 0);
+                                      const net = Number(it.net_weight || Math.max(0, gross - less));
+                                      const tunch = Number(it.tunch_percent || 0);
+                                      const pureFine = Number(it.fine_weight || (net * tunch) / 100);
+                                      const badlaPercent = Number(it.badla_percent ?? 0);
+                                      const wastagePercent = Number(it.wastage_percent ?? 0);
+                                      const totalAdditionPercent = badlaPercent + wastagePercent;
+                                      const additionWeight = Number(it.wastage_weight ?? ((pureFine * totalAdditionPercent) / 100));
+                                      return acc + Number(it.billable_weight ?? (totalAdditionPercent !== 0 ? Math.max(0, pureFine + additionWeight) : pureFine));
+                                    }, 0),
+                                    4
+                                  )}
                                 </div>
-                              </div>
-                            ) : (
-                              <span className="text-muted">-</span>
+                              </td>
                             )}
-                          </td>
-                          <td className="text-right font-mono whitespace-nowrap">{formatMetalRate(metalRate)}</td>
-                          <td className="text-right font-mono whitespace-nowrap">
-                            <div className="font-semibold">{formatCurrency(makingCharge, false)}</div>
-                            {it.making_rate ? (
-                              <div className="text-[10px] text-muted">
-                                {it.making_charge_type === 'PER_PIECE'
-                                  ? `(${it.pieces || 1} pc @ ₹${it.making_rate})`
-                                  : it.making_charge_type === 'FIXED'
-                                  ? '(Fix)'
-                                  : it.making_charge_type === 'PERCENTAGE'
-                                  ? `(${it.making_rate}%)`
-                                  : `(@₹${it.making_rate}/g)`}
-                              </div>
-                            ) : null}
-                          </td>
-                          <td className="text-right font-mono font-bold whitespace-nowrap">
-                            {formatCurrency(itemTotal)}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                  <tfoot>
-                    <tr className="print-totals-row">
-                      <td colSpan={4} className="text-right font-bold uppercase whitespace-nowrap">
-                        Totals ({selectedInvoice.items?.length || 0} item{selectedInvoice.items?.length === 1 ? '' : 's'}):
-                      </td>
-                      <td className="text-right font-mono font-bold whitespace-nowrap">
-                        {formatWeight(
-                          (selectedInvoice.items || []).reduce((acc, it) => acc + Number(it.gross_weight || 0), 0),
-                          3
-                        )}
-                      </td>
-                      <td className="text-right font-mono font-bold text-muted whitespace-nowrap">
-                        {formatWeight(
-                          (selectedInvoice.items || []).reduce((acc, it) => acc + Number(it.less_weight || 0), 0),
-                          3
-                        )}
-                      </td>
-                      <td className="text-right font-mono font-bold text-amber-700 whitespace-nowrap">
-                        {formatWeight(
-                          (selectedInvoice.items || []).reduce((acc, it) => acc + Number(it.net_weight || 0), 0),
-                          3
-                        )}
-                      </td>
-                      <td></td>
-                      <td className="text-right font-mono font-bold text-muted whitespace-nowrap">
-                        <div>
+                            {hasBadlaWaste && <td></td>}
+                            {!isWholesaleModal && <td></td>}
+                            {invoiceColumns.show_making_charge && (
+                              <td className="text-right font-mono font-bold whitespace-nowrap">
+                                {formatCurrency(
+                                  (selectedInvoice.items || []).reduce((acc, it) => acc + Number(it.making_charge ?? it.making_charges ?? 0), 0)
+                                )}
+                              </td>
+                            )}
+                            {!isWholesaleModal && (
+                              <td className="text-right font-mono font-bold text-base text-amber-800 whitespace-nowrap">
+                                {formatCurrency(
+                                  (selectedInvoice.items || []).reduce((acc, it) => {
+                                    const metalRate = Number(it.rate_per_gram ?? it.metal_rate ?? 0);
+                                    const makingCharge = Number(it.making_charge ?? it.making_charges ?? 0);
+                                    const tunch = Number(it.tunch_percent || 0);
+                                    const net = Number(it.net_weight || 0);
+                                    const fine = Number(it.fine_weight || (net * tunch) / 100);
+                                    const metalValue = Number(it.metal_value ?? (fine * metalRate));
+                                    return acc + Number(it.item_amount ?? it.item_total ?? (metalValue + makingCharge));
+                                  }, 0)
+                                )}
+                              </td>
+                            )}
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  );
+                })()}
+
+                {/* Customer Scrap / Old Metal Exchange Table (If any) */}
+                {selectedInvoice.exchange && selectedInvoice.exchange.items && selectedInvoice.exchange.items.length > 0 && (() => {
+                  const hasRealExchTags = (selectedInvoice.exchange.items || []).some(
+                    (exIt: any) => exIt.tag_no && exIt.tag_no.trim() !== '' && !/^EXCH-\d+-\d+$/i.test(exIt.tag_no.trim()) && !/^EXCH-[A-Z0-9]+-\d+$/i.test(exIt.tag_no.trim())
+                  );
+                  const showPrintExchTagCol = invoiceColumns.show_tag_no && hasRealExchTags;
+                  const printExchLeadColSpan = 1 + (showPrintExchTagCol ? 1 : 0) + 1 + 1; // # + (Tag) + Scrap Item + Metal & Purity
+
+                  return (
+                    <div className="tax-invoice-exchange-section">
+                      <div className="exchange-section-title">
+                        <span>Customer Old Scrap / Metal Exchange Return</span>
+                        <span className="font-mono text-xs text-muted">
+                          Exchange Ref: {selectedInvoice.exchange.exchange_number}
+                        </span>
+                      </div>
+                      <div className="print-table-wrapper">
+                        <table className="print-items-table">
+                          <thead>
+                            <tr>
+                              <th style={{ width: '30px', textAlign: 'center' }}>#</th>
+                              {showPrintExchTagCol && <th>Tag #</th>}
+                              <th>Old Scrap Item</th>
+                              <th>Metal & Purity</th>
+                              <th className="text-right">Gross (g)</th>
+                              {invoiceColumns.show_less_weight && <th className="text-right">Less (g)</th>}
+                              {invoiceColumns.show_net_weight && <th className="text-right">Net (g)</th>}
+                              {invoiceColumns.show_tunch && <th className="text-right">Tunch %</th>}
+                              {invoiceColumns.show_fine_weight && <th className="text-right">Fine Wt</th>}
+                              {invoiceColumns.show_making_charge && <th className="text-right">Deduct %</th>}
+                              {!isWholesaleModal && <th className="text-right">Ex. Rate</th>}
+                              {!isWholesaleModal && <th className="text-right">Credit / Jama Value (₹ - जमा)</th>}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {selectedInvoice.exchange.items.map((exIt: any, exIdx: number) => (
+                              <tr key={exIt.id || exIdx}>
+                                <td style={{ textAlign: 'center' }} className="font-mono">{exIdx + 1}</td>
+                                {showPrintExchTagCol && <td className="font-mono text-xs">{exIt.tag_no || '-'}</td>}
+                                <td className="font-semibold">{exIt.item_name || 'Customer Scrap'}</td>
+                                <td>{exIt.metal_name || 'Gold'} {exIt.purity_name || ''}</td>
+                                <td className="text-right font-mono">{formatWeight(exIt.gross_weight, 3)}</td>
+                                {invoiceColumns.show_less_weight && <td className="text-right font-mono text-muted">{formatWeight(exIt.less_weight, 3)}</td>}
+                                {invoiceColumns.show_net_weight && <td className="text-right font-mono font-bold">{formatWeight(exIt.net_weight, 3)}</td>}
+                                {invoiceColumns.show_tunch && <td className="text-right font-mono">{Number(exIt.tunch_percent || 0).toFixed(2)}%</td>}
+                                {invoiceColumns.show_fine_weight && <td className="text-right font-mono">{formatFineWeight(exIt.fine_weight, 4)}</td>}
+                                {invoiceColumns.show_making_charge && <td className="text-right font-mono">{Number(exIt.deduction_percent || 0).toFixed(1)}%</td>}
+                                {!isWholesaleModal && (
+                                  <td className="text-right font-mono">{formatMetalRate(exIt.exchange_rate)}</td>
+                                )}
+                                {!isWholesaleModal && (
+                                  <td className="text-right font-mono font-bold text-emerald-700">
+                                    {formatCurrency(exIt.exchange_value)}
+                                  </td>
+                                )}
+                              </tr>
+                            ))}
+                          </tbody>
+                          <tfoot>
+                            <tr className="print-totals-row">
+                              <td colSpan={printExchLeadColSpan} className="text-right font-bold uppercase">Total Old Metal Deducted:</td>
+                              <td className="text-right font-mono font-bold">{formatWeight(selectedInvoice.exchange.total_gross_weight, 3)}</td>
+                              {invoiceColumns.show_less_weight && <td className="text-right font-mono text-muted">{formatWeight(selectedInvoice.exchange.total_less_weight, 3)}</td>}
+                              {invoiceColumns.show_net_weight && <td className="text-right font-mono font-bold">{formatWeight(selectedInvoice.exchange.total_net_weight, 3)}</td>}
+                              {invoiceColumns.show_tunch && <td></td>}
+                              {invoiceColumns.show_fine_weight && <td className="text-right font-mono font-bold">{formatFineWeight(selectedInvoice.exchange.total_fine_weight, 4)}</td>}
+                              {invoiceColumns.show_making_charge && <td></td>}
+                              {!isWholesaleModal && <td></td>}
+                              {!isWholesaleModal && (
+                                <td className="text-right font-mono font-bold text-emerald-700">
+                                  − {formatCurrency(selectedInvoice.exchange.total_exchange_value)}
+                                </td>
+                              )}
+                            </tr>
+                          </tfoot>
+                        </table>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Bottom Split Section: Payment Breakdown, Notes, Signatures & Ledger */}
+                <div className="tax-invoice-bottom-grid">
+                  {/* Left: Payment Tendered Breakdown & Signatures */}
+                  <div className="print-payment-card">
+                    <div className="print-card-header">PAYMENT MODES & TENDERED</div>
+                    {selectedInvoice.payments && selectedInvoice.payments.length > 0 ? (
+                      selectedInvoice.payments.map((p) => {
+                        const metalLabel =
+                          p.payment_mode === 'GOLD'
+                            ? 'Gold Payment'
+                            : p.payment_mode === 'SILVER'
+                            ? 'Silver Payment'
+                            : p.payment_mode === 'BANK'
+                            ? 'Bank Transfer'
+                            : p.payment_mode;
+
+                        const detailsParts: string[] = [];
+                        if (p.metal_weight) {
+                          detailsParts.push(`${formatWeight(p.metal_weight, 3)}g`);
+                        }
+                        if (p.payer_name && p.payer_name !== selectedInvoice.customer_name) {
+                          detailsParts.push(`Paid by: ${p.payer_name}`);
+                        }
+                        if (p.payer_bank) {
+                          detailsParts.push(`from ${p.payer_bank}`);
+                        }
+                        if (p.received_in) {
+                          detailsParts.push(`into ${p.received_in}`);
+                        }
+                        if (p.reference_number) {
+                          detailsParts.push(`Ref: ${p.reference_number}`);
+                        }
+
+                        return (
+                          <div key={p.id} className="print-payment-row">
+                            <span className="font-semibold text-slate-700">
+                              {metalLabel}
+                              {detailsParts.length > 0 ? ` (${detailsParts.join(' • ')})` : ''}:
+                            </span>
+                            {!isWholesaleModal && (
+                              <strong className="font-mono text-slate-900">
+                                {formatCurrency(p.amount)}
+                              </strong>
+                            )}
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <div className="text-xs text-muted italic py-1">
+                        No advance payment recorded (Full balance due on account)
+                      </div>
+                    )}
+
+                    {selectedInvoice.notes && (
+                      <div className="print-notes-box">
+                        <strong>Invoice Notes:</strong> {selectedInvoice.notes}
+                      </div>
+                    )}
+
+                    {/* Signature Boxes */}
+                    <div className="tax-invoice-sign-grid">
+                      <div className="sign-box">
+                        <span>Customer Signature</span>
+                      </div>
+                      <div className="sign-box">
+                        <span>For {shopProfile?.name || 'JEWEL SUITE STORE'}</span>
+                        <span className="text-[10px] text-muted">(Authorized Signatory)</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Right: Calculation Ledger */}
+                  {isWholesaleModal ? (
+                    <div className="print-ledger-box wholesale-ledger">
+                      <div className="ledger-row font-bold text-slate-800 border-b pb-1 mb-1">
+                        <span>WHOLESALE FINE-TO-FINE SETTLEMENT</span>
+                      </div>
+                      <div className="ledger-row">
+                        <span>Total Gross Weight:</span>
+                        <strong className="font-mono">
+                          {formatWeight((selectedInvoice.items || []).reduce((acc, it) => acc + Number(it.gross_weight || 0), 0), 3)}g
+                        </strong>
+                      </div>
+                      <div className="ledger-row">
+                        <span>Total Net Weight:</span>
+                        <strong className="font-mono">
+                          {formatWeight((selectedInvoice.items || []).reduce((acc, it) => acc + Number(it.net_weight || 0), 0), 3)}g
+                        </strong>
+                      </div>
+                      <div className="ledger-row highlight">
+                        <span>Total Billable Fine Wt:</span>
+                        <strong className="font-mono font-bold text-amber-800">
                           {formatFineWeight(
                             (selectedInvoice.items || []).reduce((acc, it) => {
                               const gross = Number(it.gross_weight || 0);
@@ -666,261 +934,237 @@ export const InvoicesPage: React.FC = () => {
                               return acc + Number(it.billable_weight ?? (totalAdditionPercent !== 0 ? Math.max(0, pureFine + additionWeight) : pureFine));
                             }, 0),
                             4
-                          )}
-                        </div>
-                      </td>
-                      <td></td>
-                      <td></td>
-                      <td className="text-right font-mono font-bold whitespace-nowrap">
-                        {formatCurrency(
-                          (selectedInvoice.items || []).reduce((acc, it) => acc + Number(it.making_charge ?? it.making_charges ?? 0), 0)
-                        )}
-                      </td>
-                      <td className="text-right font-mono font-bold text-base text-amber-800 whitespace-nowrap">
-                        {formatCurrency(
-                          (selectedInvoice.items || []).reduce((acc, it) => {
-                            const metalRate = Number(it.rate_per_gram ?? it.metal_rate ?? 0);
-                            const makingCharge = Number(it.making_charge ?? it.making_charges ?? 0);
-                            const tunch = Number(it.tunch_percent || 0);
-                            const net = Number(it.net_weight || 0);
-                            const fine = Number(it.fine_weight || (net * tunch) / 100);
-                            const metalValue = Number(it.metal_value ?? (fine * metalRate));
-                            return acc + Number(it.item_amount ?? it.item_total ?? (metalValue + makingCharge));
-                          }, 0)
-                        )}
-                      </td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
+                          )}g
+                        </strong>
+                      </div>
 
-              {/* Customer Scrap / Old Metal Exchange Table (If any) */}
-              {selectedInvoice.exchange && selectedInvoice.exchange.items && selectedInvoice.exchange.items.length > 0 && (
-                <div className="tax-invoice-exchange-section">
-                  <div className="exchange-section-title">
-                    <span>Customer Old Scrap / Metal Exchange Return</span>
-                    <span className="font-mono text-xs text-muted">
-                      Exchange Ref: {selectedInvoice.exchange.exchange_number}
-                    </span>
-                  </div>
-                  <div className="print-table-wrapper">
-                    <table className="print-items-table">
-                      <thead>
-                        <tr>
-                          <th style={{ width: '30px', textAlign: 'center' }}>#</th>
-                          <th>Tag #</th>
-                          <th>Old Scrap Item</th>
-                          <th>Metal & Purity</th>
-                          <th className="text-right">Gross (g)</th>
-                          <th className="text-right">Less (g)</th>
-                          <th className="text-right">Net (g)</th>
-                          <th className="text-right">Tunch %</th>
-                          <th className="text-right">Fine Wt</th>
-                          <th className="text-right">Deduct %</th>
-                          <th className="text-right">Ex. Rate</th>
-                          <th className="text-right">Credit / Jama Value (₹ - जमा)</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {selectedInvoice.exchange.items.map((exIt: any, exIdx: number) => (
-                          <tr key={exIt.id || exIdx}>
-                            <td style={{ textAlign: 'center' }} className="font-mono">{exIdx + 1}</td>
-                            <td className="font-mono text-xs">{exIt.tag_no || '-'}</td>
-                            <td className="font-semibold">{exIt.item_name || 'Customer Scrap'}</td>
-                            <td>{exIt.metal_name || 'Gold'} {exIt.purity_name || ''}</td>
-                            <td className="text-right font-mono">{formatWeight(exIt.gross_weight, 3)}</td>
-                            <td className="text-right font-mono text-muted">{formatWeight(exIt.less_weight, 3)}</td>
-                            <td className="text-right font-mono font-bold">{formatWeight(exIt.net_weight, 3)}</td>
-                            <td className="text-right font-mono">{Number(exIt.tunch_percent || 0).toFixed(2)}%</td>
-                            <td className="text-right font-mono">{formatFineWeight(exIt.fine_weight, 4)}</td>
-                            <td className="text-right font-mono">{Number(exIt.deduction_percent || 0).toFixed(1)}%</td>
-                            <td className="text-right font-mono">{formatMetalRate(exIt.exchange_rate)}</td>
-                            <td className="text-right font-mono font-bold text-emerald-700">
-                              {formatCurrency(exIt.exchange_value)}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                      <tfoot>
-                        <tr className="print-totals-row">
-                          <td colSpan={4} className="text-right font-bold uppercase">Total Old Metal Deducted:</td>
-                          <td className="text-right font-mono font-bold">{formatWeight(selectedInvoice.exchange.total_gross_weight, 3)}</td>
-                          <td className="text-right font-mono text-muted">{formatWeight(selectedInvoice.exchange.total_less_weight, 3)}</td>
-                          <td className="text-right font-mono font-bold">{formatWeight(selectedInvoice.exchange.total_net_weight, 3)}</td>
-                          <td></td>
-                          <td className="text-right font-mono font-bold">{formatFineWeight(selectedInvoice.exchange.total_fine_weight, 4)}</td>
-                          <td></td>
-                          <td></td>
-                          <td className="text-right font-mono font-bold text-emerald-700">
-                            − {formatCurrency(selectedInvoice.exchange.total_exchange_value)}
-                          </td>
-                        </tr>
-                      </tfoot>
-                    </table>
-                  </div>
-                </div>
-              )}
-
-              {/* Bottom Split Section: Payment Breakdown, Notes, Signatures & Ledger */}
-              <div className="tax-invoice-bottom-grid">
-                {/* Left: Payment Tendered Breakdown & Signatures */}
-                <div className="print-payment-card">
-                  <div className="print-card-header">PAYMENT MODES & TENDERED</div>
-                  {selectedInvoice.payments && selectedInvoice.payments.length > 0 ? (
-                    selectedInvoice.payments.map((p) => {
-                      const metalLabel =
-                        p.payment_mode === 'GOLD'
-                          ? 'Gold Payment'
-                          : p.payment_mode === 'SILVER'
-                          ? 'Silver Payment'
-                          : p.payment_mode === 'BANK'
-                          ? 'Bank Transfer'
-                          : p.payment_mode;
-
-                      const detailsParts: string[] = [];
-                      if (p.metal_weight) {
-                        detailsParts.push(`${formatWeight(p.metal_weight, 3)}g @ ₹${p.metal_rate || 0}/g`);
-                      }
-                      if (p.payer_name && p.payer_name !== selectedInvoice.customer_name) {
-                        detailsParts.push(`Paid by: ${p.payer_name}`);
-                      }
-                      if (p.payer_bank) {
-                        detailsParts.push(`from ${p.payer_bank}`);
-                      }
-                      if (p.received_in) {
-                        detailsParts.push(`into ${p.received_in}`);
-                      }
-                      if (p.reference_number) {
-                        detailsParts.push(`Ref: ${p.reference_number}`);
-                      }
-
-                      return (
-                        <div key={p.id} className="print-payment-row">
-                          <span className="font-semibold text-slate-700">
-                            {metalLabel}
-                            {detailsParts.length > 0 ? ` (${detailsParts.join(' • ')})` : ''}:
+                      {selectedInvoice.exchange && Number(selectedInvoice.exchange.total_fine_weight || 0) > 0 && (
+                        <div className="ledger-row text-rose-600">
+                          <span>Less Old Metal Exchange Fine:</span>
+                          <span className="font-mono font-bold">
+                            −{formatFineWeight(selectedInvoice.exchange.total_fine_weight, 4)}g
                           </span>
-                          <strong className="font-mono text-slate-900">
-                            {formatCurrency(p.amount)}
-                          </strong>
                         </div>
-                      );
-                    })
+                      )}
+
+                      {selectedInvoice.payments && selectedInvoice.payments.some((p) => p.payment_mode === 'GOLD' || p.payment_mode === 'SILVER') && (
+                        <div className="ledger-row text-emerald-700">
+                          <span>Fine Metal Received (Payment):</span>
+                          <span className="font-mono font-bold">
+                            −{formatFineWeight(
+                              selectedInvoice.payments
+                                .filter((p) => p.payment_mode === 'GOLD' || p.payment_mode === 'SILVER')
+                                .reduce((acc, p) => acc + Number(p.metal_weight || 0), 0),
+                              4
+                            )}g
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Net Balance Fine */}
+                      {(() => {
+                        const totalBillableFine = (selectedInvoice.items || []).reduce((acc, it) => {
+                          const gross = Number(it.gross_weight || 0);
+                          const less = Number(it.less_weight || 0);
+                          const net = Number(it.net_weight || Math.max(0, gross - less));
+                          const tunch = Number(it.tunch_percent || 0);
+                          const pureFine = Number(it.fine_weight || (net * tunch) / 100);
+                          const badlaPercent = Number(it.badla_percent ?? 0);
+                          const wastagePercent = Number(it.wastage_percent ?? 0);
+                          const totalAdditionPercent = badlaPercent + wastagePercent;
+                          const additionWeight = Number(it.wastage_weight ?? ((pureFine * totalAdditionPercent) / 100));
+                          return acc + Number(it.billable_weight ?? (totalAdditionPercent !== 0 ? Math.max(0, pureFine + additionWeight) : pureFine));
+                        }, 0);
+                        const exchFine = Number(selectedInvoice.exchange?.total_fine_weight || 0);
+                        const paidFine = (selectedInvoice.payments || [])
+                          .filter((p) => p.payment_mode === 'GOLD' || p.payment_mode === 'SILVER')
+                          .reduce((acc, p) => acc + Number(p.metal_weight || 0), 0);
+                        const balFine = totalBillableFine - exchFine - paidFine;
+                        const isSettled = Math.abs(balFine) <= 0.0001;
+                        return (
+                          <div className={`ledger-row balance ${isSettled ? 'text-emerald-700' : 'text-amber-800'}`}>
+                            <span>{isSettled ? 'Fine Balance:' : balFine > 0 ? 'Remaining Fine Balance Due:' : 'Shop Owes Fine:'}</span>
+                            <strong className="font-mono text-base">
+                              {isSettled ? '0.0000g (SETTLED)' : `${formatFineWeight(Math.abs(balFine), 4)}g`}
+                            </strong>
+                          </div>
+                        );
+                      })()}
+
+                      {(selectedInvoice.items || []).some(it => Number(it.making_charge || it.making_charges || 0) > 0) && (
+                        <div className="ledger-row text-xs text-muted border-t pt-1 mt-1">
+                          <span>Total Labour / Making:</span>
+                          <span className="font-mono">
+                            {formatCurrency((selectedInvoice.items || []).reduce((acc, it) => acc + Number(it.making_charge || it.making_charges || 0), 0))}
+                          </span>
+                        </div>
+                      )}
+                    </div>
                   ) : (
-                    <div className="text-xs text-muted italic py-1">
-                      No advance payment recorded (Full balance due on account)
-                    </div>
-                  )}
+                    <div className="print-ledger-box">
+                      {/* NET METAL SETTLEMENT & VALUE TALLY */}
+                      {(() => {
+                        const goldItems = (selectedInvoice.items || []).filter((it: any) =>
+                          (it.metal_name || '').toUpperCase().includes('GOLD')
+                        );
+                        const silverItems = (selectedInvoice.items || []).filter((it: any) =>
+                          (it.metal_name || '').toUpperCase().includes('SILVER')
+                        );
+                        const exchItems = selectedInvoice.exchange?.items || [];
+                        const exchGold = exchItems.filter((ex: any) =>
+                          (ex.metal_name || '').toUpperCase().includes('GOLD')
+                        );
+                        const exchSilver = exchItems.filter((ex: any) =>
+                          (ex.metal_name || '').toUpperCase().includes('SILVER')
+                        );
 
-                  {selectedInvoice.notes && (
-                    <div className="print-notes-box">
-                      <strong>Invoice Notes:</strong> {selectedInvoice.notes}
-                    </div>
-                  )}
+                        const hasGold = goldItems.length > 0 || exchGold.length > 0;
+                        const hasSilver = silverItems.length > 0 || exchSilver.length > 0;
+                        if (!hasGold && !hasSilver) return null;
 
-                  {/* Signature Boxes */}
-                  <div className="tax-invoice-sign-grid">
-                    <div className="sign-box">
-                      <span>Customer Signature</span>
-                    </div>
-                    <div className="sign-box">
-                      <span>For {shopProfile?.name || 'JEWEL SUITE STORE'}</span>
-                      <span className="text-[10px] text-muted">(Authorized Signatory)</span>
-                    </div>
-                  </div>
-                </div>
+                        const calcFine = (arr: any[]) =>
+                          arr.reduce((acc, it) => {
+                            const net = Number(it.net_weight || (Number(it.gross_weight || 0) - Number(it.less_weight || 0)));
+                            const tunch = Number(it.tunch_percent || 0);
+                            const pf = Number(it.fine_weight || (net * tunch) / 100);
+                            const totalAdd = Number(it.badla_percent || 0) + Number(it.wastage_percent || 0);
+                            const waste = Number(it.wastage_weight ?? ((pf * totalAdd) / 100));
+                            return acc + Number(it.billable_weight ?? (totalAdd !== 0 ? pf + waste : pf));
+                          }, 0);
 
-                {/* Right: Authoritative Financial Calculation Ledger */}
-                <div className="print-ledger-box">
-                  <div className="ledger-row">
-                    <span>Taxable Amount (Metal + Labour):</span>
-                    <strong className="font-mono">{formatCurrency(selectedInvoice.taxable_amount)}</strong>
-                  </div>
+                        const goldSaleF = calcFine(goldItems);
+                        const goldRetF = calcFine(exchGold);
+                        const goldBalF = goldSaleF - goldRetF;
 
-                  {Number(selectedInvoice.discount_amount || 0) > 0 && (
-                    <div className="ledger-row text-rose-600">
-                      <span>Discount Applied:</span>
-                      <span className="font-mono">−{formatCurrency(selectedInvoice.discount_amount)}</span>
-                    </div>
-                  )}
+                        const goldSaleA = goldItems.reduce((acc: number, it: any) => acc + Number(it.item_amount ?? it.item_total ?? 0), 0);
+                        const goldRetA = exchGold.reduce((acc: number, ex: any) => acc + Number(ex.exchange_value ?? 0), 0);
+                        const goldBalA = goldSaleA - goldRetA;
 
-                  {Number(selectedInvoice.gst_amount || 0) > 0 && (
-                    <>
-                      <div className="ledger-row text-xs text-muted">
-                        <span>CGST ({((selectedInvoice.gst_rate || 3) / 2).toFixed(1)}%):</span>
-                        <span className="font-mono">
-                          {formatCurrency(Number(selectedInvoice.gst_amount || 0) / 2)}
+                        const silverSaleF = calcFine(silverItems);
+                        const silverRetF = calcFine(exchSilver);
+                        const silverBalF = silverSaleF - silverRetF;
+
+                        const silverSaleA = silverItems.reduce((acc: number, it: any) => acc + Number(it.item_amount ?? it.item_total ?? 0), 0);
+                        const silverRetA = exchSilver.reduce((acc: number, ex: any) => acc + Number(ex.exchange_value ?? 0), 0);
+                        const silverBalA = silverSaleA - silverRetA;
+
+                        return (
+                          <div className="print-metal-tally-box mb-2">
+                            <div className="font-bold text-[10px] uppercase tracking-wider text-slate-700 pb-0.5 border-b mb-1">
+                              Net Metal & Return Balance
+                            </div>
+                            {hasGold && (
+                              <div className="text-2xs font-mono leading-tight py-0.5">
+                                <strong>🟡 Gold Fine:</strong> {formatFineWeight(goldSaleF, 4)}g (−) Return Fine: {formatFineWeight(goldRetF, 4)}g (=) <strong>Bal Fine: {formatFineWeight(goldBalF, 4)}g</strong>
+                                <br />
+                                <span className="text-muted">↳ Gold Amt: {formatCurrency(goldSaleA)} (−) Return Amt: {formatCurrency(goldRetA)} (=) <strong>Bal Amt: {formatCurrency(goldBalA)}</strong></span>
+                              </div>
+                            )}
+                            {hasSilver && (
+                              <div className="text-2xs font-mono leading-tight py-0.5 mt-1 border-t border-dashed">
+                                <strong>⚪ Silver Fine:</strong> {formatFineWeight(silverSaleF, 4)}g (−) Return Fine: {formatFineWeight(silverRetF, 4)}g (=) <strong>Bal Fine: {formatFineWeight(silverBalF, 4)}g</strong>
+                                <br />
+                                <span className="text-muted">↳ Silver Amt: {formatCurrency(silverSaleA)} (−) Return Amt: {formatCurrency(silverRetA)} (=) <strong>Bal Amt: {formatCurrency(silverBalA)}</strong></span>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
+
+                      <div className="ledger-row">
+                        <span>Taxable Amount (Metal + Labour):</span>
+                        <strong className="font-mono">{formatCurrency(selectedInvoice.taxable_amount)}</strong>
+                      </div>
+
+                      {Number(selectedInvoice.discount_amount || 0) > 0 && (
+                        <div className="ledger-row text-rose-600">
+                          <span>Discount Applied:</span>
+                          <span className="font-mono">−{formatCurrency(selectedInvoice.discount_amount)}</span>
+                        </div>
+                      )}
+
+                      {Number(selectedInvoice.gst_amount || 0) > 0 && (
+                        <>
+                          <div className="ledger-row text-xs text-muted">
+                            <span>CGST ({((selectedInvoice.gst_rate || 3) / 2).toFixed(1)}%):</span>
+                            <span className="font-mono">
+                              {formatCurrency(Number(selectedInvoice.gst_amount || 0) / 2)}
+                            </span>
+                          </div>
+                          <div className="ledger-row text-xs text-muted">
+                            <span>SGST ({((selectedInvoice.gst_rate || 3) / 2).toFixed(1)}%):</span>
+                            <span className="font-mono">
+                              {formatCurrency(Number(selectedInvoice.gst_amount || 0) / 2)}
+                            </span>
+                          </div>
+                        </>
+                      )}
+
+                      {Number(selectedInvoice.exchange_amount || 0) > 0 && (
+                        <div className="ledger-row highlight text-emerald-700">
+                          <span>Old Metal Exchange Deduction:</span>
+                          <span className="font-mono">−{formatCurrency(selectedInvoice.exchange_amount)}</span>
+                        </div>
+                      )}
+
+                      {Number(selectedInvoice.round_off || 0) !== 0 && (
+                        <div className="ledger-row text-xs text-muted">
+                          <span>Round Off:</span>
+                          <span className="font-mono">{formatCurrency(selectedInvoice.round_off)}</span>
+                        </div>
+                      )}
+
+                      <div className="ledger-row grand-total">
+                        <span>Net Amount Payable:</span>
+                        <span className="font-mono">{formatCurrency(selectedInvoice.net_payable || selectedInvoice.grand_total)}</span>
+                      </div>
+
+                      <div className="ledger-row highlight text-emerald-700">
+                        <span>Total Amount Received:</span>
+                        <span className="font-mono">{formatCurrency(selectedInvoice.amount_paid)}</span>
+                      </div>
+
+                      <div className="ledger-row balance">
+                        <span>Balance Remaining:</span>
+                        <span
+                          className={`font-mono ${
+                            Number(selectedInvoice.balance_amount || 0) > 0 ? 'text-rose-700 font-bold' : 'text-emerald-700'
+                          }`}
+                        >
+                          {Number(selectedInvoice.balance_amount || 0) > 0
+                            ? formatCurrency(selectedInvoice.balance_amount)
+                            : '₹0.00 (PAID)'}
                         </span>
                       </div>
-                      <div className="ledger-row text-xs text-muted">
-                        <span>SGST ({((selectedInvoice.gst_rate || 3) / 2).toFixed(1)}%):</span>
-                        <span className="font-mono">
-                          {formatCurrency(Number(selectedInvoice.gst_amount || 0) / 2)}
-                        </span>
-                      </div>
-                    </>
-                  )}
 
-                  {Number(selectedInvoice.exchange_amount || 0) > 0 && (
-                    <div className="ledger-row highlight text-emerald-700">
-                      <span>Old Metal Exchange Deduction:</span>
-                      <span className="font-mono">−{formatCurrency(selectedInvoice.exchange_amount)}</span>
-                    </div>
-                  )}
-
-                  {Number(selectedInvoice.round_off || 0) !== 0 && (
-                    <div className="ledger-row text-xs text-muted">
-                      <span>Round Off:</span>
-                      <span className="font-mono">{formatCurrency(selectedInvoice.round_off)}</span>
-                    </div>
-                  )}
-
-                  <div className="ledger-row grand-total">
-                    <span>Net Amount Payable:</span>
-                    <span className="font-mono">{formatCurrency(selectedInvoice.net_payable || selectedInvoice.grand_total)}</span>
-                  </div>
-
-                  <div className="ledger-row highlight text-emerald-700">
-                    <span>Total Amount Received:</span>
-                    <span className="font-mono">{formatCurrency(selectedInvoice.amount_paid)}</span>
-                  </div>
-
-                  <div className="ledger-row balance">
-                    <span>Balance Remaining:</span>
-                    <span
-                      className={`font-mono ${
-                        Number(selectedInvoice.balance_amount || 0) > 0 ? 'text-rose-700 font-bold' : 'text-emerald-700'
-                      }`}
-                    >
-                      {Number(selectedInvoice.balance_amount || 0) > 0
-                        ? formatCurrency(selectedInvoice.balance_amount)
-                        : '₹0.00 (PAID)'}
-                    </span>
-                  </div>
-
-                  {Number(selectedInvoice.amount_paid || 0) > Number(selectedInvoice.net_payable || selectedInvoice.grand_total || 0) && (
-                    <div className="ledger-row text-xs text-emerald-600 font-semibold pt-1 border-t">
-                      <span>Change Returned to Customer:</span>
-                      <span className="font-mono">
-                        {formatCurrency(Number(selectedInvoice.amount_paid) - Number(selectedInvoice.net_payable || selectedInvoice.grand_total))}
-                      </span>
+                      {Number(selectedInvoice.amount_paid || 0) > Number(selectedInvoice.net_payable || selectedInvoice.grand_total || 0) && (
+                        <div className="ledger-row text-xs text-emerald-600 font-semibold pt-1 border-t">
+                          <span>Change Returned to Customer:</span>
+                          <span className="font-mono">
+                            {formatCurrency(Number(selectedInvoice.amount_paid) - Number(selectedInvoice.net_payable || selectedInvoice.grand_total))}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
-              </div>
 
-              {/* Legal Terms & Hallmark Policy */}
-              <div className="tax-invoice-terms">
-                <p className="font-bold">
-                  Subject to {shopProfile?.city || 'local'} jurisdiction. Goods once sold will be accepted for exchange/return within 7 days along with original tax bill.
-                </p>
-                <p>1. All gold jewellery tested for 916 / 750 hallmark purity as per BIS guidelines. 2. No warranty on stone breakage or mishandling.</p>
+                {/* Legal Terms & Hallmark Policy */}
+                <div className="tax-invoice-terms">
+                  <p className="font-bold">
+                    Subject to {shopProfile?.city || 'local'} jurisdiction. Goods once sold will be accepted for exchange/return within 7 days along with original tax bill.
+                  </p>
+                  <p>1. All gold jewellery tested for 916 / 750 hallmark purity as per BIS guidelines. 2. No warranty on stone breakage or mishandling.</p>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
     </div>
   );
 };
+
+export default InvoicesPage;
+

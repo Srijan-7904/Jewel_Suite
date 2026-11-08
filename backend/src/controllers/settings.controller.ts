@@ -160,6 +160,43 @@ export class SettingsController {
     }
   }
 
+  // Store Dealing Metals Configuration
+  async getMetals(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const activeOnly = req.query.activeOnly === 'true';
+      const metals = settingsService.getStoreMetals(activeOnly);
+      sendSuccess(res, metals, 'Store metals retrieved');
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  async toggleMetal(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { code } = req.params;
+      const { is_active } = req.body;
+      if (typeof is_active !== 'boolean') {
+        throw new BadRequestError("'is_active' boolean is required in request body", 'VALIDATION_ERROR');
+      }
+      const userId = req.user?.id;
+      const updated = settingsService.toggleStoreMetal(code, is_active, userId);
+      sendSuccess(res, updated, `Metal '${code}' status updated to ${is_active ? 'active' : 'inactive'}`);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  async updateActiveMetals(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { enabled_metals } = req.body;
+      const userId = req.user?.id;
+      const updated = settingsService.updateActiveMetals(enabled_metals, userId);
+      sendSuccess(res, updated, 'Active metals configuration updated successfully');
+    } catch (err) {
+      next(err);
+    }
+  }
+
   // Shop Receiving Accounts
   async getReceivingAccounts(_req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
@@ -195,6 +232,26 @@ export class SettingsController {
       const userId = req.user?.id;
       const updated = settingsService.updatePrintSettings(req.body, userId);
       sendSuccess(res, updated, 'Print settings updated successfully');
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  // Invoice Columns & Optional Fields Configuration
+  async getInvoiceColumns(_req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const columns = settingsService.getInvoiceColumnSettings();
+      sendSuccess(res, columns, 'Invoice column settings retrieved');
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  async updateInvoiceColumns(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userId = req.user?.id;
+      const updated = settingsService.updateInvoiceColumnSettings(req.body, userId);
+      sendSuccess(res, updated, 'Invoice column configuration updated successfully');
     } catch (err) {
       next(err);
     }

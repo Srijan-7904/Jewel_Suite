@@ -37,8 +37,8 @@ export const salesItemSchema = z.object({
   tunch_percent: z.number().min(0).max(100).default(91.6),
   wastage_percent: z.number().default(0),
   badla_percent: z.number().default(0).optional(),
-  rate_per_gram: z.number().positive('Rate per gram must be greater than zero').optional(),
-  metal_rate: z.number().positive().optional(),
+  rate_per_gram: z.number().nonnegative('Rate per gram cannot be negative').default(0).optional(),
+  metal_rate: z.number().nonnegative().default(0).optional(),
   pieces: z.number().int().positive().default(1).optional(),
   making_charge: z.number().min(0).optional(),
   making_rate: z.number().min(0).optional(),
@@ -65,7 +65,7 @@ export const salesItemSchema = z.object({
   }
   const tag_no = val.tag_no && val.tag_no.trim()
     ? val.tag_no.trim().toUpperCase()
-    : `TAG-${Date.now().toString(36).toUpperCase()}-${Math.floor(Math.random() * 1000)}`;
+    : '';
 
   return {
     ...val,
@@ -79,7 +79,7 @@ export const salesPaymentSchema = z.object({
   payment_mode: z.enum(['CASH', 'CARD', 'UPI', 'BANK', 'CREDIT', 'GOLD', 'SILVER', 'OTHER']),
   amount: z.number().nonnegative('Payment amount cannot be negative').default(0),
   metal_weight: z.number().nonnegative('Metal weight cannot be negative').optional(),
-  metal_rate: z.number().positive('Metal rate must be positive if provided').optional(),
+  metal_rate: z.number().nonnegative('Metal rate cannot be negative').optional(),
   metal_id: z.string().trim().nullable().optional(),
   purity_id: z.string().trim().nullable().optional(),
   reference_number: z.string().trim().nullable().optional(),
@@ -127,7 +127,7 @@ export const salesExchangeItemSchema = z.object({
   making_rate: z.number().nonnegative().optional(),
   making_charge_type: z.enum(['PER_GRAM', 'FIXED', 'PER_PIECE', 'PERCENTAGE']).optional(),
   pieces: z.number().int().min(1).optional(),
-  exchange_rate: z.number().positive('Exchange rate per gram must be positive'),
+  exchange_rate: z.number().nonnegative('Exchange rate per gram cannot be negative').default(0),
   deduction_percent: z.number().min(0).max(100).optional(),
   deduction_amount: z.number().min(0).optional(),
   notes: z.string().trim().nullable().optional(),
@@ -147,7 +147,9 @@ export const baseCreateSalesInvoiceSchema = z.object({
 export const createSalesInvoiceSchema = baseCreateSalesInvoiceSchema.transform((data) => {
   return {
     ...data,
-    payments: data.payments ? data.payments.filter((p) => p.amount > 0) : undefined,
+    payments: data.payments
+      ? data.payments.filter((p) => p.amount > 0 || (p.metal_weight !== undefined && p.metal_weight > 0))
+      : undefined,
   };
 });
 
@@ -285,7 +287,7 @@ export class SalesService {
             making_charge_type: exInput.making_charge_type,
             making_rate: exInput.making_rate,
             pieces: exInput.pieces,
-            exchange_rate: exInput.exchange_rate,
+            exchange_rate: exInput.exchange_rate ?? 0,
             deduction_percent: exInput.deduction_percent,
             deduction_amount: exInput.deduction_amount,
           });
@@ -303,7 +305,7 @@ export class SalesService {
             net_weight: calc.net_weight,
             tunch_percent: exInput.tunch_percent,
             fine_weight: calc.billable_weight ?? calc.fine_weight,
-            exchange_rate: exInput.exchange_rate,
+            exchange_rate: exInput.exchange_rate ?? 0,
             metal_value: calc.metal_value,
             deduction_percent: calc.deduction_percent,
             deduction_amount: calc.deduction_amount,
@@ -599,12 +601,62 @@ export class SalesService {
 
       // 3. Outward sale items: mark status = SOLD and log SALE_OUT
       for (const item of invoice.items) {
-        if (item.stock_item_id) {
-          assertValidStatusTransition(StockStatus.IN_STOCK, StockStatus.SOLD);
-          stockRepository.updateStatus(item.stock_item_id, StockStatus.SOLD);
+        let stockId = item.stock_item_id;
+        if (!stockId && item.tag_no) {
+          const existing = stockRepository.findByTag(item.tag_no);
+          if (existing) {
+            stockId = existing.id;
+            salesRepository.updateItemStockId(item.id, stockId);
+          }
+        }
+
+        if (stockId) {
+          const currentStock = stockRepository.findById(stockId);
+          if (currentStock && currentStock.status !== StockStatus.SOLD) {
+            stockRepository.updateStatus(stockId, StockStatus.SOLD);
+            stockMovementRepository.create({
+              stock_item_id: stockId,
+              movement_type: MovementType.SALE_OUT,
+              reference_type: 'SALES_INVOICE',
+              reference_id: invoice.id,
+              from_status: currentStock.status,
+              to_status: StockStatus.SOLD,
+              quantity: 1,
+              gross_weight: item.gross_weight,
+              net_weight: item.net_weight,
+              fine_weight: item.fine_weight,
+              notes: `Sold on invoice ${invoice.invoice_number} to ${invoice.customer_name || 'customer'}`,
+              created_by: userId || null,
+            });
+          }
+        } else {
+          // If no pre-existing stock item was inwarded, record outward stock item and movement
+          const newStock = stockRepository.create({
+            tag_no: item.tag_no || `SALE-${invoice.invoice_number}-${Date.now().toString().slice(-4)}`,
+            product_id: '',
+            metal_id: item.metal_id,
+            purity_id: item.purity_id,
+            gross_weight: item.gross_weight,
+            less_weight: item.less_weight,
+            net_weight: item.net_weight,
+            tunch_percent: item.tunch_percent,
+            fine_weight: item.fine_weight,
+            wastage_percent: item.wastage_percent,
+            making_charge: item.making_charge,
+            rate_per_gram: item.rate_per_gram,
+            metal_value: item.metal_value,
+            current_value: item.metal_value,
+            acquisition_type: 'DIRECT_SALE',
+            acquisition_reference: invoice.invoice_number,
+            status: StockStatus.SOLD,
+            huid: item.huid || null,
+            notes: `Direct counter sale on invoice ${invoice.invoice_number} to ${invoice.customer_name || 'customer'}`,
+          });
+
+          salesRepository.updateItemStockId(item.id, newStock.id);
 
           stockMovementRepository.create({
-            stock_item_id: item.stock_item_id,
+            stock_item_id: newStock.id,
             movement_type: MovementType.SALE_OUT,
             reference_type: 'SALES_INVOICE',
             reference_id: invoice.id,
@@ -614,7 +666,7 @@ export class SalesService {
             gross_weight: item.gross_weight,
             net_weight: item.net_weight,
             fine_weight: item.fine_weight,
-            notes: `Sold on invoice ${invoice.invoice_number} to ${invoice.customer_name || 'customer'}`,
+            notes: `Counter sale outward on invoice ${invoice.invoice_number}`,
             created_by: userId || null,
           });
         }

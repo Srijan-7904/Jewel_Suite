@@ -36,6 +36,7 @@ export interface SalesInvoiceRecord {
   // Joined fields
   customer_name?: string;
   customer_code?: string;
+  customer_type?: 'RETAIL' | 'WHOLESALE' | 'GIRVI_CLIENT';
   customer_phone?: string;
   customer_email?: string;
   customer_address?: string;
@@ -178,6 +179,7 @@ export class SalesRepository {
       si.*,
       c.name AS customer_name,
       c.customer_code,
+      c.customer_type,
       c.phone AS customer_phone,
       c.email AS customer_email,
       c.address AS customer_address,
@@ -572,6 +574,12 @@ export class SalesRepository {
   deleteItem(itemId: string): boolean {
     const db = getDb();
     const result = db.prepare('DELETE FROM sales_invoice_items WHERE id = ?').run(itemId);
+    return result.changes > 0;
+  }
+
+  updateItemStockId(itemId: string, stockItemId: string): boolean {
+    const db = getDb();
+    const result = db.prepare('UPDATE sales_invoice_items SET stock_item_id = ? WHERE id = ?').run(stockItemId, itemId);
     return result.changes > 0;
   }
 

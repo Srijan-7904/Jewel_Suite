@@ -9,6 +9,7 @@ import { documentSequenceRepository } from '../repositories/documentSequence.rep
 import { paymentModeRepository } from '../repositories/paymentMode.repository.js';
 import { amcRepository } from '../repositories/amc.repository.js';
 import { auditRepository } from '../repositories/audit.repository.js';
+import { metalRepository, MetalRecord } from '../repositories/metal.repository.js';
 import {
   ShopProfile,
   GeneralSettings,
@@ -22,6 +23,8 @@ import {
   TaxMode,
   PageSize,
   DocumentType,
+  InvoiceColumnSettings,
+  DEFAULT_INVOICE_COLUMN_SETTINGS,
 } from '../domain/settings.js';
 import { BadRequestError } from '../utils/errors.js';
 
@@ -352,6 +355,60 @@ export class SettingsService {
   }
 
   /**
+   * Store Dealing Metals Configuration (Gold, Silver, Diamond, Platinum)
+   */
+  getStoreMetals(activeOnly = false): MetalRecord[] {
+    return metalRepository.getMetals(activeOnly);
+  }
+
+  toggleStoreMetal(code: string, isActive: boolean, userId?: string): MetalRecord {
+    if (!isActive) {
+      const activeCount = metalRepository.getActiveMetalsCount();
+      if (activeCount <= 1) {
+        throw new BadRequestError('At least one metal type (e.g. Gold) must remain active for the shop.', 'OPERATION_NOT_ALLOWED');
+      }
+    }
+
+    const updated = metalRepository.toggleMetalActive(code, isActive);
+    if (!updated) {
+      throw new BadRequestError(`Metal '${code}' not found`, 'NOT_FOUND');
+    }
+
+    auditRepository.log({
+      user_id: userId,
+      action: 'SHOP_SETTINGS_UPDATED',
+      entity_type: 'STORE_METALS',
+      entity_id: code,
+      metadata: { code, is_active: isActive },
+    });
+
+    return updated;
+  }
+
+  updateActiveMetals(enabledCodes: string[], userId?: string): MetalRecord[] {
+    if (!Array.isArray(enabledCodes) || enabledCodes.length === 0) {
+      throw new BadRequestError('At least one metal type must be selected (e.g. GOLD).', 'VALIDATION_ERROR');
+    }
+
+    const upperCodes = enabledCodes.map((c) => c.toUpperCase());
+    const allMetals = metalRepository.getMetals(false);
+
+    for (const m of allMetals) {
+      const shouldBeActive = upperCodes.includes(m.code.toUpperCase());
+      metalRepository.toggleMetalActive(m.code, shouldBeActive);
+    }
+
+    auditRepository.log({
+      user_id: userId,
+      action: 'SHOP_SETTINGS_UPDATED',
+      entity_type: 'STORE_METALS',
+      metadata: { enabled_metals: upperCodes },
+    });
+
+    return metalRepository.getMetals(false);
+  }
+
+  /**
    * Shop Receiving Accounts Configuration
    */
   getReceivingAccounts(): ShopReceivingAccount[] {
@@ -490,6 +547,38 @@ export class SettingsService {
     });
 
     return this.getPrintSettings();
+  }
+
+  /**
+   * Invoice Columns & Optional Fields Configuration
+   */
+  getInvoiceColumnSettings(): InvoiceColumnSettings {
+    return settingRepository.getJson<InvoiceColumnSettings>('invoice.columns', DEFAULT_INVOICE_COLUMN_SETTINGS);
+  }
+
+  updateInvoiceColumnSettings(data: Partial<InvoiceColumnSettings>, userId?: string): InvoiceColumnSettings {
+    const current = this.getInvoiceColumnSettings();
+    const updated: InvoiceColumnSettings = {
+      show_tag_no: typeof data.show_tag_no === 'boolean' ? data.show_tag_no : current.show_tag_no,
+      show_tunch: typeof data.show_tunch === 'boolean' ? data.show_tunch : current.show_tunch,
+      show_less_weight: typeof data.show_less_weight === 'boolean' ? data.show_less_weight : current.show_less_weight,
+      show_net_weight: typeof data.show_net_weight === 'boolean' ? data.show_net_weight : current.show_net_weight,
+      show_badla: typeof data.show_badla === 'boolean' ? data.show_badla : current.show_badla,
+      show_wastage: typeof data.show_wastage === 'boolean' ? data.show_wastage : current.show_wastage,
+      show_making_charge: typeof data.show_making_charge === 'boolean' ? data.show_making_charge : current.show_making_charge,
+      show_fine_weight: typeof data.show_fine_weight === 'boolean' ? data.show_fine_weight : current.show_fine_weight,
+    };
+
+    settingRepository.setJson('invoice.columns', updated);
+
+    auditRepository.log({
+      user_id: userId,
+      action: 'SHOP_SETTINGS_UPDATED',
+      entity_type: 'INVOICE_COLUMNS',
+      metadata: updated as unknown as Record<string, unknown>,
+    });
+
+    return updated;
   }
 
   /**

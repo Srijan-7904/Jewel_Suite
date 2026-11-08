@@ -8,9 +8,10 @@
     "frontend"
   ],
   "engines": {
-    "node": ">=20.0.0 <=22.x"
+    "node": ">=22.0.0 <=22.x"
   },
   "scripts": {
+    "dev": "npm --prefix backend run dev",
     "start": "npm --prefix backend start",
     "dev:backend": "npm --prefix backend run dev",
     "dev:frontend": "npm --prefix frontend run dev",
