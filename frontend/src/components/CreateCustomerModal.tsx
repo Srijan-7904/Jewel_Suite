@@ -15,6 +15,7 @@ import {
   AlertCircle,
   CheckCircle,
 } from 'lucide-react';
+import { handleTallyKeyDown } from '../utils/tallyNavigation';
 import './CreateCustomerModal.css';
 
 export interface CreateCustomerModalProps {
@@ -101,6 +102,18 @@ export const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({
       });
     }
   }, [isOpen, purities.length]);
+
+  // Tally Software Navigation: Enter moves forward, Esc moves backward / closes modal
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      handleTallyKeyDown(e, {
+        onModalClose: onClose,
+      });
+    };
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
+  }, [isOpen, onClose]);
 
   const goldPurities = useMemo(() => {
     const goldMetal = metals.find((m) => m.code?.toUpperCase() === 'GOLD' || m.name?.toLowerCase().includes('gold'));

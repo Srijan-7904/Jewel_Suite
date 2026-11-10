@@ -47,6 +47,7 @@ import {
 import { LessWeightCalculatorModal, LessBreakdownEntry } from '../../components/LessWeightCalculatorModal';
 import { CustomerSearchSelect } from '../../components/CustomerSearchSelect';
 import { CustomerDetailsModal } from '../../components/CustomerDetailsModal';
+import { handleTallyKeyDown } from '../../utils/tallyNavigation';
 import '../../styles/masters.css';
 import './CreateInvoicePage.css';
 
@@ -561,6 +562,57 @@ export const CreateInvoicePage: React.FC = () => {
     return customerPurities.filter((p) => p.name.toLowerCase().includes('925') || p.name.toLowerCase().includes('silver') || p.code.includes('925') || (p.tunch_percent !== null && p.tunch_percent >= 90));
   }, [customerMetals, customerPurities]);
 
+  // =========================================================================
+  // TALLY SOFTWARE KEYBOARD NAVIGATION:
+  // - Enter: Move FORWARD to next input/select field (auto-selects text/number)
+  // - Esc: Move BACKWARD to previous field (or close active popup / modal)
+  // =========================================================================
+  useEffect(() => {
+    const handleGlobalTallyNav = (e: KeyboardEvent) => {
+      // 1. If quick customer registration modal is open:
+      if (showCustomerModal) {
+        handleTallyKeyDown(e, {
+          onModalClose: () => setShowCustomerModal(false),
+          isDropdownOpen: Boolean(activeItemDropdownRowId),
+          onCloseDropdown: () => setActiveItemDropdownRowId(null),
+        });
+        return;
+      }
+
+      // 2. If customer details modal is open:
+      if (showCustomerDetailsModal) {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          setShowCustomerDetailsModal(false);
+        }
+        return;
+      }
+
+      // 3. If item suggestions flyout is open:
+      if (activeItemDropdownRowId) {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          e.stopPropagation();
+          setActiveItemDropdownRowId(null);
+          return;
+        }
+      }
+
+      // 4. Default Tally Navigation across all invoice inputs
+      handleTallyKeyDown(e, {
+        isDropdownOpen: Boolean(activeItemDropdownRowId),
+        onCloseDropdown: () => setActiveItemDropdownRowId(null),
+        onEnterAtEnd: () => {
+          const saveBtn = document.querySelector<HTMLButtonElement>('.pos-save-btn, button[type="submit"]');
+          saveBtn?.focus();
+        },
+      });
+    };
+
+    window.addEventListener('keydown', handleGlobalTallyNav, true);
+    return () => window.removeEventListener('keydown', handleGlobalTallyNav, true);
+  }, [showCustomerModal, showCustomerDetailsModal, activeItemDropdownRowId]);
+
   const [customerForm, setCustomerForm] = useState({
     name: '',
     customer_code: '',
@@ -934,6 +986,24 @@ export const CreateInvoicePage: React.FC = () => {
 
     setActiveItemDropdownRowId(null);
     showToast('success', `Tag ${stock.tag_no} selected from Stock Inventory!`);
+
+    // In Tally style: automatically move focus to next editable field in row
+    setTimeout(() => {
+      const row = document.querySelector(`[data-row-id="${rowId}"]`)?.closest('tr');
+      if (row) {
+        const inputs = Array.from(row.querySelectorAll<HTMLInputElement>('input:not([disabled]):not([readonly])'));
+        const nextTarget = inputs.find(
+          (inp) =>
+            inp.placeholder.includes('RATE') ||
+            inp.placeholder.includes('MC') ||
+            inp.placeholder.includes('RATE/G')
+        );
+        if (nextTarget) {
+          nextTarget.focus();
+          nextTarget.select();
+        }
+      }
+    }, 60);
   };
 
   // Lookup tag on blur / barcode scan
