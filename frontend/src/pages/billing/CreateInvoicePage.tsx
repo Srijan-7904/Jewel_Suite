@@ -5440,12 +5440,12 @@ export const CreateInvoicePage: React.FC = () => {
                     </div>
 
                     {/* 4 Cards in 2x2 Grid: Row 1 = Cash & Bank, Row 2 = Gold & Silver */}
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="opening-cards-grid">
                       {/* Cash Card */}
                       <div className="opening-card-compact card-cash">
                         <div className="card-heading">
-                          <span className="flex items-center gap-1.5 font-semibold text-xs text-emerald-600">
-                            <Banknote size={13} />
+                          <span className="card-title-badge" style={{ color: '#10b981' }}>
+                            <Banknote size={15} />
                             Cash Opening (₹)
                           </span>
                           <select
@@ -5458,31 +5458,39 @@ export const CreateInvoicePage: React.FC = () => {
                               })
                             }
                           >
-                            <option value="DEBIT">Baaki / Dr (Owes Shop - बाकी)</option>
+                            <option value="DEBIT">Baaki / Dr (Customer Owes - बाकी)</option>
                             <option value="CREDIT">Jama / Cr (Advance - जमा)</option>
                           </select>
                         </div>
-                        <input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          className="compact-field-input font-mono text-sm font-bold"
-                          placeholder="0.00"
-                          value={customerForm.opening_cash_balance || ''}
-                          onChange={(e) =>
-                            setCustomerForm({
-                              ...customerForm,
-                              opening_cash_balance: parseFloat(e.target.value) || 0,
-                            })
-                          }
-                        />
+                        <div className="opening-currency-input-row">
+                          <div className="opening-input-wrapper">
+                            <span className="opening-input-prefix">₹</span>
+                            <input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              className="opening-styled-input"
+                              placeholder="0.00"
+                              value={customerForm.opening_cash_balance || ''}
+                              onChange={(e) =>
+                                setCustomerForm({
+                                  ...customerForm,
+                                  opening_cash_balance: parseFloat(e.target.value) || 0,
+                                })
+                              }
+                            />
+                          </div>
+                          <span className={`opening-status-chip ${customerForm.opening_cash_type === 'DEBIT' ? 'is-debit' : 'is-credit'}`}>
+                            {customerForm.opening_cash_type === 'DEBIT' ? 'Dr / बाकी' : 'Cr / जमा'}
+                          </span>
+                        </div>
                       </div>
 
                       {/* Bank Card */}
                       <div className="opening-card-compact card-bank">
                         <div className="card-heading">
-                          <span className="flex items-center gap-1.5 font-semibold text-xs text-blue-600">
-                            <CreditCard size={13} />
+                          <span className="card-title-badge" style={{ color: '#3b82f6' }}>
+                            <CreditCard size={15} />
                             Bank / RTGS Opening (₹)
                           </span>
                           <select
@@ -5495,31 +5503,39 @@ export const CreateInvoicePage: React.FC = () => {
                               })
                             }
                           >
-                            <option value="DEBIT">Baaki / Dr (Owes Shop - बाकी)</option>
+                            <option value="DEBIT">Baaki / Dr (Customer Owes - बाकी)</option>
                             <option value="CREDIT">Jama / Cr (Advance - जमा)</option>
                           </select>
                         </div>
-                        <input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          className="compact-field-input font-mono text-sm font-bold"
-                          placeholder="0.00"
-                          value={customerForm.opening_bank_balance || ''}
-                          onChange={(e) =>
-                            setCustomerForm({
-                              ...customerForm,
-                              opening_bank_balance: parseFloat(e.target.value) || 0,
-                            })
-                          }
-                        />
+                        <div className="opening-currency-input-row">
+                          <div className="opening-input-wrapper">
+                            <span className="opening-input-prefix">₹</span>
+                            <input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              className="opening-styled-input"
+                              placeholder="0.00"
+                              value={customerForm.opening_bank_balance || ''}
+                              onChange={(e) =>
+                                setCustomerForm({
+                                  ...customerForm,
+                                  opening_bank_balance: parseFloat(e.target.value) || 0,
+                                })
+                              }
+                            />
+                          </div>
+                          <span className={`opening-status-chip ${customerForm.opening_bank_type === 'DEBIT' ? 'is-debit' : 'is-credit'}`}>
+                            {customerForm.opening_bank_type === 'DEBIT' ? 'Dr / बाकी' : 'Cr / जमा'}
+                          </span>
+                        </div>
                       </div>
 
                       {/* Gold Card: Weight (g), Karat/Purity, Rate & Valuation */}
                       <div className="opening-card-compact card-gold">
                         <div className="card-heading">
-                          <span className="flex items-center gap-1.5 font-semibold text-xs text-[#dfb742]">
-                            <Coins size={13} />
+                          <span className="card-title-badge" style={{ color: '#b8860b' }}>
+                            <Coins size={15} />
                             Gold Opening (grams)
                           </span>
                           <select
@@ -5536,14 +5552,15 @@ export const CreateInvoicePage: React.FC = () => {
                             <option value="CREDIT">Jama / Cr (Deposited - जमा)</option>
                           </select>
                         </div>
-                        <div className="grid grid-cols-3 gap-1.5">
-                          <div>
-                            <span className="compact-field-label text-[9px] mb-0.5">Weight (g) *</span>
+                        <div className="opening-metal-inputs-grid">
+                          <div className="compact-field-group">
+                            <span className="compact-field-label">Weight (g) *</span>
                             <input
                               type="number"
                               step="0.001"
                               min="0"
-                              className="compact-field-input font-mono text-xs font-bold"
+                              className="compact-field-input"
+                              style={{ fontFamily: 'var(--font-mono, monospace)', fontWeight: 700 }}
                               placeholder="0.000 g"
                               value={customerForm.opening_gold_weight || ''}
                               onChange={(e) => {
@@ -5558,10 +5575,11 @@ export const CreateInvoicePage: React.FC = () => {
                             />
                           </div>
 
-                          <div>
-                            <span className="compact-field-label text-[9px] mb-0.5">Select Karat/Purity</span>
+                          <div className="compact-field-group">
+                            <span className="compact-field-label">Select Karat/Purity</span>
                             <select
-                              className="compact-field-select text-xs font-mono uppercase"
+                              className="compact-field-select"
+                              style={{ fontFamily: 'var(--font-mono, monospace)', textTransform: 'uppercase' }}
                               value={customerForm.opening_gold_purity_id}
                               onChange={(e) =>
                                 setCustomerForm({
@@ -5579,13 +5597,14 @@ export const CreateInvoicePage: React.FC = () => {
                             </select>
                           </div>
 
-                          <div>
-                            <span className="compact-field-label text-[9px] mb-0.5">Rate (₹/g)</span>
+                          <div className="compact-field-group">
+                            <span className="compact-field-label">Rate (₹/g)</span>
                             <input
                               type="number"
                               step="1"
                               min="0"
-                              className="compact-field-input font-mono text-xs"
+                              className="compact-field-input"
+                              style={{ fontFamily: 'var(--font-mono, monospace)' }}
                               placeholder="₹/g"
                               value={customerForm.opening_gold_rate || ''}
                               onChange={(e) => {
@@ -5601,9 +5620,11 @@ export const CreateInvoicePage: React.FC = () => {
                           </div>
                         </div>
                         {Boolean(customerForm.opening_gold_value && customerForm.opening_gold_value > 0) && (
-                          <div className="flex justify-between items-center text-[11px] text-[var(--gold-primary)] mt-1 px-1">
-                            <span>Valuation:</span>
-                            <strong className="font-mono">₹{customerForm.opening_gold_value.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
+                          <div className="opening-metal-valuation-strip gold-val">
+                            <span>🪙 Gold Valuation:</span>
+                            <strong style={{ fontFamily: 'var(--font-mono, monospace)' }}>
+                              ₹{customerForm.opening_gold_value.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                            </strong>
                           </div>
                         )}
                       </div>
@@ -5611,8 +5632,8 @@ export const CreateInvoicePage: React.FC = () => {
                       {/* Silver Card: Weight (g), Purity, Rate & Valuation */}
                       <div className="opening-card-compact card-silver">
                         <div className="card-heading">
-                          <span className="flex items-center gap-1.5 font-semibold text-xs text-slate-400">
-                            <Scale size={13} />
+                          <span className="card-title-badge" style={{ color: '#64748b' }}>
+                            <Scale size={15} />
                             Silver Opening (grams)
                           </span>
                           <select
@@ -5629,14 +5650,15 @@ export const CreateInvoicePage: React.FC = () => {
                             <option value="CREDIT">Jama / Cr (Deposited - जमा)</option>
                           </select>
                         </div>
-                        <div className="grid grid-cols-3 gap-1.5">
-                          <div>
-                            <span className="compact-field-label text-[9px] mb-0.5">Weight (g) *</span>
+                        <div className="opening-metal-inputs-grid">
+                          <div className="compact-field-group">
+                            <span className="compact-field-label">Weight (g) *</span>
                             <input
                               type="number"
                               step="0.001"
                               min="0"
-                              className="compact-field-input font-mono text-xs font-bold"
+                              className="compact-field-input"
+                              style={{ fontFamily: 'var(--font-mono, monospace)', fontWeight: 700 }}
                               placeholder="0.000 g"
                               value={customerForm.opening_silver_weight || ''}
                               onChange={(e) => {
@@ -5651,10 +5673,11 @@ export const CreateInvoicePage: React.FC = () => {
                             />
                           </div>
 
-                          <div>
-                            <span className="compact-field-label text-[9px] mb-0.5">Select Purity</span>
+                          <div className="compact-field-group">
+                            <span className="compact-field-label">Select Purity</span>
                             <select
-                              className="compact-field-select text-xs font-mono uppercase"
+                              className="compact-field-select"
+                              style={{ fontFamily: 'var(--font-mono, monospace)', textTransform: 'uppercase' }}
                               value={customerForm.opening_silver_purity_id}
                               onChange={(e) =>
                                 setCustomerForm({
@@ -5672,13 +5695,14 @@ export const CreateInvoicePage: React.FC = () => {
                             </select>
                           </div>
 
-                          <div>
-                            <span className="compact-field-label text-[9px] mb-0.5">Rate (₹/g)</span>
+                          <div className="compact-field-group">
+                            <span className="compact-field-label">Rate (₹/g)</span>
                             <input
                               type="number"
                               step="0.1"
                               min="0"
-                              className="compact-field-input font-mono text-xs"
+                              className="compact-field-input"
+                              style={{ fontFamily: 'var(--font-mono, monospace)' }}
                               placeholder="₹/g"
                               value={customerForm.opening_silver_rate || ''}
                               onChange={(e) => {
@@ -5694,49 +5718,67 @@ export const CreateInvoicePage: React.FC = () => {
                           </div>
                         </div>
                         {Boolean(customerForm.opening_silver_value && customerForm.opening_silver_value > 0) && (
-                          <div className="flex justify-between items-center text-[11px] text-slate-300 mt-1 px-1">
-                            <span>Valuation:</span>
-                            <strong className="font-mono">₹{customerForm.opening_silver_value.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
+                          <div className="opening-metal-valuation-strip silver-val">
+                            <span>⚪ Silver Valuation:</span>
+                            <strong style={{ fontFamily: 'var(--font-mono, monospace)' }}>
+                              ₹{customerForm.opening_silver_value.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                            </strong>
                           </div>
                         )}
                       </div>
                     </div>
 
-                    {/* Net Summary Bar */}
-                    <div className="flex gap-3 flex-wrap pt-1.5 mt-1 border-t border-dashed border-[var(--border-subtle)] text-[11px]">
-                      <div className="flex items-center gap-1">
-                        <span className="text-muted">Net Currency:</span>
-                        <strong className="font-mono text-emerald-500">
-                          ₹{Math.abs(
-                            ((customerForm.opening_cash_type === 'DEBIT' ? 1 : -1) * (customerForm.opening_cash_balance || 0)) +
-                            ((customerForm.opening_bank_type === 'DEBIT' ? 1 : -1) * (customerForm.opening_bank_balance || 0))
-                          ).toFixed(2)}
-                          {(((customerForm.opening_cash_type === 'DEBIT' ? 1 : -1) * (customerForm.opening_cash_balance || 0)) +
-                            ((customerForm.opening_bank_type === 'DEBIT' ? 1 : -1) * (customerForm.opening_bank_balance || 0))) > 0
-                            ? ' (Dr / Customer Owes Us)'
-                            : (((customerForm.opening_cash_type === 'DEBIT' ? 1 : -1) * (customerForm.opening_cash_balance || 0)) +
-                               ((customerForm.opening_bank_type === 'DEBIT' ? 1 : -1) * (customerForm.opening_bank_balance || 0))) < 0
-                            ? ' (Cr / We Owe Customer)'
-                            : ' (₹0.00 Nil)'}
-                        </strong>
-                      </div>
-                      {Boolean(customerForm.opening_gold_weight && customerForm.opening_gold_weight > 0) && (
-                        <div className="flex items-center gap-1">
-                          <span className="text-muted">Gold:</span>
-                          <strong className="font-mono text-[var(--gold-primary)]">
-                            {customerForm.opening_gold_weight}g ({customerForm.opening_gold_type})
-                          </strong>
+                    {/* Net Summary Bar - Clean Side-by-Side Luxury Badges */}
+                    {(() => {
+                      const netCur =
+                        ((customerForm.opening_cash_type === 'DEBIT' ? 1 : -1) * (customerForm.opening_cash_balance || 0)) +
+                        ((customerForm.opening_bank_type === 'DEBIT' ? 1 : -1) * (customerForm.opening_bank_balance || 0));
+                      const isCurDebit = netCur > 0;
+                      const isCurCredit = netCur < 0;
+                      return (
+                        <div className="opening-net-summary-strip">
+                          <div className="opening-net-group">
+                            <span className="opening-net-label">Net Currency:</span>
+                            <span
+                              className={`opening-net-badge ${
+                                isCurDebit
+                                  ? 'badge-currency-dr'
+                                  : isCurCredit
+                                  ? 'badge-currency-cr'
+                                  : 'badge-currency-nil'
+                              }`}
+                            >
+                              ₹{Math.abs(netCur).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                              {isCurDebit
+                                ? ' (Dr / Customer Owes Us)'
+                                : isCurCredit
+                                ? ' (Cr / We Owe Customer)'
+                                : ' (₹0.00 Nil)'}
+                            </span>
+                          </div>
+
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.65rem', flexWrap: 'wrap' }}>
+                            {Boolean(customerForm.opening_gold_weight && customerForm.opening_gold_weight > 0) && (
+                              <div className="opening-net-group">
+                                <span className="opening-net-label">Gold:</span>
+                                <span className="opening-net-badge badge-gold">
+                                  🟡 {customerForm.opening_gold_weight}g ({customerForm.opening_gold_type === 'DEBIT' ? 'Dr / बाकी' : 'Cr / जमा'})
+                                </span>
+                              </div>
+                            )}
+
+                            {Boolean(customerForm.opening_silver_weight && customerForm.opening_silver_weight > 0) && (
+                              <div className="opening-net-group">
+                                <span className="opening-net-label">Silver:</span>
+                                <span className="opening-net-badge badge-silver">
+                                  ⚪ {customerForm.opening_silver_weight}g ({customerForm.opening_silver_type === 'DEBIT' ? 'Dr / बाकी' : 'Cr / जमा'})
+                                </span>
+                              </div>
+                            )}
+                          </div>
                         </div>
-                      )}
-                      {Boolean(customerForm.opening_silver_weight && customerForm.opening_silver_weight > 0) && (
-                        <div className="flex items-center gap-1">
-                          <span className="text-muted">Silver:</span>
-                          <strong className="font-mono text-slate-300">
-                            {customerForm.opening_silver_weight}g ({customerForm.opening_silver_type})
-                          </strong>
-                        </div>
-                      )}
-                    </div>
+                      );
+                    })()}
                   </div>
                 </div>
               </div>

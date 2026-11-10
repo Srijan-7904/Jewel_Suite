@@ -238,41 +238,252 @@
 
 /* Compact Opening Ledger Cards */
 .opening-card-compact {
-  border: 1px solid var(--border-subtle, #e2e8f0);
+  border: 1px solid var(--border-default, #ddd2ba);
   background: var(--bg-surface, #ffffff);
-  border-radius: 6px;
-  padding: 0.45rem 0.65rem;
+  border-radius: 8px;
+  padding: 0.65rem 0.85rem;
   display: flex;
   flex-direction: column;
-  gap: 0.3rem;
-  transition: border-color 0.15s;
+  gap: 0.5rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  transition: all 0.15s ease;
+  box-sizing: border-box;
 }
 
 .opening-card-compact:hover {
-  border-color: var(--border-active, #94a3b8);
+  border-color: var(--gold-border, rgba(184, 134, 11, 0.45));
+  box-shadow: 0 3px 8px rgba(184, 134, 11, 0.08);
 }
 
 .opening-card-compact.card-gold {
-  border-left: 3px solid #d4af37;
+  border-left: 4px solid #b8860b;
 }
 
 .opening-card-compact.card-silver {
-  border-left: 3px solid #94a3b8;
+  border-left: 4px solid #64748b;
 }
 
 .opening-card-compact.card-cash {
-  border-left: 3px solid #10b981;
+  border-left: 4px solid #10b981;
 }
 
 .opening-card-compact.card-bank {
-  border-left: 3px solid #3b82f6;
+  border-left: 4px solid #3b82f6;
 }
 
 .opening-card-compact .card-heading {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.opening-card-compact .card-title-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-weight: 700;
+  font-size: 0.78rem;
+  letter-spacing: 0.2px;
+}
+
+/* 4 Opening Cards Grid - Side by Side in 2 Columns */
+.opening-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+@media (max-width: 768px) {
+  .opening-cards-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Currency Card Inputs - Side by Side Flex */
+.opening-currency-input-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.opening-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+}
+
+.opening-input-prefix {
+  position: absolute;
+  left: 0.6rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text-muted, #685f53);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.opening-styled-input {
+  width: 100%;
+  height: 34px;
+  background: var(--bg-surface, #ffffff);
+  border: 1px solid var(--border-default, #ddd2ba);
+  border-radius: 6px;
+  color: var(--text-main, #211d17);
+  padding: 0 0.65rem 0 1.5rem;
+  font-size: 0.85rem;
+  font-family: var(--font-mono, monospace);
+  font-weight: 700;
+  outline: none;
+  transition: all 0.15s ease;
+  box-sizing: border-box;
+}
+
+.opening-styled-input:focus {
+  border-color: var(--gold-primary, #b8860b);
+  box-shadow: 0 0 0 2px rgba(184, 134, 11, 0.2);
+}
+
+.opening-status-chip {
+  padding: 0.35rem 0.65rem;
+  border-radius: 5px;
   font-size: 0.72rem;
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.opening-status-chip.is-debit {
+  background: rgba(220, 38, 38, 0.1);
+  color: #dc2626;
+  border: 1px solid rgba(220, 38, 38, 0.25);
+}
+
+.opening-status-chip.is-credit {
+  background: rgba(13, 130, 82, 0.1);
+  color: #0d8252;
+  border: 1px solid rgba(13, 130, 82, 0.25);
+}
+
+/* Metal Inputs Grid - 3 Columns Side by Side */
+.opening-metal-inputs-grid {
+  display: grid;
+  grid-template-columns: 1fr 1.35fr 1fr;
+  gap: 0.45rem;
+  align-items: flex-end;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.compact-field-group {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  width: 100%;
+}
+
+.compact-field-label {
+  display: block;
+  font-size: 0.66rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--text-muted, #685f53);
+  margin-bottom: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.opening-metal-valuation-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.25rem 0.6rem;
+  border-radius: 4px;
+  font-size: 0.72rem;
+  margin-top: 0.25rem;
+}
+
+.opening-metal-valuation-strip.gold-val {
+  background: rgba(184, 134, 11, 0.08);
+  color: #8c6511;
+  border: 1px solid rgba(184, 134, 11, 0.25);
+}
+
+.opening-metal-valuation-strip.silver-val {
+  background: rgba(100, 116, 139, 0.08);
+  color: #475569;
+  border: 1px solid rgba(100, 116, 139, 0.25);
+}
+
+/* Net Summary Strip - Side by Side Luxury Strip */
+.opening-net-summary-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin-top: 0.75rem;
+  padding: 0.55rem 0.85rem;
+  background: var(--bg-surface-elevated, #fffdf7);
+  border: 1px dashed var(--gold-border, rgba(184, 134, 11, 0.38));
+  border-radius: 7px;
+}
+
+.opening-net-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.75rem;
+}
+
+.opening-net-label {
+  color: var(--text-muted, #685f53);
+  font-weight: 600;
+}
+
+.opening-net-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.15rem 0.55rem;
+  border-radius: 4px;
+  font-family: var(--font-mono, monospace);
+  font-weight: 700;
+  font-size: 0.75rem;
+}
+
+.opening-net-badge.badge-currency-dr {
+  background: rgba(220, 38, 38, 0.1);
+  color: #dc2626;
+  border: 1px solid rgba(220, 38, 38, 0.25);
+}
+
+.opening-net-badge.badge-currency-cr {
+  background: rgba(13, 130, 82, 0.1);
+  color: #0d8252;
+  border: 1px solid rgba(13, 130, 82, 0.25);
+}
+
+.opening-net-badge.badge-currency-nil {
+  background: rgba(100, 116, 139, 0.1);
+  color: #64748b;
+  border: 1px solid rgba(100, 116, 139, 0.25);
+}
+
+.opening-net-badge.badge-gold {
+  background: rgba(184, 134, 11, 0.12);
+  color: #8c6511;
+  border: 1px solid rgba(184, 134, 11, 0.3);
+}
+
+.opening-net-badge.badge-silver {
+  background: rgba(100, 116, 139, 0.12);
+  color: #475569;
+  border: 1px solid rgba(100, 116, 139, 0.3);
 }
 
 .customer-modal-footer {

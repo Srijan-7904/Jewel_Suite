@@ -528,13 +528,14 @@ export const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({
                   </div>
                 </div>
 
-                {/* 4 Opening Cards in 2x2 Grid: Row 1 = Cash & Bank, Row 2 = Gold & Silver */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+                {/* 4 Opening Cards Grid: Row 1 = Cash & Bank, Row 2 = Gold & Silver */}
+                <div className="opening-cards-grid">
                   {/* Cash Card */}
                   <div className="opening-card-compact card-cash">
                     <div className="card-heading">
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontWeight: 600, fontSize: '0.75rem', color: '#10b981' }}>
-                        <Banknote size={14} /> Cash Opening (₹)
+                      <span className="card-title-badge" style={{ color: '#10b981' }}>
+                        <Banknote size={15} />
+                        Cash Opening (₹)
                       </span>
                       <select
                         className="opening-type-select"
@@ -550,27 +551,36 @@ export const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({
                         <option value="CREDIT">Jama / Cr (Advance - जमा)</option>
                       </select>
                     </div>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      className="compact-field-input font-mono font-bold"
-                      placeholder="0.00"
-                      value={customerForm.opening_cash_balance || ''}
-                      onChange={(e) =>
-                        setCustomerForm({
-                          ...customerForm,
-                          opening_cash_balance: parseFloat(e.target.value) || 0,
-                        })
-                      }
-                    />
+                    <div className="opening-currency-input-row">
+                      <div className="opening-input-wrapper">
+                        <span className="opening-input-prefix">₹</span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          className="opening-styled-input"
+                          placeholder="0.00"
+                          value={customerForm.opening_cash_balance || ''}
+                          onChange={(e) =>
+                            setCustomerForm({
+                              ...customerForm,
+                              opening_cash_balance: parseFloat(e.target.value) || 0,
+                            })
+                          }
+                        />
+                      </div>
+                      <span className={`opening-status-chip ${customerForm.opening_cash_type === 'DEBIT' ? 'is-debit' : 'is-credit'}`}>
+                        {customerForm.opening_cash_type === 'DEBIT' ? 'Dr / बाकी' : 'Cr / जमा'}
+                      </span>
+                    </div>
                   </div>
 
                   {/* Bank Card */}
                   <div className="opening-card-compact card-bank">
                     <div className="card-heading">
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontWeight: 600, fontSize: '0.75rem', color: '#3b82f6' }}>
-                        <CreditCard size={14} /> Bank / RTGS Opening (₹)
+                      <span className="card-title-badge" style={{ color: '#3b82f6' }}>
+                        <CreditCard size={15} />
+                        Bank / RTGS Opening (₹)
                       </span>
                       <select
                         className="opening-type-select"
@@ -586,27 +596,36 @@ export const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({
                         <option value="CREDIT">Jama / Cr (Advance - जमा)</option>
                       </select>
                     </div>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      className="compact-field-input font-mono font-bold"
-                      placeholder="0.00"
-                      value={customerForm.opening_bank_balance || ''}
-                      onChange={(e) =>
-                        setCustomerForm({
-                          ...customerForm,
-                          opening_bank_balance: parseFloat(e.target.value) || 0,
-                        })
-                      }
-                    />
+                    <div className="opening-currency-input-row">
+                      <div className="opening-input-wrapper">
+                        <span className="opening-input-prefix">₹</span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          className="opening-styled-input"
+                          placeholder="0.00"
+                          value={customerForm.opening_bank_balance || ''}
+                          onChange={(e) =>
+                            setCustomerForm({
+                              ...customerForm,
+                              opening_bank_balance: parseFloat(e.target.value) || 0,
+                            })
+                          }
+                        />
+                      </div>
+                      <span className={`opening-status-chip ${customerForm.opening_bank_type === 'DEBIT' ? 'is-debit' : 'is-credit'}`}>
+                        {customerForm.opening_bank_type === 'DEBIT' ? 'Dr / बाकी' : 'Cr / जमा'}
+                      </span>
+                    </div>
                   </div>
 
                   {/* Gold Card */}
                   <div className="opening-card-compact card-gold">
                     <div className="card-heading">
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontWeight: 600, fontSize: '0.75rem', color: '#d4af37' }}>
-                        <Coins size={14} /> Gold Opening (grams)
+                      <span className="card-title-badge" style={{ color: '#b8860b' }}>
+                        <Coins size={15} />
+                        Gold Opening (grams)
                       </span>
                       <select
                         className="opening-type-select"
@@ -622,14 +641,15 @@ export const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({
                         <option value="CREDIT">Jama / Cr (Deposited - जमा)</option>
                       </select>
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.3fr 1fr', gap: '0.35rem' }}>
-                      <div>
-                        <label style={{ display: 'block', fontSize: '0.62rem', color: 'var(--text-muted)', marginBottom: '1px' }}>Weight (g) *</label>
+                    <div className="opening-metal-inputs-grid">
+                      <div className="compact-field-group">
+                        <span className="compact-field-label">Weight (g) *</span>
                         <input
                           type="number"
                           step="0.001"
                           min="0"
-                          className="compact-field-input font-mono font-bold"
+                          className="compact-field-input"
+                          style={{ fontFamily: 'var(--font-mono, monospace)', fontWeight: 700 }}
                           placeholder="0.000 g"
                           value={customerForm.opening_gold_weight || ''}
                           onChange={(e) => {
@@ -643,10 +663,11 @@ export const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({
                           }}
                         />
                       </div>
-                      <div>
-                        <label style={{ display: 'block', fontSize: '0.62rem', color: 'var(--text-muted)', marginBottom: '1px' }}>Karat / Purity</label>
+                      <div className="compact-field-group">
+                        <span className="compact-field-label">Select Karat/Purity</span>
                         <select
-                          className="compact-field-select font-mono uppercase"
+                          className="compact-field-select"
+                          style={{ fontFamily: 'var(--font-mono, monospace)', textTransform: 'uppercase' }}
                           value={customerForm.opening_gold_purity_id}
                           onChange={(e) =>
                             setCustomerForm({
@@ -663,13 +684,14 @@ export const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({
                           ))}
                         </select>
                       </div>
-                      <div>
-                        <label style={{ display: 'block', fontSize: '0.62rem', color: 'var(--text-muted)', marginBottom: '1px' }}>Rate (₹/g)</label>
+                      <div className="compact-field-group">
+                        <span className="compact-field-label">Rate (₹/g)</span>
                         <input
                           type="number"
                           step="1"
                           min="0"
-                          className="compact-field-input font-mono"
+                          className="compact-field-input"
+                          style={{ fontFamily: 'var(--font-mono, monospace)' }}
                           placeholder="₹/g"
                           value={customerForm.opening_gold_rate || ''}
                           onChange={(e) => {
@@ -685,9 +707,11 @@ export const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({
                       </div>
                     </div>
                     {Boolean(customerForm.opening_gold_value && customerForm.opening_gold_value > 0) && (
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', color: '#d4af37', background: 'rgba(212,175,55,0.08)', padding: '2px 6px', borderRadius: '3px' }}>
-                        <span>Gold Value:</span>
-                        <strong className="font-mono">₹{customerForm.opening_gold_value.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
+                      <div className="opening-metal-valuation-strip gold-val">
+                        <span>🪙 Gold Valuation:</span>
+                        <strong style={{ fontFamily: 'var(--font-mono, monospace)' }}>
+                          ₹{customerForm.opening_gold_value.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        </strong>
                       </div>
                     )}
                   </div>
@@ -695,8 +719,9 @@ export const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({
                   {/* Silver Card */}
                   <div className="opening-card-compact card-silver">
                     <div className="card-heading">
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontWeight: 600, fontSize: '0.75rem', color: '#94a3b8' }}>
-                        <Scale size={14} /> Silver Opening (grams)
+                      <span className="card-title-badge" style={{ color: '#64748b' }}>
+                        <Scale size={15} />
+                        Silver Opening (grams)
                       </span>
                       <select
                         className="opening-type-select"
@@ -712,14 +737,15 @@ export const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({
                         <option value="CREDIT">Jama / Cr (Deposited - जमा)</option>
                       </select>
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.3fr 1fr', gap: '0.35rem' }}>
-                      <div>
-                        <label style={{ display: 'block', fontSize: '0.62rem', color: 'var(--text-muted)', marginBottom: '1px' }}>Weight (g) *</label>
+                    <div className="opening-metal-inputs-grid">
+                      <div className="compact-field-group">
+                        <span className="compact-field-label">Weight (g) *</span>
                         <input
                           type="number"
                           step="0.001"
                           min="0"
-                          className="compact-field-input font-mono font-bold"
+                          className="compact-field-input"
+                          style={{ fontFamily: 'var(--font-mono, monospace)', fontWeight: 700 }}
                           placeholder="0.000 g"
                           value={customerForm.opening_silver_weight || ''}
                           onChange={(e) => {
@@ -733,10 +759,11 @@ export const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({
                           }}
                         />
                       </div>
-                      <div>
-                        <label style={{ display: 'block', fontSize: '0.62rem', color: 'var(--text-muted)', marginBottom: '1px' }}>Purity</label>
+                      <div className="compact-field-group">
+                        <span className="compact-field-label">Select Purity</span>
                         <select
-                          className="compact-field-select font-mono uppercase"
+                          className="compact-field-select"
+                          style={{ fontFamily: 'var(--font-mono, monospace)', textTransform: 'uppercase' }}
                           value={customerForm.opening_silver_purity_id}
                           onChange={(e) =>
                             setCustomerForm({
@@ -753,13 +780,14 @@ export const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({
                           ))}
                         </select>
                       </div>
-                      <div>
-                        <label style={{ display: 'block', fontSize: '0.62rem', color: 'var(--text-muted)', marginBottom: '1px' }}>Rate (₹/g)</label>
+                      <div className="compact-field-group">
+                        <span className="compact-field-label">Rate (₹/g)</span>
                         <input
                           type="number"
                           step="0.1"
                           min="0"
-                          className="compact-field-input font-mono"
+                          className="compact-field-input"
+                          style={{ fontFamily: 'var(--font-mono, monospace)' }}
                           placeholder="₹/g"
                           value={customerForm.opening_silver_rate || ''}
                           onChange={(e) => {
@@ -775,40 +803,64 @@ export const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({
                       </div>
                     </div>
                     {Boolean(customerForm.opening_silver_value && customerForm.opening_silver_value > 0) && (
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', color: '#cbd5e1', background: 'rgba(203,213,225,0.08)', padding: '2px 6px', borderRadius: '3px' }}>
-                        <span>Silver Value:</span>
-                        <strong className="font-mono">₹{customerForm.opening_silver_value.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
+                      <div className="opening-metal-valuation-strip silver-val">
+                        <span>⚪ Silver Valuation:</span>
+                        <strong style={{ fontFamily: 'var(--font-mono, monospace)' }}>
+                          ₹{customerForm.opening_silver_value.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        </strong>
                       </div>
                     )}
                   </div>
                 </div>
 
                 {/* Net Summary Bar */}
-                <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', paddingTop: '0.4rem', marginTop: '0.4rem', borderTop: '1px dashed var(--border-subtle)', fontSize: '0.75rem' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                    <span style={{ color: 'var(--text-muted)' }}>Net Currency:</span>
-                    <strong style={{ color: netMonetary >= 0 ? '#10b981' : '#3b82f6', fontFamily: 'monospace' }}>
-                      ₹{Math.abs(netMonetary).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                      {netMonetary > 0 ? ' (Dr / Customer Owes Us)' : netMonetary < 0 ? ' (Cr / We Owe Customer)' : ' (₹0.00 Nil)'}
-                    </strong>
-                  </div>
-                  {Boolean(customerForm.opening_gold_weight && customerForm.opening_gold_weight > 0) && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                      <span style={{ color: 'var(--text-muted)' }}>Gold:</span>
-                      <strong style={{ color: '#d4af37', fontFamily: 'monospace' }}>
-                        {Number(customerForm.opening_gold_weight).toFixed(3)}g ({customerForm.opening_gold_type === 'DEBIT' ? 'Dr' : 'Cr'})
-                      </strong>
+                {(() => {
+                  const isCurDebit = netMonetary > 0;
+                  const isCurCredit = netMonetary < 0;
+                  return (
+                    <div className="opening-net-summary-strip">
+                      <div className="opening-net-group">
+                        <span className="opening-net-label">Net Currency:</span>
+                        <span
+                          className={`opening-net-badge ${
+                            isCurDebit
+                              ? 'badge-currency-dr'
+                              : isCurCredit
+                              ? 'badge-currency-cr'
+                              : 'badge-currency-nil'
+                          }`}
+                        >
+                          ₹{Math.abs(netMonetary).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                          {isCurDebit
+                            ? ' (Dr / Customer Owes Us)'
+                            : isCurCredit
+                            ? ' (Cr / We Owe Customer)'
+                            : ' (₹0.00 Nil)'}
+                        </span>
+                      </div>
+
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.65rem', flexWrap: 'wrap' }}>
+                        {Boolean(customerForm.opening_gold_weight && customerForm.opening_gold_weight > 0) && (
+                          <div className="opening-net-group">
+                            <span className="opening-net-label">Gold:</span>
+                            <span className="opening-net-badge badge-gold">
+                              🟡 {Number(customerForm.opening_gold_weight).toFixed(3)}g ({customerForm.opening_gold_type === 'DEBIT' ? 'Dr / बाकी' : 'Cr / जमा'})
+                            </span>
+                          </div>
+                        )}
+
+                        {Boolean(customerForm.opening_silver_weight && customerForm.opening_silver_weight > 0) && (
+                          <div className="opening-net-group">
+                            <span className="opening-net-label">Silver:</span>
+                            <span className="opening-net-badge badge-silver">
+                              ⚪ {Number(customerForm.opening_silver_weight).toFixed(3)}g ({customerForm.opening_silver_type === 'DEBIT' ? 'Dr / बाकी' : 'Cr / जमा'})
+                            </span>
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  )}
-                  {Boolean(customerForm.opening_silver_weight && customerForm.opening_silver_weight > 0) && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                      <span style={{ color: 'var(--text-muted)' }}>Silver:</span>
-                      <strong style={{ color: '#cbd5e1', fontFamily: 'monospace' }}>
-                        {Number(customerForm.opening_silver_weight).toFixed(3)}g ({customerForm.opening_silver_type === 'DEBIT' ? 'Dr' : 'Cr'})
-                      </strong>
-                    </div>
-                  )}
-                </div>
+                  );
+                })()}
               </div>
             </div>
           </div>
