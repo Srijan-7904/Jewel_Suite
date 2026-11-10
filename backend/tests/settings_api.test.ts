@@ -1,16 +1,23 @@
 // backend/tests/settings_api.test.ts
 import { describe, it, expect, beforeAll } from 'vitest';
 import request from 'supertest';
+import DatabaseConstructor, { Database as DatabaseType } from 'better-sqlite3';
+import * as dbModule from '../src/database/connection/db.js';
 import { bootstrapApp } from '../src/server.js';
 import type { Application } from 'express';
 
 describe('Jewel Suite Part 11: Settings & User Management HTTP API Tests', () => {
   let app: Application;
+  let testDb: DatabaseType;
   let adminToken: string;
   let staffToken: string;
   let createdStaffId: string;
 
   beforeAll(async () => {
+    testDb = new DatabaseConstructor(':memory:');
+    testDb.pragma('foreign_keys = ON');
+    dbModule.setDb(testDb);
+
     app = await bootstrapApp();
 
     // 1. Login as default Admin

@@ -399,7 +399,7 @@ export class InventoryService {
       const baseFineRate = Number(r.base_fine_rate || 0);
       let currentVal = 0;
       if (currentRate > 0) {
-        currentVal = roundCurrency(toDecimal(net).mul(toDecimal(currentRate)));
+        currentVal = roundCurrency(toDecimal(fine).mul(toDecimal(currentRate)));
       } else if (baseFineRate > 0) {
         currentVal = roundCurrency(toDecimal(fine).mul(toDecimal(baseFineRate)));
       } else {

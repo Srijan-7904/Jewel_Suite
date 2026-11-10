@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { v4 as uuidv4 } from 'uuid';
 import {
   salesRepository,
   SalesInvoiceRecord,
@@ -175,6 +176,41 @@ export class SalesService {
     const anyProd = db.prepare('SELECT id FROM products LIMIT 1').get() as { id: string } | undefined;
     if (anyProd) return anyProd.id;
     throw new BadRequestError('No valid product found for scrap mapping');
+  }
+
+  private resolveProductIdForSaleItem(item: { item_name: string; metal_id: string; purity_id: string }): string {
+    const db = getDb();
+    if (item.item_name) {
+      const prodByName = db.prepare('SELECT id FROM products WHERE LOWER(name) = LOWER(?) LIMIT 1').get(item.item_name.trim()) as { id: string } | undefined;
+      if (prodByName) return prodByName.id;
+    }
+
+    // Ensure category exists
+    let cat = db.prepare('SELECT id FROM categories LIMIT 1').get() as { id: string } | undefined;
+    if (!cat) {
+      const catId = uuidv4();
+      db.prepare('INSERT INTO categories (id, name, code, description) VALUES (?, ?, ?, ?)').run(catId, 'General Jewellery', 'GEN', 'Standard Jewellery Category');
+      cat = { id: catId };
+    }
+
+    let metalCode = 'GOLD';
+    if (item.metal_id) {
+      const metal = db.prepare('SELECT code FROM metals WHERE id = ?').get(item.metal_id) as { code: string } | undefined;
+      if (metal) metalCode = metal.code;
+    }
+
+    const fallbackProdId = uuidv4();
+    db.prepare(`
+      INSERT INTO products (id, product_code, name, category_id, default_metal, default_unit)
+      VALUES (?, ?, ?, ?, ?, 'g')
+    `).run(
+      fallbackProdId,
+      `PRD-${metalCode.slice(0, 3)}-${Date.now().toString(36).toUpperCase()}-${Math.floor(Math.random() * 1000)}`,
+      item.item_name || 'General Jewellery',
+      cat.id,
+      metalCode
+    );
+    return fallbackProdId;
   }
 
   /**
@@ -633,9 +669,10 @@ export class SalesService {
           }
         } else {
           // If no pre-existing stock item was inwarded, record outward negative stock item and movement
+          const fallbackProductId = this.resolveProductIdForSaleItem(item);
           const newStock = stockRepository.create({
             tag_no: item.tag_no || `SALE-${invoice.invoice_number}-${Date.now().toString().slice(-4)}`,
-            product_id: '',
+            product_id: fallbackProductId,
             metal_id: item.metal_id,
             purity_id: item.purity_id,
             gross_weight: item.gross_weight,
