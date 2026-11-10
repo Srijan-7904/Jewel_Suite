@@ -856,6 +856,7 @@
 /* Items Table */
 .print-items-table {
   width: 100%;
+  min-width: 720px;
   border-collapse: collapse;
   font-size: 0.72rem;
   margin-bottom: 0;
@@ -872,12 +873,12 @@
   font-size: 0.67rem;
   letter-spacing: 0.2px;
   vertical-align: middle;
-  white-space: normal;
+  white-space: nowrap;
   line-height: 1.25;
 }
 
 .print-items-table td {
-  padding: 0.42rem 0.32rem;
+  padding: 0.42rem 0.35rem;
   border: 1px solid #e2e8f0;
   color: #1e293b;
   vertical-align: middle;
@@ -1045,6 +1046,10 @@
 
 /* Print Media Query */
 @media print {
+  @page {
+    size: A4 portrait;
+    margin: 6mm 6mm;
+  }
   body * {
     visibility: hidden;
   }
@@ -1089,6 +1094,11 @@
   .print-items-table {
     min-width: 100% !important;
     width: 100% !important;
+    font-size: 0.65rem !important;
+  }
+  .print-items-table th,
+  .print-items-table td {
+    padding: 3px 3px !important;
   }
   .no-print {
     display: none !important;

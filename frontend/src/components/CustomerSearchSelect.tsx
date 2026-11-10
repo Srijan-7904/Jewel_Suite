@@ -26,6 +26,7 @@ export interface CustomerSearchSelectProps {
   placeholder?: string;
   className?: string;
   disabled?: boolean;
+  showDetailsInTrigger?: boolean;
 }
 
 export const CustomerSearchSelect: React.FC<CustomerSearchSelectProps> = ({
@@ -39,6 +40,7 @@ export const CustomerSearchSelect: React.FC<CustomerSearchSelectProps> = ({
   placeholder = 'Search customer by name or phone (e.g. Srijan / 96281...)',
   className = '',
   disabled = false,
+  showDetailsInTrigger = false,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -314,7 +316,7 @@ export const CustomerSearchSelect: React.FC<CustomerSearchSelectProps> = ({
                     if (isCash) {
                       return <span className="selected-balance-pill is-cash-sale font-mono">CASH SALE</span>;
                     }
-                    if (selectedCustomer.current_balance !== undefined && selectedCustomer.current_balance !== 0) {
+                    if (showDetailsInTrigger && selectedCustomer.current_balance !== undefined && selectedCustomer.current_balance !== 0) {
                       return (
                         <span className={`selected-balance-pill ${selectedCustomer.current_balance > 0 ? 'is-debit' : 'is-credit'} font-mono`}>
                           {selectedCustomer.current_balance > 0
@@ -326,7 +328,7 @@ export const CustomerSearchSelect: React.FC<CustomerSearchSelectProps> = ({
                     return null;
                   })()}
                 </div>
-                {(selectedCustomer.address || selectedCustomer.city) && (
+                {showDetailsInTrigger && (selectedCustomer.address || selectedCustomer.city) && (
                   <span
                     className="selected-subaddress"
                     title={[selectedCustomer.address, selectedCustomer.city].filter(Boolean).join(', ')}

@@ -18,7 +18,6 @@ import {
   toDecimal,
   formatWeight,
   formatFineWeight,
-  formatMetalRate,
   formatCurrency,
   parseDecimalInput,
 } from '../../utils/precision';
@@ -125,6 +124,7 @@ interface PaymentRow {
   metal_rate?: number | string;
   rate_error?: string;
   is_auto_weight?: boolean;
+  is_auto?: boolean;
   last_edited?: 'weight' | 'fine' | 'amount';
 }
 
@@ -1139,48 +1139,6 @@ export const PurchaseBillsPage: React.FC = () => {
     );
   };
 
-  const handleMetalFineWeightChange = (id: string, value: string) => {
-    const sanitized = parseDecimalInput(value, 4);
-    setPayments((prev) =>
-      prev.map((p) => {
-        if (p.id !== id) return p;
-        const isGold = p.payment_mode === 'GOLD';
-        const info = findMetalAndPurity(p.payment_mode === 'SILVER' ? 'SILVER' : 'GOLD', p.purity_id);
-        const baseRate = toDecimal(info.baseRate || p.metal_rate || info.applicableRate || 0);
-        const tunch = toDecimal(p.tunch_percent || info.tunchPercent || (isGold ? 99.9 : 99.9));
-
-        const fw = toDecimal(sanitized || 0);
-        const grossWeight = sanitized && !fw.isZero() && tunch.gt(0)
-          ? fw.times(100).dividedBy(tunch).toDecimalPlaces(3, Decimal.ROUND_HALF_UP).toNumber()
-          : (p.metal_weight || '');
-
-        if (baseRate.lte(0)) {
-          return {
-            ...p,
-            fine_weight: sanitized,
-            metal_weight: grossWeight,
-            amount: '',
-            last_edited: 'fine',
-            rate_error: "Today's benchmark rate not configured on dashboard to calculate payment value",
-          };
-        }
-
-        const amount = sanitized && !fw.isZero()
-          ? fw.times(baseRate).toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber()
-          : '';
-
-        return {
-          ...p,
-          fine_weight: sanitized,
-          metal_weight: grossWeight,
-          amount,
-          last_edited: 'fine',
-          rate_error: undefined,
-        };
-      })
-    );
-  };
-
   const handlePaymentAmountChange = (id: string, value: string) => {
     const sanitized = parseDecimalInput(value, 2);
     setPayments((prev) =>
@@ -1189,6 +1147,63 @@ export const PurchaseBillsPage: React.FC = () => {
         return {
           ...p,
           amount: sanitized,
+          is_auto: false,
+        };
+      })
+    );
+  };
+
+  const handleMetalRateChange = (id: string, value: string) => {
+    const sanitized = parseDecimalInput(value, 2);
+    setPayments((prev) =>
+      prev.map((p) => {
+        if (p.id !== id) return p;
+        const r = toDecimal(sanitized || 0);
+        let newAmount = p.amount;
+        if (p.metal_weight && Number(p.metal_weight) > 0 && r.gt(0)) {
+          newAmount = toDecimal(p.metal_weight).times(r).toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber();
+        }
+        return {
+          ...p,
+          metal_rate: sanitized,
+          amount: newAmount,
+          is_auto: false,
+          rate_error: r.lte(0) ? 'Rate must be greater than zero' : undefined,
+        };
+      })
+    );
+  };
+
+  const handlePaymentPurityChange = (id: string, newPurityId: string) => {
+    setPayments((prev) =>
+      prev.map((p) => {
+        if (p.id !== id) return p;
+        const isGold = p.payment_mode === 'GOLD';
+        const info = findMetalAndPurity(isGold ? 'GOLD' : 'SILVER', newPurityId);
+        const selectedPur = purities.find((pur) => pur.id === newPurityId);
+        const newRate = info.applicableRate;
+        const tunch = info.tunchPercent;
+
+        let newFine = p.fine_weight;
+        let newAmt = p.amount;
+
+        if (p.metal_weight && Number(p.metal_weight) > 0) {
+          const w = toDecimal(p.metal_weight);
+          newFine = w.times(tunch).dividedBy(100).toDecimalPlaces(3, Decimal.ROUND_HALF_UP).toNumber();
+          if (newRate > 0) {
+            newAmt = w.times(newRate).toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber();
+          }
+        }
+
+        return {
+          ...p,
+          purity_id: newPurityId,
+          purity_name: selectedPur ? selectedPur.name : info.purityName,
+          metal_rate: newRate > 0 ? newRate : p.metal_rate,
+          tunch_percent: tunch,
+          fine_weight: newFine,
+          amount: newAmt,
+          rate_error: newRate <= 0 ? 'No active rate configured for this purity' : undefined,
         };
       })
     );
@@ -1213,9 +1228,12 @@ export const PurchaseBillsPage: React.FC = () => {
     let goldNetWeight = new Decimal(0);
     let goldFineWeight = new Decimal(0);
     let goldAdjustedFineWeight = new Decimal(0);
+    let goldPurchaseAmount = new Decimal(0);
+
     let silverNetWeight = new Decimal(0);
     let silverFineWeight = new Decimal(0);
     let silverAdjustedFineWeight = new Decimal(0);
+    let silverPurchaseAmount = new Decimal(0);
 
     interface MetalSummaryAcc {
       metalName: string;
@@ -1336,10 +1354,12 @@ export const PurchaseBillsPage: React.FC = () => {
           silverNetWeight = silverNetWeight.plus(net);
           silverFineWeight = silverFineWeight.plus(pureFine);
           silverAdjustedFineWeight = silverAdjustedFineWeight.plus(billableFine);
+          silverPurchaseAmount = silverPurchaseAmount.plus(rowAmount);
         } else if (!isDiamond && !isPlatinum) {
           goldNetWeight = goldNetWeight.plus(net);
           goldFineWeight = goldFineWeight.plus(pureFine);
           goldAdjustedFineWeight = goldAdjustedFineWeight.plus(billableFine);
+          goldPurchaseAmount = goldPurchaseAmount.plus(rowAmount);
         }
       }
     });
@@ -1373,8 +1393,10 @@ export const PurchaseBillsPage: React.FC = () => {
 
     let goldExchangeNetWeight = new Decimal(0);
     let goldExchangeFineWeight = new Decimal(0);
+    let goldExchangeAmount = new Decimal(0);
     let silverExchangeNetWeight = new Decimal(0);
     let silverExchangeFineWeight = new Decimal(0);
+    let silverExchangeAmount = new Decimal(0);
 
     interface ExMetalSummaryAcc {
       metalName: string;
@@ -1453,9 +1475,11 @@ export const PurchaseBillsPage: React.FC = () => {
       if (isExSilver) {
         silverExchangeNetWeight = silverExchangeNetWeight.plus(net);
         silverExchangeFineWeight = silverExchangeFineWeight.plus(pureFine);
+        silverExchangeAmount = silverExchangeAmount.plus(exVal);
       } else if (!isExDiamond && !isExPlatinum) {
         goldExchangeNetWeight = goldExchangeNetWeight.plus(net);
         goldExchangeFineWeight = goldExchangeFineWeight.plus(pureFine);
+        goldExchangeAmount = goldExchangeAmount.plus(exVal);
       }
 
       let exAcc = exMetalMap.get(standardExMetalKey);
@@ -1557,9 +1581,22 @@ export const PurchaseBillsPage: React.FC = () => {
       ? totalPaid.gte(netPayable)
       : true;
 
+    const goldBalFine = Decimal.max(0, goldFineWeight.minus(goldExchangeFineWeight));
+    const goldBalAmount = Decimal.max(0, goldPurchaseAmount.minus(goldExchangeAmount));
+    const silverBalFine = Decimal.max(0, silverFineWeight.minus(silverExchangeFineWeight));
+    const silverBalAmount = Decimal.max(0, silverPurchaseAmount.minus(silverExchangeAmount));
+
     return {
       metalBreakdowns,
       exchangeMetalBreakdowns,
+      goldPurchaseAmount: goldPurchaseAmount.toNumber(),
+      goldExchangeAmount: goldExchangeAmount.toNumber(),
+      goldBalFine: goldBalFine.toNumber(),
+      goldBalAmount: goldBalAmount.toNumber(),
+      silverPurchaseAmount: silverPurchaseAmount.toNumber(),
+      silverExchangeAmount: silverExchangeAmount.toNumber(),
+      silverBalFine: silverBalFine.toNumber(),
+      silverBalAmount: silverBalAmount.toNumber(),
       totalGrossWeight: totalGrossWeight.toNumber(),
       totalLessWeight: totalLessWeight.toNumber(),
       totalNetWeight: totalNetWeight.toNumber(),
@@ -1644,6 +1681,125 @@ export const PurchaseBillsPage: React.FC = () => {
       },
     ]);
   };
+
+  const handleToggleAutoMode = (paymentId: string, metalType: 'GOLD' | 'SILVER') => {
+    const isGold = metalType === 'GOLD';
+    const balFine = isGold ? calculations.goldBalFine : calculations.silverBalFine;
+    const balAmt = isGold ? calculations.goldBalAmount : calculations.silverBalAmount;
+
+    setPayments((prev) =>
+      prev.map((p) => {
+        if (p.id !== paymentId) return p;
+        const willBeAuto = !p.is_auto;
+        const info = findMetalAndPurity(metalType, p.purity_id);
+        const rate = Number(p.metal_rate || info.applicableRate || 0);
+        const amt = balAmt > 0 ? balAmt : (rate > 0 ? Decimal.max(0, new Decimal(balFine).times(rate)).toNumber() : 0);
+
+        return {
+          ...p,
+          is_auto: willBeAuto,
+          metal_weight: willBeAuto ? (balFine > 0 ? balFine : '') : p.metal_weight,
+          fine_weight: willBeAuto ? (balFine > 0 ? balFine : '') : p.fine_weight,
+          amount: willBeAuto ? (amt > 0 ? amt : '') : p.amount,
+          last_edited: 'weight',
+        };
+      })
+    );
+  };
+
+  const handleApplyAutoFromSummary = (metalType: 'GOLD' | 'SILVER') => {
+    const isGold = metalType === 'GOLD';
+    const balFine = isGold ? calculations.goldBalFine : calculations.silverBalFine;
+    const balAmt = isGold ? calculations.goldBalAmount : calculations.silverBalAmount;
+
+    const existingIndex = payments.findIndex((p) => p.payment_mode === metalType);
+
+    if (existingIndex >= 0) {
+      const existing = payments[existingIndex];
+      setPayments((prev) =>
+        prev.map((p, idx) => {
+          if (idx !== existingIndex) return p;
+          const willBeAuto = !p.is_auto;
+          const info = findMetalAndPurity(metalType, p.purity_id);
+          const rate = Number(p.metal_rate || info.applicableRate || 0);
+          const amt = balAmt > 0 ? balAmt : (rate > 0 ? Decimal.max(0, new Decimal(balFine).times(rate)).toNumber() : 0);
+          return {
+            ...p,
+            is_auto: willBeAuto,
+            metal_weight: willBeAuto ? (balFine > 0 ? balFine : '') : p.metal_weight,
+            fine_weight: willBeAuto ? (balFine > 0 ? balFine : '') : p.fine_weight,
+            amount: willBeAuto ? (amt > 0 ? amt : '') : p.amount,
+            last_edited: 'weight',
+          };
+        })
+      );
+      showToast('success', `${isGold ? 'Gold' : 'Silver'} Auto mode ${existing.is_auto ? 'disabled' : 'selected & synced'}`);
+    } else {
+      const info = findMetalAndPurity(metalType);
+      const currentSup = suppliers.find((s) => s.id === supplierId);
+      const rate = info.applicableRate;
+      const amt = balAmt > 0 ? balAmt : (rate > 0 ? Decimal.max(0, new Decimal(balFine).times(rate)).toNumber() : 0);
+
+      const newPay: PaymentRow = {
+        id: `pay-${Date.now()}-${payments.length + 1}`,
+        payment_mode: metalType,
+        amount: amt > 0 ? amt : '',
+        reference_number: '',
+        payer_type: 'SELF',
+        payer_name: currentSup ? currentSup.name : 'CASH SUPPLIER',
+        payer_party_id: supplierId,
+        received_in: '',
+        metal_id: info.metalId,
+        metal_name: info.metalName,
+        purity_id: info.purityId,
+        purity_name: info.purityName,
+        tunch_percent: info.tunchPercent,
+        metal_weight: balFine > 0 ? balFine : '',
+        fine_weight: balFine > 0 ? balFine : '',
+        metal_rate: info.applicableRate > 0 ? info.applicableRate : '',
+        rate_error: info.applicableRate <= 0 ? "Today's benchmark rate not set in dashboard" : undefined,
+        last_edited: 'weight',
+        is_auto: true,
+      };
+      setPayments((prev) => [...prev, newPay]);
+      showToast('success', `${isGold ? 'Gold' : 'Silver'} Auto mode payment row added (${balFine}g)`);
+    }
+  };
+
+  // Keep Auto mode payment rows synced with latest Net Metal & Return Balance
+  useEffect(() => {
+    setPayments((prev) => {
+      let hasChanges = false;
+      const updated = prev.map((p) => {
+        if (!p.is_auto) return p;
+        const isGold = p.payment_mode === 'GOLD';
+        const isSilver = p.payment_mode === 'SILVER';
+        if (!isGold && !isSilver) return p;
+
+        const balFine = isGold ? calculations.goldBalFine : calculations.silverBalFine;
+        const balAmt = isGold ? calculations.goldBalAmount : calculations.silverBalAmount;
+        const rate = Number(p.metal_rate || 0);
+        const targetAmt = balAmt > 0 ? balAmt : (rate > 0 ? Decimal.max(0, new Decimal(balFine).times(rate)).toNumber() : 0);
+
+        if (p.metal_weight !== (balFine > 0 ? balFine : '') || p.amount !== (targetAmt > 0 ? targetAmt : '')) {
+          hasChanges = true;
+          return {
+            ...p,
+            metal_weight: balFine > 0 ? balFine : '',
+            fine_weight: balFine > 0 ? balFine : '',
+            amount: targetAmt > 0 ? targetAmt : '',
+          };
+        }
+        return p;
+      });
+      return hasChanges ? updated : prev;
+    });
+  }, [
+    calculations.goldBalFine,
+    calculations.goldBalAmount,
+    calculations.silverBalFine,
+    calculations.silverBalAmount,
+  ]);
 
   // Reset to Fresh Blank Purchase
   const handleStartNewBill = () => {
@@ -3948,196 +4104,231 @@ export const PurchaseBillsPage: React.FC = () => {
                           </div>
                         )}
 
-                        {/* Input Fields Row: Gold ____ / Silver ____ / Amount ___ / Bank ______ / Note ______ */}
-                        <div className="payment-fields-row">
-                          {/* GOLD Weight Input */}
-                          {isGold && (
-                            <div className="field-block gold-block">
-                              <div className="field-header">
-                                <label className="field-title">Gold (g) *</label>
-                                <span className="auto-rate-pill gold-pill">
-                                  @ {formatMetalRate(p.metal_rate, true)}/g (Today's Gold Rate)
-                                </span>
-                              </div>
-                              <div className="input-group-styled">
-                                <input
-                                  type="text"
-                                  inputMode="decimal"
-                                  className="styled-input font-mono font-bold text-amber-400"
-                                  value={p.metal_weight !== undefined ? p.metal_weight : ''}
-                                  onChange={(e) => handleMetalWeightChange(p.id, e.target.value)}
-                                  placeholder="0.000"
-                                />
-                                <span className="unit-label">g</span>
-                              </div>
-                              {availablePurities.length > 1 && (
-                                <select
-                                  className="purity-mini-select font-mono"
-                                  value={p.purity_id || ''}
-                                  onChange={(e) => handleUpdatePaymentRow(p.id, { purity_id: e.target.value })}
-                                  title="Gold Purity (Auto-calculates rate from dashboard)"
-                                >
-                                  {availablePurities.map((pur) => (
-                                    <option key={pur.id} value={pur.id}>
-                                      {pur.name}
-                                    </option>
-                                  ))}
-                                </select>
-                              )}
-                            </div>
-                          )}
-
-                          {/* SILVER Weight Input */}
-                          {isSilver && (
-                            <div className="field-block silver-block">
-                              <div className="field-header">
-                                <label className="field-title">Silver (g) *</label>
-                                <span className="auto-rate-pill silver-pill">
-                                  @ {formatMetalRate(p.metal_rate, true)}/g (Today's Silver Rate)
-                                </span>
-                              </div>
-                              <div className="input-group-styled">
-                                <input
-                                  type="text"
-                                  inputMode="decimal"
-                                  className="styled-input font-mono font-bold text-slate-200"
-                                  value={p.metal_weight !== undefined ? p.metal_weight : ''}
-                                  onChange={(e) => handleMetalWeightChange(p.id, e.target.value)}
-                                  placeholder="0.000"
-                                />
-                                <span className="unit-label">g</span>
-                              </div>
-                              {availablePurities.length > 1 && (
-                                <select
-                                  className="purity-mini-select font-mono"
-                                  value={p.purity_id || ''}
-                                  onChange={(e) => handleUpdatePaymentRow(p.id, { purity_id: e.target.value })}
-                                  title="Silver Purity (Auto-calculates rate from dashboard)"
-                                >
-                                  {availablePurities.map((pur) => (
-                                    <option key={pur.id} value={pur.id}>
-                                      {pur.name}
-                                    </option>
-                                  ))}
-                                </select>
-                              )}
-                            </div>
-                          )}
-
-                          {/* BANK Input */}
-                          {isBank && (
-                            <div className="field-block bank-block">
-                              <label className="field-title">Bank *</label>
-                              <div className="input-group-styled">
-                                {receivingAccounts.filter((a) => a.is_active && (a.account_type === 'BANK' || a.account_type === 'UPI')).length > 0 ? (
-                                  <select
-                                    className="styled-input font-mono"
-                                    value={p.received_in || ''}
-                                    onChange={(e) =>
-                                      handleUpdatePaymentRow(p.id, {
-                                        received_in: e.target.value,
-                                        payer_bank: e.target.value,
-                                      })
-                                    }
+                        {/* Input Fields Row */}
+                        <div className={`payment-fields-row ${isMetal ? 'is-metal-fields' : ''}`}>
+                          {isMetal ? (
+                            <>
+                              {/* 1. Metal: Gold / Silver */}
+                              <div className="field-block metal-select-block">
+                                <label className="field-title">Metal *</label>
+                                <div className="segmented-toggle metal-type-segmented">
+                                  <button
+                                    type="button"
+                                    className={`segment-btn metal-gold-btn ${isGold ? 'active' : ''}`}
+                                    onClick={() => handleSetPaymentMode(p.id, 'GOLD')}
                                   >
-                                    <option value="">-- Choose Account --</option>
-                                    {receivingAccounts
-                                      .filter((a) => a.is_active)
-                                      .map((acc) => (
-                                        <option key={acc.id} value={acc.account_name}>
-                                          {acc.account_name} ({acc.account_type})
-                                        </option>
-                                      ))}
-                                  </select>
-                                ) : (
+                                    🟡 Gold
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className={`segment-btn metal-silver-btn ${isSilver ? 'active' : ''}`}
+                                    onClick={() => handleSetPaymentMode(p.id, 'SILVER')}
+                                  >
+                                    ⚪ Silver
+                                  </button>
+                                </div>
+                              </div>
+
+                              {/* 2. Rate: Rate/g */}
+                              <div className="field-block rate-block">
+                                <label className="field-title">Rate (₹/g)</label>
+                                <div className="input-group-styled">
+                                  <span className="unit-label-prefix">₹</span>
                                   <input
                                     type="text"
-                                    list="indian-banks-list-pur"
-                                    className="styled-input font-mono"
-                                    placeholder="e.g. State Bank of India / HDFC"
-                                    value={p.received_in || p.payer_bank || ''}
+                                    inputMode="decimal"
+                                    className="styled-input font-mono font-bold"
+                                    value={p.metal_rate !== undefined ? p.metal_rate : ''}
+                                    onChange={(e) => handleMetalRateChange(p.id, e.target.value)}
+                                    placeholder="Rate/g"
+                                  />
+                                </div>
+                              </div>
+
+                              {/* 3. Weight: Weight (g) with Auto mode toggle underneath */}
+                              <div className="field-block weight-block">
+                                <div className="field-header">
+                                  <label className="field-title">Weight (g) *</label>
+                                  {p.fine_weight && Number(p.fine_weight) > 0 && (
+                                    <span className="text-3xs text-muted font-mono" title="Calculated Fine Weight">
+                                      Fine: {formatFineWeight(p.fine_weight, 4)}g
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="input-group-styled">
+                                  <input
+                                    type="text"
+                                    inputMode="decimal"
+                                    className={`styled-input font-mono font-bold ${isGold ? 'text-amber-400' : 'text-slate-200'}`}
+                                    value={p.metal_weight !== undefined ? p.metal_weight : ''}
+                                    onChange={(e) => {
+                                      handleUpdatePaymentRow(p.id, { is_auto: false });
+                                      handleMetalWeightChange(p.id, e.target.value);
+                                    }}
+                                    placeholder="0.000"
+                                  />
+                                  <span className="unit-label">g</span>
+                                </div>
+
+                                {/* Auto mode indicator & toggle directly below Weight */}
+                                <div className="auto-mode-toggle-subrow mt-1">
+                                  <button
+                                    type="button"
+                                    className={`auto-mode-pill-btn ${isGold ? 'gold-auto' : 'silver-auto'} ${p.is_auto ? 'active' : ''}`}
+                                    onClick={() => handleToggleAutoMode(p.id, isGold ? 'GOLD' : 'SILVER')}
+                                    title="Click to toggle Auto mode linked to Balance Fine & Amount"
+                                  >
+                                    <span className="auto-dot-icon">{isGold ? '🟢' : '🔴'}</span>
+                                    <span className="auto-label-text">
+                                      {p.is_auto ? 'Auto mode Selected' : 'Select Auto mode'}
+                                    </span>
+                                  </button>
+                                </div>
+                              </div>
+
+                              {/* 4. Amount: Amount (₹) */}
+                              <div className="field-block amount-block">
+                                <label className="field-title">Amount (₹)</label>
+                                <div className="input-group-styled">
+                                  <span className="unit-label-prefix">₹</span>
+                                  <input
+                                    type="text"
+                                    inputMode="decimal"
+                                    className="styled-input font-mono font-bold text-emerald-400"
+                                    value={p.amount !== undefined ? p.amount : ''}
+                                    onChange={(e) => {
+                                      handleUpdatePaymentRow(p.id, { is_auto: false });
+                                      handlePaymentAmountChange(p.id, e.target.value);
+                                    }}
+                                    placeholder="0.00"
+                                  />
+                                </div>
+                              </div>
+
+                              {/* 5. Purity: Dropdown */}
+                              <div className="field-block purity-block">
+                                <label className="field-title">Purity *</label>
+                                <select
+                                  className="styled-input font-mono text-xs"
+                                  value={p.purity_id || ''}
+                                  onChange={(e) => handlePaymentPurityChange(p.id, e.target.value)}
+                                  title="Select Purity for Metal Rate"
+                                >
+                                  {availablePurities.map((pur) => (
+                                    <option key={pur.id} value={pur.id}>
+                                      {pur.name}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+
+                              {/* 6. Note */}
+                              <div className="field-block note-block flex-grow">
+                                <label className="field-title">Note / Bullion Memo</label>
+                                <div className="input-group-styled">
+                                  <input
+                                    type="text"
+                                    className="styled-input font-mono text-xs"
+                                    value={p.notes || p.reference_number || ''}
                                     onChange={(e) =>
                                       handleUpdatePaymentRow(p.id, {
-                                        received_in: e.target.value,
-                                        payer_bank: e.target.value,
+                                        notes: e.target.value,
+                                        reference_number: e.target.value,
                                       })
                                     }
+                                    placeholder="Tender remarks / Bullion Bar No..."
                                   />
-                                )}
+                                </div>
                               </div>
-                            </div>
-                          )}
+                            </>
+                          ) : (
+                            <>
+                              {/* BANK Input */}
+                              {isBank && (
+                                <div className="field-block bank-block">
+                                  <label className="field-title">Bank *</label>
+                                  <div className="input-group-styled">
+                                    {receivingAccounts.filter((a) => a.is_active && (a.account_type === 'BANK' || a.account_type === 'UPI')).length > 0 ? (
+                                      <select
+                                        className="styled-input font-mono"
+                                        value={p.received_in || ''}
+                                        onChange={(e) =>
+                                          handleUpdatePaymentRow(p.id, {
+                                            received_in: e.target.value,
+                                            payer_bank: e.target.value,
+                                          })
+                                        }
+                                      >
+                                        <option value="">-- Choose Account --</option>
+                                        {receivingAccounts
+                                          .filter((a) => a.is_active)
+                                          .map((acc) => (
+                                            <option key={acc.id} value={acc.account_name}>
+                                              {acc.account_name} ({acc.account_type})
+                                            </option>
+                                          ))}
+                                      </select>
+                                    ) : (
+                                      <input
+                                        type="text"
+                                        list="indian-banks-list-pur"
+                                        className="styled-input font-mono"
+                                        placeholder="e.g. State Bank of India / HDFC"
+                                        value={p.received_in || p.payer_bank || ''}
+                                        onChange={(e) =>
+                                          handleUpdatePaymentRow(p.id, {
+                                            received_in: e.target.value,
+                                            payer_bank: e.target.value,
+                                          })
+                                        }
+                                      />
+                                    )}
+                                  </div>
+                                </div>
+                              )}
 
-                          {/* FINE WT (Shown for Gold & Silver) */}
-                          {isMetal && (
-                            <div className="field-block fine-block">
-                              <div className="field-header">
-                                <label className="field-title">Fine Wt (g)</label>
-                                {Number(p.amount) > 0 && (
-                                  <span className="auto-rate-pill fine-value-pill">
-                                    = {formatCurrency(p.amount)} (in Summary)
-                                  </span>
-                                )}
+                              {/* AMOUNT Input (Shown for non-metal: Cash, Bank, Credit) */}
+                              <div className="field-block amount-block">
+                                <label className="field-title">Amount *</label>
+                                <div className="input-group-styled">
+                                  <span className="unit-label-prefix">₹</span>
+                                  <input
+                                    type="text"
+                                    inputMode="decimal"
+                                    className="styled-input font-mono font-bold text-emerald-400"
+                                    value={p.amount !== undefined ? p.amount : ''}
+                                    onChange={(e) => handlePaymentAmountChange(p.id, e.target.value)}
+                                    placeholder="0.00"
+                                  />
+                                </div>
                               </div>
-                              <div className="input-group-styled">
-                                <input
-                                  type="text"
-                                  inputMode="decimal"
-                                  className={`styled-input font-mono font-bold ${isGold ? 'text-amber-300' : 'text-slate-200'}`}
-                                  value={p.fine_weight !== undefined ? p.fine_weight : ''}
-                                  onChange={(e) => handleMetalFineWeightChange(p.id, e.target.value)}
-                                  placeholder="0.000"
-                                  title="Fine metal weight (auto-calculated from purity tunch or enter directly)"
-                                />
-                                <span className="unit-label">g</span>
-                              </div>
-                            </div>
-                          )}
 
-                          {/* AMOUNT Input (Shown for non-metal: Cash, Bank, Credit) */}
-                          {!isMetal && (
-                            <div className="field-block amount-block">
-                              <label className="field-title">Amount *</label>
-                              <div className="input-group-styled">
-                                <span className="unit-label-prefix">₹</span>
-                                <input
-                                  type="text"
-                                  inputMode="decimal"
-                                  className="styled-input font-mono font-bold text-emerald-400"
-                                  value={p.amount !== undefined ? p.amount : ''}
-                                  onChange={(e) => handlePaymentAmountChange(p.id, e.target.value)}
-                                  placeholder="0.00"
-                                />
+                              {/* NOTE / REF Input */}
+                              <div className="field-block note-block flex-grow">
+                                <label className="field-title">Reference / Note</label>
+                                <div className="input-group-styled">
+                                  <input
+                                    type="text"
+                                    className="styled-input"
+                                    value={p.reference_number || p.notes || ''}
+                                    onChange={(e) =>
+                                      handleUpdatePaymentRow(p.id, {
+                                        reference_number: e.target.value,
+                                        notes: e.target.value,
+                                      })
+                                    }
+                                    placeholder={
+                                      isBank
+                                        ? 'UTR / Cheque No'
+                                        : isCredit
+                                        ? 'Supplier Jama Khata Ledger Note'
+                                        : 'Payment remarks / note'
+                                    }
+                                  />
+                                </div>
                               </div>
-                            </div>
+                            </>
                           )}
-
-                          {/* NOTE / REF Input */}
-                          <div className="field-block note-block flex-grow">
-                            <label className="field-title">Reference / Note</label>
-                            <div className="input-group-styled">
-                              <input
-                                type="text"
-                                className="styled-input"
-                                value={p.reference_number || p.notes || ''}
-                                onChange={(e) =>
-                                  handleUpdatePaymentRow(p.id, {
-                                    reference_number: e.target.value,
-                                    notes: e.target.value,
-                                  })
-                                }
-                                placeholder={
-                                  isBank
-                                    ? 'UTR / Cheque No'
-                                    : isMetal
-                                    ? 'Bullion Bar No / Delivery Memo'
-                                    : isCredit
-                                    ? 'Supplier Jama Khata Ledger Note'
-                                    : 'Payment remarks / note'
-                                }
-                              />
-                            </div>
-                          </div>
                         </div>
 
                         {p.rate_error && (
@@ -4175,107 +4366,117 @@ export const PurchaseBillsPage: React.FC = () => {
                   </div>
                 </div>
 
-                {/* SEPARATE METAL WEIGHTS PANEL (NET & FINE PER METAL) */}
-                <div className="summary-metal-weights-panel">
-                  <div className="panel-sub-header">
+                {/* NET METAL & RETURN BALANCE TALLY (FINE & VALUE BALANCE) */}
+                <div className="summary-metal-tally-card">
+                  <div className="tally-card-header">
                     <div className="flex items-center gap-1.5">
                       <Scale size={13} className="text-gold" />
                       <span className="text-xs font-bold uppercase tracking-wider text-muted">
-                        Inward Weights (Net & Fine)
+                        Net Metal & Return Balance Tally
                       </span>
                     </div>
-                    <span className="text-3xs text-gold uppercase font-semibold">Separate by Metal</span>
+                    <span className="text-3xs text-gold uppercase font-semibold">Fine & Value Balance</span>
                   </div>
 
-                  <div className="metal-weights-grid">
-                    {calculations.metalBreakdowns.length === 0 ? (
-                      <div className="metal-weight-empty text-xs text-muted py-2 text-center w-full">
-                        No purchase items added yet
+                  <div className="tally-cards-container">
+                    {/* 🟡 GOLD TALLY */}
+                    <div className="tally-metal-block gold-tally">
+                      <div className="tally-header-row flex items-center justify-between">
+                        <span className="tally-metal-title font-bold text-xs text-amber-300">
+                          🟡 Gold Balance
+                        </span>
+                        <button
+                          type="button"
+                          className={`tally-auto-btn gold-auto-btn ${
+                            payments.some((p) => p.payment_mode === 'GOLD' && p.is_auto) ? 'is-active' : ''
+                          }`}
+                          onClick={() => handleApplyAutoFromSummary('GOLD')}
+                          title="Click to toggle Auto mode for Gold payment (auto-binds Bal Fine & Bal Amt)"
+                        >
+                          <span className="dot">🟢</span>
+                          <span>
+                            {payments.some((p) => p.payment_mode === 'GOLD' && p.is_auto)
+                              ? 'Auto Selected'
+                              : 'Auto'}
+                          </span>
+                          <span className="val-preview font-mono">{formatFineWeight(calculations.goldBalFine, 3)}g</span>
+                        </button>
                       </div>
-                    ) : (
-                      calculations.metalBreakdowns.map((mb) => {
-                        const isGold = mb.metalName.toLowerCase().includes('gold');
-                        const isSilver = mb.metalName.toLowerCase().includes('silver');
-                        const theme = isGold ? 'metal-gold' : isSilver ? 'metal-silver' : 'metal-other';
-                        return (
-                          <div key={mb.metalName} className={`metal-weight-card ${theme}`}>
-                            <div className="metal-card-header">
-                              <span className="metal-name-badge">
-                                {isGold ? '🟡' : isSilver ? '⚪' : '💎'} {mb.metalName}
-                              </span>
-                              <span className="metal-item-count">
-                                {mb.itemCount} {mb.itemCount === 1 ? 'item' : 'items'}
-                              </span>
-                            </div>
-                            <div className="metal-card-body">
-                              <div className="weight-metric-row">
-                                <span className="weight-metric-label">Net Wt:</span>
-                                <span className="weight-metric-value font-mono font-bold">
-                                  {formatWeight(mb.netWeight, 3)} g
-                                </span>
-                              </div>
-                              <div className="weight-metric-row">
-                                <span className="weight-metric-label">Fine Wt:</span>
-                                <span className="weight-metric-value font-mono font-bold text-amber-300">
-                                  {formatFineWeight(mb.billableFineWeight, 4)} g
-                                </span>
-                              </div>
-                              {Math.abs(mb.billableFineWeight - mb.pureFineWeight) > 0.0001 && (
-                                <div className="weight-metric-sub">
-                                  <span>Pure Fine: {formatFineWeight(mb.pureFineWeight, 4)}g</span>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })
-                    )}
-                  </div>
 
-                  {/* If Exchange Return Metals Exist */}
-                  {calculations.exchangeMetalBreakdowns.length > 0 && (
-                    <div className="exchange-weights-section mt-2 pt-2 border-t border-dashed border-border/60">
-                      <div className="panel-sub-header text-emerald-400 mb-1">
-                        <div className="flex items-center gap-1.5">
-                          <Coins size={12} />
-                          <span className="text-3xs font-bold uppercase tracking-wider">
-                            Exchange Return Weights
+                      <div className="tally-equation-grid font-mono text-xs">
+                        <div className="equation-line">
+                          <span className="eq-label text-muted">Fine Wt:</span>
+                          <span className="eq-formula">
+                            <span className="val-sold" title="Fine Gold Inward">{formatFineWeight(calculations.goldFineWeight, 4)}g</span>
+                            <span className="op">−</span>
+                            <span className="val-ret text-rose-300" title="Return Exchange Fine Gold">{formatFineWeight(calculations.goldExchangeFineWeight, 4)}g</span>
+                            <span className="op">=</span>
+                            <strong className="val-bal text-amber-300" title="Balance Gold Fine">{formatFineWeight(calculations.goldBalFine, 4)}g</strong>
+                          </span>
+                        </div>
+                        <div className="equation-line">
+                          <span className="eq-label text-muted">Amount:</span>
+                          <span className="eq-formula">
+                            <span className="val-sold" title="Purchase Gold Amount">{formatCurrency(calculations.goldPurchaseAmount)}</span>
+                            <span className="op">−</span>
+                            <span className="val-ret text-rose-300" title="Return Exchange Gold Amount">{formatCurrency(calculations.goldExchangeAmount)}</span>
+                            <span className="op">=</span>
+                            <strong className="val-bal text-emerald-400" title="Balance Gold Amount">{formatCurrency(calculations.goldBalAmount)}</strong>
                           </span>
                         </div>
                       </div>
-                      <div className="metal-weights-grid">
-                        {calculations.exchangeMetalBreakdowns.map((ex) => {
-                          const isGold = ex.metalName.toLowerCase().includes('gold');
-                          const isSilver = ex.metalName.toLowerCase().includes('silver');
-                          const theme = isGold ? 'metal-gold' : isSilver ? 'metal-silver' : 'metal-other';
-                          return (
-                            <div key={ex.metalName} className={`metal-weight-card ${theme} exchange-card`}>
-                              <div className="metal-card-header">
-                                <span className="metal-name-badge">
-                                  {isGold ? '🟡' : isSilver ? '⚪' : '💎'} {ex.metalName}
-                                </span>
-                                <span className="metal-item-count">{ex.itemCount} exch</span>
-                              </div>
-                              <div className="metal-card-body">
-                                <div className="weight-metric-row">
-                                  <span className="weight-metric-label">Exch Net:</span>
-                                  <span className="weight-metric-value font-mono font-bold text-rose-300">
-                                    −{formatWeight(ex.netWeight, 3)} g
-                                  </span>
-                                </div>
-                                <div className="weight-metric-row">
-                                  <span className="weight-metric-label">Exch Fine:</span>
-                                  <span className="weight-metric-value font-mono font-bold text-rose-300">
-                                    −{formatFineWeight(ex.billableFineWeight, 4)} g
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
                     </div>
-                  )}
+
+                    {/* ⚪ SILVER TALLY */}
+                    {(calculations.silverFineWeight > 0 || calculations.silverExchangeFineWeight > 0 || calculations.silverBalFine > 0) && (
+                      <div className="tally-metal-block silver-tally mt-2">
+                        <div className="tally-header-row flex items-center justify-between">
+                          <span className="tally-metal-title font-bold text-xs text-slate-200">
+                            ⚪ Silver Balance
+                          </span>
+                          <button
+                            type="button"
+                            className={`tally-auto-btn silver-auto-btn ${
+                              payments.some((p) => p.payment_mode === 'SILVER' && p.is_auto) ? 'is-active' : ''
+                            }`}
+                            onClick={() => handleApplyAutoFromSummary('SILVER')}
+                            title="Click to toggle Auto mode for Silver payment (auto-binds Bal Fine & Bal Amt)"
+                          >
+                            <span className="dot">🔴</span>
+                            <span>
+                              {payments.some((p) => p.payment_mode === 'SILVER' && p.is_auto)
+                                ? 'Auto Selected'
+                                : 'Auto'}
+                            </span>
+                            <span className="val-preview font-mono">{formatFineWeight(calculations.silverBalFine, 3)}g</span>
+                          </button>
+                        </div>
+
+                        <div className="tally-equation-grid font-mono text-xs">
+                          <div className="equation-line">
+                            <span className="eq-label text-muted">Fine Wt:</span>
+                            <span className="eq-formula">
+                              <span className="val-sold" title="Fine Silver Inward">{formatFineWeight(calculations.silverFineWeight, 4)}g</span>
+                              <span className="op">−</span>
+                              <span className="val-ret text-rose-300" title="Return Exchange Fine Silver">{formatFineWeight(calculations.silverExchangeFineWeight, 4)}g</span>
+                              <span className="op">=</span>
+                              <strong className="val-bal text-slate-200" title="Balance Silver Fine">{formatFineWeight(calculations.silverBalFine, 4)}g</strong>
+                            </span>
+                          </div>
+                          <div className="equation-line">
+                            <span className="eq-label text-muted">Amount:</span>
+                            <span className="eq-formula">
+                              <span className="val-sold" title="Purchase Silver Amount">{formatCurrency(calculations.silverPurchaseAmount)}</span>
+                              <span className="op">−</span>
+                              <span className="val-ret text-rose-300" title="Return Exchange Silver Amount">{formatCurrency(calculations.silverExchangeAmount)}</span>
+                              <span className="op">=</span>
+                              <strong className="val-bal text-emerald-400" title="Balance Silver Amount">{formatCurrency(calculations.silverBalAmount)}</strong>
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 <div className="summary-breakdown-list">
@@ -4445,34 +4646,6 @@ export const PurchaseBillsPage: React.FC = () => {
                     ) : (
                       <div className="pending-pill">
                         <span>Zero Bill</span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Fine Metal Reconciliation */}
-                  <div className="metal-fine-reconciliation mt-3 pt-3 border-t">
-                    <div className="flex justify-between text-xs py-0.5">
-                      <span className="text-muted font-medium">Fine Gold Net Inward:</span>
-                      <strong className="font-mono text-gold">{formatFineWeight(calculations.goldFineWeight, 4)} g</strong>
-                    </div>
-                    {calculations.totalWastageWeight > 0 && (
-                      <>
-                        <div className="flex justify-between text-xs py-0.5 text-muted">
-                          <span>↳ Wastage Addition:</span>
-                          <span className="font-mono text-emerald-400">+{formatFineWeight(calculations.totalWastageWeight, 4)} g</span>
-                        </div>
-                        <div className="flex justify-between text-xs py-0.5 font-semibold text-amber-400">
-                          <span>Billable Fine Gold:</span>
-                          <strong className="font-mono">
-                            {formatFineWeight(calculations.goldFineWeight + calculations.totalWastageWeight, 4)} g
-                          </strong>
-                        </div>
-                      </>
-                    )}
-                    {calculations.silverFineWeight > 0 && (
-                      <div className="flex justify-between text-xs py-0.5">
-                        <span className="text-muted font-medium">Fine Silver Net Inward:</span>
-                        <strong className="font-mono">{formatFineWeight(calculations.silverFineWeight, 4)} g</strong>
                       </div>
                     )}
                   </div>

@@ -165,12 +165,75 @@
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
-  gap: 0.4rem;
+  gap: 0.5rem;
   padding: 0.45rem 0.65rem;
   background: rgba(212, 175, 55, 0.08);
   border: 1px solid rgba(212, 175, 55, 0.25);
   border-radius: 6px;
   margin-bottom: 0.5rem;
+}
+
+.opening-direction-toggle {
+  display: inline-flex;
+  align-items: center;
+  background: var(--bg-app, #131418);
+  padding: 2px;
+  border-radius: 5px;
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
+  gap: 2px;
+}
+
+.opening-dir-btn {
+  padding: 3px 9px;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 500;
+  background: transparent;
+  color: var(--text-muted, #9ca3af);
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  font-family: inherit;
+}
+
+.opening-dir-btn:hover {
+  color: var(--text-main, #ffffff);
+}
+
+.opening-dir-btn.active {
+  background: var(--gold-primary, #d4af37);
+  color: #000000;
+  font-weight: 700;
+  box-shadow: 0 1px 4px rgba(212, 175, 55, 0.3);
+}
+
+.opening-type-select {
+  background: var(--bg-app, #131418);
+  border: 1px solid var(--border-default, #2a2e37);
+  color: var(--text-main, #ffffff);
+  font-size: 0.7rem;
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-family: var(--font-mono, monospace);
+  outline: none;
+  cursor: pointer;
+  max-width: 215px;
+  transition: all 0.15s ease;
+}
+
+.opening-type-select:hover {
+  border-color: var(--gold-primary, #d4af37);
+}
+
+.opening-type-select:focus {
+  border-color: var(--gold-primary, #d4af37);
+  box-shadow: 0 0 0 2px rgba(212, 175, 55, 0.2);
+}
+
+.opening-type-select option {
+  background: #18191f;
+  color: #ffffff;
 }
 
 /* Compact Opening Ledger Cards */

@@ -465,35 +465,17 @@ export const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({
 
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
                     {/* Primary Direction Toggle */}
-                    <div style={{ display: 'flex', background: 'var(--bg-app)', padding: '2px', borderRadius: '4px', border: '1px solid var(--border-subtle)' }}>
+                    <div className="opening-direction-toggle">
                       <button
                         type="button"
-                        style={{
-                          padding: '2px 8px',
-                          borderRadius: '3px',
-                          fontSize: '0.7rem',
-                          fontWeight: customerPrimaryDirection === 'DEBIT' ? 700 : 500,
-                          background: customerPrimaryDirection === 'DEBIT' ? 'var(--gold-primary)' : 'transparent',
-                          color: customerPrimaryDirection === 'DEBIT' ? '#000' : 'var(--text-muted)',
-                          border: 'none',
-                          cursor: 'pointer',
-                        }}
+                        className={`opening-dir-btn ${customerPrimaryDirection === 'DEBIT' ? 'active' : ''}`}
                         onClick={() => handleCustomerPrimaryDirectionChange('DEBIT')}
                       >
                         Customer Owes Us / Baaki (Dr - बाकी)
                       </button>
                       <button
                         type="button"
-                        style={{
-                          padding: '2px 8px',
-                          borderRadius: '3px',
-                          fontSize: '0.7rem',
-                          fontWeight: customerPrimaryDirection === 'CREDIT' ? 700 : 500,
-                          background: customerPrimaryDirection === 'CREDIT' ? 'var(--gold-primary)' : 'transparent',
-                          color: customerPrimaryDirection === 'CREDIT' ? '#000' : 'var(--text-muted)',
-                          border: 'none',
-                          cursor: 'pointer',
-                        }}
+                        className={`opening-dir-btn ${customerPrimaryDirection === 'CREDIT' ? 'active' : ''}`}
                         onClick={() => handleCustomerPrimaryDirectionChange('CREDIT')}
                       >
                         We Owe Customer / Jama (Cr - जमा)
@@ -555,7 +537,7 @@ export const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({
                         <Banknote size={14} /> Cash Opening (₹)
                       </span>
                       <select
-                        style={{ background: 'var(--bg-app)', border: '1px solid var(--border-subtle)', fontSize: '0.7rem', borderRadius: '3px', padding: '1px 4px' }}
+                        className="opening-type-select"
                         value={customerForm.opening_cash_type}
                         onChange={(e) =>
                           setCustomerForm({
@@ -591,7 +573,7 @@ export const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({
                         <CreditCard size={14} /> Bank / RTGS Opening (₹)
                       </span>
                       <select
-                        style={{ background: 'var(--bg-app)', border: '1px solid var(--border-subtle)', fontSize: '0.7rem', borderRadius: '3px', padding: '1px 4px' }}
+                        className="opening-type-select"
                         value={customerForm.opening_bank_type}
                         onChange={(e) =>
                           setCustomerForm({
@@ -627,7 +609,7 @@ export const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({
                         <Coins size={14} /> Gold Opening (grams)
                       </span>
                       <select
-                        style={{ background: 'var(--bg-app)', border: '1px solid var(--border-subtle)', fontSize: '0.7rem', borderRadius: '3px', padding: '1px 4px' }}
+                        className="opening-type-select"
                         value={customerForm.opening_gold_type}
                         onChange={(e) =>
                           setCustomerForm({
@@ -717,7 +699,7 @@ export const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({
                         <Scale size={14} /> Silver Opening (grams)
                       </span>
                       <select
-                        style={{ background: 'var(--bg-app)', border: '1px solid var(--border-subtle)', fontSize: '0.7rem', borderRadius: '3px', padding: '1px 4px' }}
+                        className="opening-type-select"
                         value={customerForm.opening_silver_type}
                         onChange={(e) =>
                           setCustomerForm({

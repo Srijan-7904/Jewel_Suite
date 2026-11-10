@@ -1,10 +1,17 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import Decimal from 'decimal.js';
 import { salesApi, SalesInvoiceDetails } from '../../services/sales';
 import { customerApi, rateApi, supplierApi } from '../../services/masters';
 import { inventoryApi } from '../../services/inventory';
-import { settingsApi, ShopProfile, ShopReceivingAccount } from '../../services/settings';
+import {
+  settingsApi,
+  ShopProfile,
+  ShopReceivingAccount,
+  InvoiceColumnSettings,
+  DEFAULT_INVOICE_COLUMN_SETTINGS,
+} from '../../services/settings';
 import { Customer, CurrentRate, Metal, MetalPurity, Supplier, StockItem } from '../../types';
 import {
   toDecimal,
@@ -141,6 +148,7 @@ interface PaymentRow {
   metal_rate?: number | string;
   rate_error?: string;
   last_edited?: 'weight' | 'fine' | 'amount';
+  is_auto?: boolean;
 }
 
 export const CreateInvoicePage: React.FC = () => {
@@ -173,10 +181,20 @@ export const CreateInvoicePage: React.FC = () => {
     setTimeout(() => setToast(null), 4000);
   };
 
-  // In-Stock Inventory Tracking & Tag Selection
+  // In-Stock Inventory Tracking & Item Name Autocomplete Selection
   const [stockItems, setStockItems] = useState<StockItem[]>([]);
-  const [activeTagDropdownRowId, setActiveTagDropdownRowId] = useState<string | null>(null);
-  const tagDropdownRef = useRef<HTMLDivElement | null>(null);
+  const [activeItemDropdownRowId, setActiveItemDropdownRowId] = useState<string | null>(null);
+  const [itemDropdownCoords, setItemDropdownCoords] = useState<{ top: number; left: number; width: number } | null>(null);
+  const itemDropdownRef = useRef<HTMLDivElement | null>(null);
+
+  const updateItemDropdownCoords = (el: HTMLElement) => {
+    const rect = el.getBoundingClientRect();
+    setItemDropdownCoords({
+      top: rect.bottom + 4,
+      left: Math.max(10, rect.left),
+      width: Math.max(rect.width, 390),
+    });
+  };
 
   const fetchInStockItems = useCallback(async () => {
     try {
@@ -191,11 +209,39 @@ export const CreateInvoicePage: React.FC = () => {
     fetchInStockItems();
   }, [fetchInStockItems]);
 
+  // Keep floating portal flyout aligned on scroll or resize
+  useEffect(() => {
+    if (!activeItemDropdownRowId) return;
+    const handleScrollOrResize = () => {
+      const activeInput = document.querySelector<HTMLInputElement>(`input[data-row-id="${activeItemDropdownRowId}"]`);
+      if (activeInput) {
+        const rect = activeInput.getBoundingClientRect();
+        setItemDropdownCoords({
+          top: rect.bottom + 4,
+          left: Math.max(10, rect.left),
+          width: Math.max(rect.width, 390),
+        });
+      } else {
+        setActiveItemDropdownRowId(null);
+      }
+    };
+    window.addEventListener('scroll', handleScrollOrResize, true);
+    window.addEventListener('resize', handleScrollOrResize);
+    return () => {
+      window.removeEventListener('scroll', handleScrollOrResize, true);
+      window.removeEventListener('resize', handleScrollOrResize);
+    };
+  }, [activeItemDropdownRowId]);
+
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
-      if (!target.closest('.tag-input-cell')) {
-        setActiveTagDropdownRowId(null);
+      if (
+        !target.closest('.item-name-cell') &&
+        !target.closest('.tag-input-cell') &&
+        !target.closest('.item-flyout-portal')
+      ) {
+        setActiveItemDropdownRowId(null);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -279,6 +325,9 @@ export const CreateInvoicePage: React.FC = () => {
     },
   ]);
 
+  // Invoice Column Visibility Settings
+  const [invoiceColumns, setInvoiceColumns] = useState<InvoiceColumnSettings>(DEFAULT_INVOICE_COLUMN_SETTINGS);
+
   // Exchange Items State
   const [exchangeItems, setExchangeItems] = useState<ExchangeItemRow[]>([]);
 
@@ -304,8 +353,12 @@ export const CreateInvoicePage: React.FC = () => {
       rateApi.getMetals().catch(() => []),
       rateApi.getAllPurities().catch(() => []),
       settingsApi.getShopProfile().catch(() => null),
+      settingsApi.getInvoiceColumns().catch(() => DEFAULT_INVOICE_COLUMN_SETTINGS),
     ])
-      .then(([custRes, supRes, recvRes, ratesRes, metalsRes, puritiesRes, profileRes]) => {
+      .then(([custRes, supRes, recvRes, ratesRes, metalsRes, puritiesRes, profileRes, invoiceColsRes]) => {
+        if (invoiceColsRes) {
+          setInvoiceColumns(invoiceColsRes);
+        }
         const custList = (custRes as any)?.items || [];
         setCustomers(custList);
         if (custList.length > 0 && !editDraftId) {
@@ -879,7 +932,7 @@ export const CreateInvoicePage: React.FC = () => {
       notes: stock.notes || undefined,
     });
 
-    setActiveTagDropdownRowId(null);
+    setActiveItemDropdownRowId(null);
     showToast('success', `Tag ${stock.tag_no} selected from Stock Inventory!`);
   };
 
@@ -1467,48 +1520,6 @@ export const CreateInvoicePage: React.FC = () => {
     );
   };
 
-  const handleMetalFineWeightChange = (id: string, value: string) => {
-    const sanitized = parseDecimalInput(value, 4);
-    setPayments((prev) =>
-      prev.map((p) => {
-        if (p.id !== id) return p;
-        const isGold = p.payment_mode === 'GOLD';
-        const info = findMetalAndPurity(p.payment_mode === 'SILVER' ? 'SILVER' : 'GOLD', p.purity_id);
-        const baseRate = toDecimal(info.baseRate || p.metal_rate || info.applicableRate || 0);
-        const tunch = toDecimal(p.tunch_percent || info.tunchPercent || (isGold ? 99.9 : 99.9));
-
-        const fw = toDecimal(sanitized || 0);
-        const grossWeight = sanitized && !fw.isZero() && tunch.gt(0)
-          ? fw.times(100).dividedBy(tunch).toDecimalPlaces(3, Decimal.ROUND_HALF_UP).toNumber()
-          : (p.metal_weight || '');
-
-        if (baseRate.lte(0)) {
-          return {
-            ...p,
-            fine_weight: sanitized,
-            metal_weight: grossWeight,
-            amount: '',
-            last_edited: 'fine',
-            rate_error: "Today's benchmark rate not configured on dashboard to calculate payment value",
-          };
-        }
-
-        const amount = sanitized && !fw.isZero()
-          ? fw.times(baseRate).toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber()
-          : '';
-
-        return {
-          ...p,
-          fine_weight: sanitized,
-          metal_weight: grossWeight,
-          amount,
-          last_edited: 'fine',
-          rate_error: undefined,
-        };
-      })
-    );
-  };
-
   const handlePaymentAmountChange = (id: string, value: string) => {
     const sanitized = parseDecimalInput(value, 2);
     setPayments((prev) =>
@@ -1517,6 +1528,63 @@ export const CreateInvoicePage: React.FC = () => {
         return {
           ...p,
           amount: sanitized,
+          is_auto: false,
+        };
+      })
+    );
+  };
+
+  const handleMetalRateChange = (id: string, value: string) => {
+    const sanitized = parseDecimalInput(value, 2);
+    setPayments((prev) =>
+      prev.map((p) => {
+        if (p.id !== id) return p;
+        const r = toDecimal(sanitized || 0);
+        let newAmount = p.amount;
+        if (p.metal_weight && Number(p.metal_weight) > 0 && r.gt(0)) {
+          newAmount = toDecimal(p.metal_weight).times(r).toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber();
+        }
+        return {
+          ...p,
+          metal_rate: sanitized,
+          amount: newAmount,
+          is_auto: false,
+          rate_error: r.lte(0) ? 'Rate must be greater than zero' : undefined,
+        };
+      })
+    );
+  };
+
+  const handlePaymentPurityChange = (id: string, newPurityId: string) => {
+    setPayments((prev) =>
+      prev.map((p) => {
+        if (p.id !== id) return p;
+        const isGold = p.payment_mode === 'GOLD';
+        const info = findMetalAndPurity(isGold ? 'GOLD' : 'SILVER', newPurityId);
+        const selectedPur = purities.find((pur) => pur.id === newPurityId);
+        const newRate = info.applicableRate;
+        const tunch = info.tunchPercent;
+
+        let newFine = p.fine_weight;
+        let newAmt = p.amount;
+
+        if (p.metal_weight && Number(p.metal_weight) > 0) {
+          const w = toDecimal(p.metal_weight);
+          newFine = w.times(tunch).dividedBy(100).toDecimalPlaces(3, Decimal.ROUND_HALF_UP).toNumber();
+          if (newRate > 0) {
+            newAmt = w.times(newRate).toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber();
+          }
+        }
+
+        return {
+          ...p,
+          purity_id: newPurityId,
+          purity_name: selectedPur ? selectedPur.name : info.purityName,
+          metal_rate: newRate > 0 ? newRate : p.metal_rate,
+          tunch_percent: tunch,
+          fine_weight: newFine,
+          amount: newAmt,
+          rate_error: newRate <= 0 ? 'No active rate configured for this purity' : undefined,
         };
       })
     );
@@ -1541,9 +1609,12 @@ export const CreateInvoicePage: React.FC = () => {
     let goldNetWeight = new Decimal(0);
     let goldFineWeight = new Decimal(0);
     let goldAdjustedFineWeight = new Decimal(0);
+    let goldSaleAmount = new Decimal(0);
+
     let silverNetWeight = new Decimal(0);
     let silverFineWeight = new Decimal(0);
     let silverAdjustedFineWeight = new Decimal(0);
+    let silverSaleAmount = new Decimal(0);
 
     interface MetalSummaryAcc {
       metalName: string;
@@ -1665,10 +1736,12 @@ export const CreateInvoicePage: React.FC = () => {
           silverNetWeight = silverNetWeight.plus(net);
           silverFineWeight = silverFineWeight.plus(pureFine);
           silverAdjustedFineWeight = silverAdjustedFineWeight.plus(billableFine);
+          silverSaleAmount = silverSaleAmount.plus(rowAmount);
         } else if (!isDiamond && !isPlatinum) {
           goldNetWeight = goldNetWeight.plus(net);
           goldFineWeight = goldFineWeight.plus(pureFine);
           goldAdjustedFineWeight = goldAdjustedFineWeight.plus(billableFine);
+          goldSaleAmount = goldSaleAmount.plus(rowAmount);
         }
       }
     });
@@ -1686,8 +1759,10 @@ export const CreateInvoicePage: React.FC = () => {
 
     let goldExchangeNetWeight = new Decimal(0);
     let goldExchangeFineWeight = new Decimal(0);
+    let goldExchangeAmount = new Decimal(0);
     let silverExchangeNetWeight = new Decimal(0);
     let silverExchangeFineWeight = new Decimal(0);
+    let silverExchangeAmount = new Decimal(0);
 
     interface ExMetalSummaryAcc {
       metalName: string;
@@ -1764,9 +1839,11 @@ export const CreateInvoicePage: React.FC = () => {
       if (isExSilver) {
         silverExchangeNetWeight = silverExchangeNetWeight.plus(net);
         silverExchangeFineWeight = silverExchangeFineWeight.plus(pureFine);
+        silverExchangeAmount = silverExchangeAmount.plus(exVal);
       } else if (!isExDiamond && !isExPlatinum) {
         goldExchangeNetWeight = goldExchangeNetWeight.plus(net);
         goldExchangeFineWeight = goldExchangeFineWeight.plus(pureFine);
+        goldExchangeAmount = goldExchangeAmount.plus(exVal);
       }
 
       let exAcc = exMetalMap.get(standardExMetalKey);
@@ -1859,6 +1936,21 @@ export const CreateInvoicePage: React.FC = () => {
       ? totalReceived.gte(netPayable)
       : true;
 
+    const goldWholesaleBal = Decimal.max(
+      0,
+      goldAdjustedFineWeight.minus(goldExchangeFineWeight).minus(goldPaymentFineGrams)
+    ).toNumber();
+
+    const silverWholesaleBal = Decimal.max(
+      0,
+      silverAdjustedFineWeight.minus(silverExchangeFineWeight).minus(silverPaymentFineGrams)
+    ).toNumber();
+
+    const wholesaleIsSettled =
+      (goldAdjustedFineWeight.gt(0) || silverAdjustedFineWeight.gt(0)) &&
+      goldWholesaleBal <= 0.0005 &&
+      silverWholesaleBal <= 0.0005;
+
     const metalBreakdowns = Array.from(saleMetalMap.values()).map((m) => ({
       metalName: m.metalName,
       grossWeight: m.grossWeight.toNumber(),
@@ -1891,10 +1983,23 @@ export const CreateInvoicePage: React.FC = () => {
       itemCount: m.itemCount,
     }));
 
+    const goldBalFine = Decimal.max(0, goldFineWeight.minus(goldExchangeFineWeight));
+    const goldBalAmount = Decimal.max(0, goldSaleAmount.minus(goldExchangeAmount));
+    const silverBalFine = Decimal.max(0, silverFineWeight.minus(silverExchangeFineWeight));
+    const silverBalAmount = Decimal.max(0, silverSaleAmount.minus(silverExchangeAmount));
+
     return {
       metalBreakdowns,
       exchangeMetalBreakdowns,
       hasMultipleMetals: metalBreakdowns.length > 1,
+      goldSaleAmount: goldSaleAmount.toNumber(),
+      goldExchangeAmount: goldExchangeAmount.toNumber(),
+      goldBalFine: goldBalFine.toNumber(),
+      goldBalAmount: goldBalAmount.toNumber(),
+      silverSaleAmount: silverSaleAmount.toNumber(),
+      silverExchangeAmount: silverExchangeAmount.toNumber(),
+      silverBalFine: silverBalFine.toNumber(),
+      silverBalAmount: silverBalAmount.toNumber(),
       totalGrossWeight: totalGrossWeight.toNumber(),
       totalLessWeight: totalLessWeight.toNumber(),
       totalNetWeight: totalNetWeight.toNumber(),
@@ -1948,6 +2053,9 @@ export const CreateInvoicePage: React.FC = () => {
       balanceDue: balanceDue.toNumber(),
       changeDue: changeDue.toNumber(),
       isSettled,
+      goldWholesaleBal,
+      silverWholesaleBal,
+      wholesaleIsSettled,
     };
   }, [saleItems, exchangeItems, discountAmount, gstRate, payments]);
 
@@ -1981,6 +2089,125 @@ export const CreateInvoicePage: React.FC = () => {
     ]);
   };
 
+  const handleToggleAutoMode = (paymentId: string, metalType: 'GOLD' | 'SILVER') => {
+    const isGold = metalType === 'GOLD';
+    const balFine = isGold ? calculations.goldBalFine : calculations.silverBalFine;
+    const balAmt = isGold ? calculations.goldBalAmount : calculations.silverBalAmount;
+
+    setPayments((prev) =>
+      prev.map((p) => {
+        if (p.id !== paymentId) return p;
+        const willBeAuto = !p.is_auto;
+        const info = findMetalAndPurity(metalType, p.purity_id);
+        const rate = Number(p.metal_rate || info.applicableRate || 0);
+        const amt = balAmt > 0 ? balAmt : (rate > 0 ? Decimal.max(0, new Decimal(balFine).times(rate)).toNumber() : 0);
+
+        return {
+          ...p,
+          is_auto: willBeAuto,
+          metal_weight: willBeAuto ? (balFine > 0 ? balFine : '') : p.metal_weight,
+          fine_weight: willBeAuto ? (balFine > 0 ? balFine : '') : p.fine_weight,
+          amount: willBeAuto ? (amt > 0 ? amt : '') : p.amount,
+          last_edited: 'weight',
+        };
+      })
+    );
+  };
+
+  const handleApplyAutoFromSummary = (metalType: 'GOLD' | 'SILVER') => {
+    const isGold = metalType === 'GOLD';
+    const balFine = isGold ? calculations.goldBalFine : calculations.silverBalFine;
+    const balAmt = isGold ? calculations.goldBalAmount : calculations.silverBalAmount;
+
+    const existingIndex = payments.findIndex((p) => p.payment_mode === metalType);
+
+    if (existingIndex >= 0) {
+      const existing = payments[existingIndex];
+      setPayments((prev) =>
+        prev.map((p, idx) => {
+          if (idx !== existingIndex) return p;
+          const willBeAuto = !p.is_auto;
+          const info = findMetalAndPurity(metalType, p.purity_id);
+          const rate = Number(p.metal_rate || info.applicableRate || 0);
+          const amt = balAmt > 0 ? balAmt : (rate > 0 ? Decimal.max(0, new Decimal(balFine).times(rate)).toNumber() : 0);
+          return {
+            ...p,
+            is_auto: willBeAuto,
+            metal_weight: willBeAuto ? (balFine > 0 ? balFine : '') : p.metal_weight,
+            fine_weight: willBeAuto ? (balFine > 0 ? balFine : '') : p.fine_weight,
+            amount: willBeAuto ? (amt > 0 ? amt : '') : p.amount,
+            last_edited: 'weight',
+          };
+        })
+      );
+      showToast('info', `${isGold ? 'Gold' : 'Silver'} Auto mode ${existing.is_auto ? 'disabled' : 'selected & synced'}`);
+    } else {
+      const info = findMetalAndPurity(metalType);
+      const currentCust = customers.find((c) => c.id === customerId);
+      const rate = info.applicableRate;
+      const amt = balAmt > 0 ? balAmt : (rate > 0 ? Decimal.max(0, new Decimal(balFine).times(rate)).toNumber() : 0);
+
+      const newPay: PaymentRow = {
+        id: `pay-${Date.now()}-${payments.length + 1}`,
+        payment_mode: metalType,
+        amount: amt > 0 ? amt : '',
+        reference_number: '',
+        payer_type: 'CUSTOMER',
+        payer_name: currentCust ? currentCust.name : 'CASH CUSTOMER',
+        payer_party_id: customerId,
+        received_in: '',
+        metal_id: info.metalId,
+        metal_name: info.metalName,
+        purity_id: info.purityId,
+        purity_name: info.purityName,
+        tunch_percent: info.tunchPercent,
+        metal_weight: balFine > 0 ? balFine : '',
+        fine_weight: balFine > 0 ? balFine : '',
+        metal_rate: info.applicableRate > 0 ? info.applicableRate : '',
+        rate_error: info.applicableRate <= 0 ? "Today's benchmark rate not set in dashboard" : undefined,
+        last_edited: 'weight',
+        is_auto: true,
+      };
+      setPayments((prev) => [...prev, newPay]);
+      showToast('success', `${isGold ? 'Gold' : 'Silver'} Auto mode payment row added (${balFine}g)`);
+    }
+  };
+
+  // Keep Auto mode payment rows synced with latest Net Metal & Return Balance
+  useEffect(() => {
+    setPayments((prev) => {
+      let hasChanges = false;
+      const updated = prev.map((p) => {
+        if (!p.is_auto) return p;
+        const isGold = p.payment_mode === 'GOLD';
+        const isSilver = p.payment_mode === 'SILVER';
+        if (!isGold && !isSilver) return p;
+
+        const balFine = isGold ? calculations.goldBalFine : calculations.silverBalFine;
+        const balAmt = isGold ? calculations.goldBalAmount : calculations.silverBalAmount;
+        const rate = Number(p.metal_rate || 0);
+        const targetAmt = balAmt > 0 ? balAmt : (rate > 0 ? Decimal.max(0, new Decimal(balFine).times(rate)).toNumber() : 0);
+
+        if (p.metal_weight !== (balFine > 0 ? balFine : '') || p.amount !== (targetAmt > 0 ? targetAmt : '')) {
+          hasChanges = true;
+          return {
+            ...p,
+            metal_weight: balFine > 0 ? balFine : '',
+            fine_weight: balFine > 0 ? balFine : '',
+            amount: targetAmt > 0 ? targetAmt : '',
+          };
+        }
+        return p;
+      });
+      return hasChanges ? updated : prev;
+    });
+  }, [
+    calculations.goldBalFine,
+    calculations.goldBalAmount,
+    calculations.silverBalFine,
+    calculations.silverBalAmount,
+  ]);
+
   // Submit / Create Invoice
   const handleSaveInvoice = async (finalize = false) => {
     if (!customerId) {
@@ -2011,9 +2238,11 @@ export const CreateInvoicePage: React.FC = () => {
       const rowNum = i + 1;
 
       // 1. Tag No
-      if (!item.tag_no || !item.tag_no.trim()) {
-        showToast('error', `Row #${rowNum}: Tag No is mandatory. You must enter a Tag No.`);
-        return;
+      if (invoiceColumns.show_tag_no) {
+        if (!item.tag_no || !item.tag_no.trim()) {
+          showToast('error', `Row #${rowNum}: Tag No is mandatory. You must enter a Tag No.`);
+          return;
+        }
       }
 
       // 2. Item Name
@@ -2029,14 +2258,16 @@ export const CreateInvoicePage: React.FC = () => {
       }
 
       // 4. Tunch% (Purity)
-      if (item.tunch_percent === '' || item.tunch_percent === null || item.tunch_percent === undefined) {
-        showToast('error', `Row #${rowNum} ("${item.item_name || 'Item'}"): Tunch% is mandatory. You must enter Tunch% (e.g. 91.67).`);
-        return;
-      }
-      const tunch = toDecimal(item.tunch_percent);
-      if (tunch.lte(0) || tunch.gt(100)) {
-        showToast('error', `Row #${rowNum} ("${item.item_name || 'Item'}"): Tunch% must be between 0.01% and 100%.`);
-        return;
+      if (invoiceColumns.show_tunch) {
+        if (item.tunch_percent === '' || item.tunch_percent === null || item.tunch_percent === undefined) {
+          showToast('error', `Row #${rowNum} ("${item.item_name || 'Item'}"): Tunch% is mandatory. You must enter Tunch% (e.g. 91.67).`);
+          return;
+        }
+        const tunch = toDecimal(item.tunch_percent);
+        if (tunch.lte(0) || tunch.gt(100)) {
+          showToast('error', `Row #${rowNum} ("${item.item_name || 'Item'}"): Tunch% must be between 0.01% and 100%.`);
+          return;
+        }
       }
 
       // 5. Gross Weight
@@ -2051,59 +2282,69 @@ export const CreateInvoicePage: React.FC = () => {
       }
 
       // 6. Less Weight
-      if (item.less_weight === '' || item.less_weight === null || item.less_weight === undefined) {
-        showToast('error', `Row #${rowNum} ("${item.item_name || 'Item'}"): Less weight is mandatory. You must enter Less weight (enter 0 if no stones/wax).`);
-        return;
-      }
-      const less = toDecimal(item.less_weight);
-      if (less.lt(0)) {
-        showToast('error', `Row #${rowNum} ("${item.item_name || 'Item'}"): Less weight cannot be negative.`);
-        return;
-      }
-      if (less.gt(gross)) {
-        showToast('error', `Row #${rowNum} ("${item.item_name || 'Item'}"): Less weight (${less.toNumber()}g) cannot exceed gross weight (${gross.toNumber()}g).`);
-        return;
-      }
-
-      // 7. Badla%
-      if (item.badla_percent === '' || item.badla_percent === null || item.badla_percent === undefined) {
-        showToast('error', `Row #${rowNum} ("${item.item_name || 'Item'}"): Badla% is mandatory. You must enter Badla% (enter 0 if none).`);
-        return;
-      }
-
-      // 8. Waste%
-      if (item.wastage_percent === '' || item.wastage_percent === null || item.wastage_percent === undefined) {
-        showToast('error', `Row #${rowNum} ("${item.item_name || 'Item'}"): Waste% is mandatory. You must enter Waste% (enter 0 if none).`);
-        return;
-      }
-
-      // 9. Making Charge
-      if (item.making_rate === '' || item.making_rate === null || item.making_rate === undefined) {
-        showToast('error', `Row #${rowNum} ("${item.item_name || 'Item'}"): Making charge is mandatory. You must enter Making charge (enter 0 if free labour).`);
-        return;
-      }
-      const makingRate = toDecimal(item.making_rate);
-      if (makingRate.lt(0)) {
-        showToast('error', `Row #${rowNum} ("${item.item_name || 'Item'}"): Making charge cannot be negative.`);
-        return;
-      }
-      if (item.making_charge_type === 'PER_PIECE') {
-        const pcs = Number(item.pieces);
-        if (!pcs || pcs < 1) {
-          showToast('error', `Row #${rowNum} ("${item.item_name || 'Item'}"): Number of pieces is mandatory and must be at least 1.`);
+      if (invoiceColumns.show_less_weight) {
+        if (item.less_weight === '' || item.less_weight === null || item.less_weight === undefined) {
+          showToast('error', `Row #${rowNum} ("${item.item_name || 'Item'}"): Less weight is mandatory. You must enter Less weight (enter 0 if no stones/wax).`);
+          return;
+        }
+        const less = toDecimal(item.less_weight);
+        if (less.lt(0)) {
+          showToast('error', `Row #${rowNum} ("${item.item_name || 'Item'}"): Less weight cannot be negative.`);
+          return;
+        }
+        if (less.gt(gross)) {
+          showToast('error', `Row #${rowNum} ("${item.item_name || 'Item'}"): Less weight (${less.toNumber()}g) cannot exceed gross weight (${gross.toNumber()}g).`);
           return;
         }
       }
 
-      // 10. Rate per Gram
-      if (item.rate_per_gram === '' || item.rate_per_gram === null || item.rate_per_gram === undefined) {
-        showToast('error', `Row #${rowNum} ("${item.item_name || 'Item'}"): Rate/g is mandatory. You must enter metal rate per gram.`);
-        return;
+      // 7. Badla%
+      if (invoiceColumns.show_badla) {
+        if (item.badla_percent === '' || item.badla_percent === null || item.badla_percent === undefined) {
+          showToast('error', `Row #${rowNum} ("${item.item_name || 'Item'}"): Badla% is mandatory. You must enter Badla% (enter 0 if none).`);
+          return;
+        }
       }
-      const rate = toDecimal(item.rate_per_gram);
-      if (rate.lte(0)) {
-        showToast('error', `Row #${rowNum} ("${item.item_name || 'Item'}"): Rate/g must be greater than zero.`);
-        return;
+
+      // 8. Waste%
+      if (invoiceColumns.show_wastage) {
+        if (item.wastage_percent === '' || item.wastage_percent === null || item.wastage_percent === undefined) {
+          showToast('error', `Row #${rowNum} ("${item.item_name || 'Item'}"): Waste% is mandatory. You must enter Waste% (enter 0 if none).`);
+          return;
+        }
+      }
+
+      // 9. Making Charge
+      if (invoiceColumns.show_making_charge) {
+        if (item.making_rate === '' || item.making_rate === null || item.making_rate === undefined) {
+          showToast('error', `Row #${rowNum} ("${item.item_name || 'Item'}"): Making charge is mandatory. You must enter Making charge (enter 0 if free labour).`);
+          return;
+        }
+        const makingRate = toDecimal(item.making_rate);
+        if (makingRate.lt(0)) {
+          showToast('error', `Row #${rowNum} ("${item.item_name || 'Item'}"): Making charge cannot be negative.`);
+          return;
+        }
+        if (item.making_charge_type === 'PER_PIECE') {
+          const pcs = Number(item.pieces);
+          if (!pcs || pcs < 1) {
+            showToast('error', `Row #${rowNum} ("${item.item_name || 'Item'}"): Number of pieces is mandatory and must be at least 1.`);
+            return;
+          }
+        }
+      }
+
+      // 10. Rate per Gram (Mandatory for Retail; Wholesale is Fine-to-Fine / Pure Metal Weight settlement)
+      if (billType !== 'WHOLESALE') {
+        if (item.rate_per_gram === '' || item.rate_per_gram === null || item.rate_per_gram === undefined) {
+          showToast('error', `Row #${rowNum} ("${item.item_name || 'Item'}"): Rate/g is mandatory. You must enter metal rate per gram.`);
+          return;
+        }
+        const rate = toDecimal(item.rate_per_gram);
+        if (rate.lte(0)) {
+          showToast('error', `Row #${rowNum} ("${item.item_name || 'Item'}"): Rate/g must be greater than zero.`);
+          return;
+        }
       }
     }
 
@@ -2154,7 +2395,7 @@ export const CreateInvoicePage: React.FC = () => {
         gst_rate: toDecimal(gstRate).toNumber(),
         discount_amount: toDecimal(discountAmount).toNumber(),
         notes: notes.trim() || undefined,
-        items: saleItems.map((item) => {
+        items: saleItems.map((item, idx) => {
           const gross = toDecimal(item.gross_weight);
           const less = toDecimal(item.less_weight);
           const net = Decimal.max(0, gross.minus(less));
@@ -2183,20 +2424,22 @@ export const CreateInvoicePage: React.FC = () => {
 
           return {
             stock_item_id: item.stock_item_id || undefined,
-            tag_no: item.tag_no.trim(),
+            tag_no: invoiceColumns.show_tag_no
+              ? (item.tag_no?.trim() || `TAG-${Date.now()}-${idx + 1}`)
+              : (item.tag_no?.trim() || `TAG-${Date.now()}-${idx + 1}`),
             item_name: item.item_name.trim(),
             metal_id: item.metal_id,
             purity_id: item.purity_id,
             gross_weight: gross.toNumber(),
-            less_weight: less.toNumber(),
-            tunch_percent: tunch.toNumber(),
-            badla_percent: badla.toNumber(),
-            wastage_percent: toDecimal(item.wastage_percent).toNumber(),
-            rate_per_gram: rate.toNumber(),
+            less_weight: invoiceColumns.show_less_weight ? less.toNumber() : 0,
+            tunch_percent: invoiceColumns.show_tunch ? tunch.toNumber() : (tunch.gt(0) ? tunch.toNumber() : 100),
+            badla_percent: invoiceColumns.show_badla ? badla.toNumber() : 0,
+            wastage_percent: invoiceColumns.show_wastage ? toDecimal(item.wastage_percent).toNumber() : 0,
+            rate_per_gram: billType === 'WHOLESALE' ? 0 : rate.toNumber(),
             pieces: pcs.toNumber(),
-            making_charge: making.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber(),
-            metal_rate: rate.toNumber(),
-            making_rate: makingRate.toNumber(),
+            making_charge: invoiceColumns.show_making_charge ? making.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber() : 0,
+            metal_rate: billType === 'WHOLESALE' ? 0 : rate.toNumber(),
+            making_rate: invoiceColumns.show_making_charge ? makingRate.toNumber() : 0,
             making_charge_type: item.making_charge_type,
             notes: item.notes,
           };
@@ -2216,27 +2459,27 @@ export const CreateInvoicePage: React.FC = () => {
                   metal_id: ex.metal_id,
                   purity_id: ex.purity_id,
                   item_name: ex.item_name.trim() || 'Old Metal Scrap',
-                  tag_no: ex.tag_no.trim() || undefined,
+                  tag_no: invoiceColumns.show_tag_no ? (ex.tag_no?.trim() || undefined) : undefined,
                   gross_weight: toDecimal(ex.gross_weight).toNumber(),
-                  less_weight: toDecimal(ex.less_weight).toNumber(),
-                  tunch_percent: toDecimal(ex.tunch_percent).toNumber(),
-                  badla_percent: toDecimal(ex.badla_percent || 0).toNumber(),
-                  wastage_percent: toDecimal(ex.wastage_percent || 0).toNumber(),
-                  making_rate: makingRate,
+                  less_weight: invoiceColumns.show_less_weight ? toDecimal(ex.less_weight).toNumber() : 0,
+                  tunch_percent: invoiceColumns.show_tunch ? toDecimal(ex.tunch_percent).toNumber() : (toDecimal(ex.tunch_percent).gt(0) ? toDecimal(ex.tunch_percent).toNumber() : 100),
+                  badla_percent: invoiceColumns.show_badla ? toDecimal(ex.badla_percent || 0).toNumber() : 0,
+                  wastage_percent: invoiceColumns.show_wastage ? toDecimal(ex.wastage_percent || 0).toNumber() : 0,
+                  making_rate: invoiceColumns.show_making_charge ? makingRate : 0,
                   making_charge_type: chargeType,
                   pieces: toDecimal(ex.pieces || 1).toNumber(),
                   exchange_rate: toDecimal(ex.exchange_rate).toNumber(),
-                  deduction_percent: chargeType === 'PERCENTAGE' ? makingRate : toDecimal(ex.deduction_percent || 0).toNumber(),
+                  deduction_percent: invoiceColumns.show_making_charge ? (chargeType === 'PERCENTAGE' ? makingRate : toDecimal(ex.deduction_percent || 0).toNumber()) : 0,
                 };
               })
             : undefined,
         payments:
-          payments.filter((p) => toDecimal(p.amount).gt(0)).length > 0
+          payments.filter((p) => toDecimal(p.amount).gt(0) || toDecimal(p.metal_weight).gt(0)).length > 0
             ? payments
-                .filter((p) => toDecimal(p.amount).gt(0))
+                .filter((p) => toDecimal(p.amount).gt(0) || toDecimal(p.metal_weight).gt(0))
                 .map((p) => ({
                   payment_mode: p.payment_mode,
-                  amount: toDecimal(p.amount).toNumber(),
+                  amount: toDecimal(p.amount || 0).toNumber(),
                   metal_weight: p.metal_weight ? toDecimal(p.metal_weight).toNumber() : undefined,
                   metal_rate: p.metal_rate ? toDecimal(p.metal_rate).toNumber() : undefined,
                   metal_id: p.metal_id || undefined,
@@ -2295,6 +2538,29 @@ export const CreateInvoicePage: React.FC = () => {
       phone === 'COUNTER'
     );
   }, [selectedCustomer]);
+
+  const isWholesale = billType === 'WHOLESALE';
+
+  // Dynamic Column Count & Spans based on Store Invoice Configuration
+  const saleLeadColSpan = 1 + (invoiceColumns.show_tag_no ? 1 : 0) + 1 + 1 + (invoiceColumns.show_tunch ? 1 : 0);
+  const totalVisibleSaleCols =
+    1 +
+    (invoiceColumns.show_tag_no ? 1 : 0) +
+    1 +
+    1 +
+    (invoiceColumns.show_tunch ? 1 : 0) +
+    1 +
+    (invoiceColumns.show_less_weight ? 1 : 0) +
+    (invoiceColumns.show_net_weight ? 1 : 0) +
+    (invoiceColumns.show_badla ? 1 : 0) +
+    (invoiceColumns.show_wastage ? 1 : 0) +
+    (invoiceColumns.show_making_charge ? 1 : 0) +
+    (isWholesale || invoiceColumns.show_fine_weight ? 1 : 0) +
+    (isWholesale ? 0 : 2) +
+    1;
+
+  const exchLeadColSpan = 1 + (invoiceColumns.show_tag_no ? 1 : 0) + 1 + 1 + (invoiceColumns.show_tunch ? 1 : 0);
+  const totalVisibleExchCols = totalVisibleSaleCols;
 
   return (
     <div className="pos-page-container">
@@ -2414,7 +2680,7 @@ export const CreateInvoicePage: React.FC = () => {
         <div className="meta-grid">
           {/* Customer Selection */}
           <div className="meta-col customer-col">
-            <div className="flex items-center justify-between mb-1">
+            <div className="meta-header-row">
               <label className="meta-label">Customer Name *</label>
               <div className="customer-header-actions">
                 <button
@@ -2423,8 +2689,8 @@ export const CreateInvoicePage: React.FC = () => {
                   onClick={handleQuickWalkin}
                   title="Select Cash Customer (Spot Counter Sale — No Khata Record)"
                 >
-                  <Banknote size={12} />
-                  <span>+ CASH CUSTOMER</span>
+                  <Banknote size={11} />
+                  <span>+ Cash</span>
                 </button>
                 <button
                   type="button"
@@ -2432,15 +2698,22 @@ export const CreateInvoicePage: React.FC = () => {
                   onClick={() => handleOpenCustomerModal()}
                   title="Create new customer in Master directory & select for invoice"
                 >
-                  <UserPlus size={12} />
-                  <span>+ Add Customer</span>
+                  <UserPlus size={11} />
+                  <span>+ Add</span>
                 </button>
               </div>
             </div>
             <CustomerSearchSelect
               customers={customers}
               selectedCustomerId={customerId}
-              onSelectCustomer={(c) => setCustomerId(c.id)}
+              onSelectCustomer={(c) => {
+                setCustomerId(c.id);
+                if (c.customer_type === 'WHOLESALE') {
+                  setBillType('WHOLESALE');
+                } else if (c.customer_type === 'RETAIL') {
+                  setBillType('RETAIL');
+                }
+              }}
               onClearCustomer={() => setCustomerId('')}
               onAddNewCustomer={(query) => handleOpenCustomerModal(query)}
               onQuickWalkin={handleQuickWalkin}
@@ -2456,7 +2729,7 @@ export const CreateInvoicePage: React.FC = () => {
 
           {/* Contact & Khata Info */}
           <div className="meta-col contact-col">
-            <div className="flex items-center justify-between mb-1">
+            <div className="meta-header-row">
               <label className="meta-label">Phone & Khata Balance</label>
               {selectedCustomer && !isCashCustomer && (
                 <button
@@ -2481,59 +2754,63 @@ export const CreateInvoicePage: React.FC = () => {
                     Spot cash payment at counter • No customer khata record maintained
                   </div>
                 </div>
-              ) : (
+              ) : selectedCustomer ? (
                 <>
                   <div className="customer-contact-line">
                     <span className="customer-contact-phone font-mono">
                       <Phone size={11} className="inline-icon text-gold" />
-                      <span>{selectedCustomer?.phone || 'No Phone'}</span>
+                      <span>{selectedCustomer.phone || 'No Phone'}</span>
                     </span>
                     <span className="customer-contact-bullet">•</span>
                     <span
                       className="customer-contact-address"
-                      title={[selectedCustomer?.address, selectedCustomer?.city].filter(Boolean).join(', ') || 'Counter Cash Sale'}
+                      title={[selectedCustomer.address, selectedCustomer.city].filter(Boolean).join(', ') || 'Counter Cash Sale'}
                     >
                       <MapPin size={11} className="inline-icon text-muted" />
-                      <span>{[selectedCustomer?.address, selectedCustomer?.city].filter(Boolean).join(', ') || 'Counter Cash Sale'}</span>
+                      <span>{[selectedCustomer.address, selectedCustomer.city].filter(Boolean).join(', ') || 'Counter Cash Sale'}</span>
                     </span>
                   </div>
-                  {selectedCustomer && (
-                    <div className="customer-khata-line">
-                      {selectedCustomer.current_balance !== undefined && selectedCustomer.current_balance !== 0 ? (
-                        <span className={`khata-pill ${selectedCustomer.current_balance > 0 ? 'is-due' : 'is-adv'}`}>
-                          {selectedCustomer.current_balance > 0 ? (
-                            <>
-                              <AlertTriangle size={11} className="inline-icon" />
-                              <span>Baaki (Dr): ₹{Number(selectedCustomer.current_balance).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-                            </>
-                          ) : (
-                            <>
-                              <Check size={11} className="inline-icon" />
-                              <span>Jama (Cr): ₹{Math.abs(Number(selectedCustomer.current_balance)).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-                            </>
-                          )}
-                        </span>
-                      ) : (
-                        <span className="khata-pill is-settled">
-                          <span>Khata: ₹0.00 Settled</span>
-                        </span>
-                      )}
-                      {selectedCustomer.gold_balance_grams !== undefined && selectedCustomer.gold_balance_grams !== 0 && (
-                        <span className="khata-gold-pill">
-                          <Coins size={11} className="inline-icon" />
-                          <span>{selectedCustomer.gold_balance_grams > 0 ? `+${selectedCustomer.gold_balance_grams.toFixed(3)}g Baaki` : `${selectedCustomer.gold_balance_grams.toFixed(3)}g Jama`}</span>
-                        </span>
-                      )}
-                    </div>
-                  )}
+                  <div className="customer-khata-line">
+                    {selectedCustomer.current_balance !== undefined && selectedCustomer.current_balance !== 0 ? (
+                      <span className={`khata-pill ${selectedCustomer.current_balance > 0 ? 'is-due' : 'is-adv'}`}>
+                        {selectedCustomer.current_balance > 0 ? (
+                          <>
+                            <AlertTriangle size={11} className="inline-icon" />
+                            <span>Baaki (Dr): ₹{Number(selectedCustomer.current_balance).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                          </>
+                        ) : (
+                          <>
+                            <Check size={11} className="inline-icon" />
+                            <span>Jama (Cr): ₹{Math.abs(Number(selectedCustomer.current_balance)).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                          </>
+                        )}
+                      </span>
+                    ) : (
+                      <span className="khata-pill is-settled">
+                        <span>Khata: ₹0.00 Settled</span>
+                      </span>
+                    )}
+                    {selectedCustomer.gold_balance_grams !== undefined && selectedCustomer.gold_balance_grams !== 0 && (
+                      <span className="khata-gold-pill">
+                        <Coins size={11} className="inline-icon" />
+                        <span>{selectedCustomer.gold_balance_grams > 0 ? `+${selectedCustomer.gold_balance_grams.toFixed(3)}g Baaki` : `${selectedCustomer.gold_balance_grams.toFixed(3)}g Jama`}</span>
+                      </span>
+                    )}
+                  </div>
                 </>
+              ) : (
+                <div className="text-muted text-xs italic py-1">
+                  Select customer to view phone & khata balance
+                </div>
               )}
             </div>
           </div>
 
           {/* Invoice Date */}
           <div className="meta-col date-col">
-            <label className="meta-label">Invoice Date *</label>
+            <div className="meta-header-row">
+              <label className="meta-label">Invoice Date *</label>
+            </div>
             <input
               type="date"
               className="pos-input font-mono"
@@ -2544,9 +2821,12 @@ export const CreateInvoicePage: React.FC = () => {
 
           {/* Place of Supply */}
           <div className="meta-col supply-col">
-            <label className="meta-label">Place of Supply</label>
-            <div className="pos-readonly-box font-mono text-xs text-gold">
-              {shopProfile?.state || 'Maharashtra'} (State Code: 27)
+            <div className="meta-header-row">
+              <label className="meta-label">Place of Supply</label>
+            </div>
+            <div className="pos-readonly-box font-mono" title={`State Code: ${shopProfile?.gstin?.slice(0, 2) || '27'}`}>
+              <span className="text-muted text-xs font-sans">State:</span>
+              <span className="text-gold font-bold text-xs">{(shopProfile?.gstin?.slice(0, 2) || '27')} • {shopProfile?.state || 'Maharashtra'}</span>
             </div>
           </div>
         </div>
@@ -2575,26 +2855,38 @@ export const CreateInvoicePage: React.FC = () => {
             <thead>
               <tr>
                 <th className="col-idx">#</th>
-                <th className="col-tag">Tag No <span className="req-star">*</span></th>
+                {invoiceColumns.show_tag_no && <th className="col-tag">Tag No <span className="req-star">*</span></th>}
                 <th className="col-desc">Item Name <span className="req-star">*</span> ▾</th>
                 <th className="col-metal">Metal <span className="req-star">*</span></th>
-                <th className="col-purity text-right" title="Tunch% (Acts as Purity)">Tunch% <span className="req-star">*</span></th>
+                {invoiceColumns.show_tunch && <th className="col-purity text-right" title="Tunch% (Acts as Purity)">Tunch% <span className="req-star">*</span></th>}
                 <th className="col-gross text-right">Gross (g) <span className="req-star">*</span></th>
-                <th className="col-less text-right">Less (g) <span className="req-star">*</span></th>
-                <th className="col-net text-right" title="Calculated: Gross - Less">Net (g)</th>
-                <th className="col-badla text-right" title="Badla% (Added to Fine Weight)">Badla% <span className="req-star">*</span></th>
-                <th className="col-waste text-right" title="Waste% (Added to Fine Weight)">Waste% <span className="req-star">*</span></th>
-                <th className="col-making text-center">Making Charge <span className="req-star">*</span></th>
-                <th className="col-fine text-right" title="Calculated Pure Fine Weight">Fine Wt</th>
-                <th className="col-rate text-right" title="24K / Pure Metal Benchmark Rate (₹/g)">Rate/g (24K ₹) <span className="req-star">*</span></th>
-                <th className="col-amount text-right" title="Calculated Total Amount">Amount (₹)</th>
+                {invoiceColumns.show_less_weight && <th className="col-less text-right">Less (g) <span className="req-star">*</span></th>}
+                {invoiceColumns.show_net_weight && <th className="col-net text-right" title="Calculated: Gross - Less">Net (g)</th>}
+                {invoiceColumns.show_badla && <th className="col-badla text-right" title="Badla% (Added to Fine Weight)">Badla% <span className="req-star">*</span></th>}
+                {invoiceColumns.show_wastage && <th className="col-waste text-right" title="Waste% (Added to Fine Weight)">Waste% <span className="req-star">*</span></th>}
+                {invoiceColumns.show_making_charge && <th className="col-making text-center">Making Charge <span className="req-star">*</span></th>}
+                {(isWholesale || invoiceColumns.show_fine_weight) && (
+                  <th className="col-fine text-right font-bold text-gold" title="Calculated Pure Fine Weight">
+                    Fine Wt (g)
+                  </th>
+                )}
+                {!isWholesale && (
+                  <th className="col-rate text-right" title="24K / Pure Metal Benchmark Rate (₹/g)">
+                    Rate/g (24K ₹) <span className="req-star">*</span>
+                  </th>
+                )}
+                {!isWholesale && (
+                  <th className="col-amount text-right" title="Calculated Total Amount">
+                    Amount (₹)
+                  </th>
+                )}
                 <th className="col-action text-center">✕</th>
               </tr>
             </thead>
             <tbody>
               {saleItems.length === 0 ? (
                 <tr>
-                  <td colSpan={15} className="text-center py-4 text-muted">
+                  <td colSpan={totalVisibleSaleCols} className="text-center py-4 text-muted">
                     <div className="empty-sale-items-msg">
                       <button
                         type="button"
@@ -2655,43 +2947,85 @@ export const CreateInvoicePage: React.FC = () => {
                       <td className="text-center">
                         <div className="grid-index-cell font-mono text-muted text-xs">{idx + 1}</div>
                       </td>
-                      <td className="tag-input-cell">
-                        <div className="tag-field-container">
+                      {invoiceColumns.show_tag_no && (
+                        <td className="tag-input-cell">
+                          <div className="tag-field-container">
+                            <input
+                              type="text"
+                              className={`grid-input font-mono text-xs text-gold uppercase ${item.stock_item_id ? 'input-stock-linked' : ''}`}
+                              value={item.tag_no ?? ''}
+                              onChange={(e) => {
+                                handleUpdateSaleRow(item.id, { tag_no: e.target.value });
+                              }}
+                              onBlur={(e) => {
+                                const val = e.target.value;
+                                setTimeout(() => {
+                                  handleTagInputBlur(item.id, val);
+                                }, 200);
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  handleTagInputBlur(item.id, item.tag_no);
+                                }
+                              }}
+                              placeholder="TAG NO"
+                              title="Enter or scan barcode tag"
+                            />
+                            {item.stock_item_id && (
+                              <div
+                                className="tag-stock-badge in-stock"
+                                title="Linked to in-stock inventory. Stock will be marked SOLD on invoice finalization."
+                              >
+                                <span>✓ In-Stock</span>
+                                <button
+                                  type="button"
+                                  className="tag-unlink-btn"
+                                  title="Unlink from inventory item"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleUnlinkStock(item.id);
+                                  }}
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                      )}
+                      <td className="item-name-cell">
+                        <div className="item-name-field-container">
                           <input
                             type="text"
-                            className={`grid-input font-mono text-xs text-gold uppercase ${!item.tag_no?.trim() ? 'input-field-required' : ''} ${item.stock_item_id ? 'input-stock-linked' : ''}`}
-                            value={item.tag_no ?? ''}
+                            data-row-id={item.id}
+                            className={`grid-input font-semibold uppercase ${!item.item_name?.trim() ? 'input-field-required' : ''} ${item.stock_item_id ? 'input-stock-linked' : ''}`}
+                            value={item.item_name ?? ''}
                             onChange={(e) => {
                               const val = e.target.value;
-                              handleUpdateSaleRow(item.id, { tag_no: val });
-                              setActiveTagDropdownRowId(item.id);
+                              handleUpdateSaleRow(item.id, { item_name: val });
+                              updateItemDropdownCoords(e.currentTarget);
+                              setActiveItemDropdownRowId(item.id);
                             }}
-                            onFocus={() => setActiveTagDropdownRowId(item.id)}
-                            onBlur={(e) => {
-                              const val = e.target.value;
-                              setTimeout(() => {
-                                handleTagInputBlur(item.id, val);
-                              }, 200);
+                            onFocus={(e) => {
+                              updateItemDropdownCoords(e.currentTarget);
+                              setActiveItemDropdownRowId(item.id);
                             }}
                             onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                e.preventDefault();
-                                handleTagInputBlur(item.id, item.tag_no);
-                                setActiveTagDropdownRowId(null);
-                              } else if (e.key === 'Escape') {
-                                setActiveTagDropdownRowId(null);
+                              if (e.key === 'Escape') {
+                                setActiveItemDropdownRowId(null);
                               }
                             }}
-                            placeholder="TAG NO *"
-                            title="Enter or select an in-stock tag from inventory"
+                            placeholder="ITEM NAME *"
+                            title="Search & select in-stock jewellery item or enter custom name"
                             required
                           />
                           {item.stock_item_id && (
                             <div
                               className="tag-stock-badge in-stock"
-                              title="Linked to in-stock inventory. Stock will be marked SOLD on invoice finalization."
+                              title="Linked to in-stock inventory item. Stock will be marked SOLD on invoice finalization."
                             >
-                              <span>✓ In-Stock</span>
+                              <span>✓ In-Stock {item.tag_no ? `(${item.tag_no})` : ''}</span>
                               <button
                                 type="button"
                                 className="tag-unlink-btn"
@@ -2707,9 +3041,19 @@ export const CreateInvoicePage: React.FC = () => {
                           )}
                         </div>
 
-                        {/* In-Stock Autocomplete Suggestions Flyout */}
-                        {activeTagDropdownRowId === item.id && (
-                          <div className="tag-suggestions-flyout" ref={tagDropdownRef}>
+                        {/* In-Stock Autocomplete Suggestions Flyout rendered as Portal so it floats outside any container boundaries */}
+                        {activeItemDropdownRowId === item.id && itemDropdownCoords && createPortal(
+                          <div
+                            className="tag-suggestions-flyout item-flyout-portal"
+                            ref={itemDropdownRef}
+                            style={{
+                              position: 'fixed',
+                              top: `${itemDropdownCoords.top}px`,
+                              left: `${itemDropdownCoords.left}px`,
+                              width: `${itemDropdownCoords.width}px`,
+                              zIndex: 99999,
+                            }}
+                          >
                             <div className="tag-flyout-header">
                               <span>📦 Available In-Stock ({stockItems.length})</span>
                               <button
@@ -2717,7 +3061,7 @@ export const CreateInvoicePage: React.FC = () => {
                                 className="tag-flyout-close"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  setActiveTagDropdownRowId(null);
+                                  setActiveItemDropdownRowId(null);
                                 }}
                               >
                                 ✕
@@ -2726,15 +3070,16 @@ export const CreateInvoicePage: React.FC = () => {
                             <div className="tag-flyout-list">
                               {stockItems
                                 .filter((s) => {
-                                  const q = (item.tag_no || '').trim().toUpperCase();
+                                  const q = (item.item_name || '').trim().toUpperCase();
                                   if (!q) return true;
                                   return (
-                                    s.tag_no.toUpperCase().includes(q) ||
                                     (s.product_name && s.product_name.toUpperCase().includes(q)) ||
-                                    (s.metal_name && s.metal_name.toUpperCase().includes(q))
+                                    (s.tag_no && s.tag_no.toUpperCase().includes(q)) ||
+                                    (s.metal_name && s.metal_name.toUpperCase().includes(q)) ||
+                                    (s.notes && s.notes.toUpperCase().includes(q))
                                   );
                                 })
-                                .slice(0, 8)
+                                .slice(0, 10)
                                 .map((stock) => (
                                   <div
                                     key={stock.id}
@@ -2744,51 +3089,57 @@ export const CreateInvoicePage: React.FC = () => {
                                       handleSelectStockItem(item.id, stock);
                                     }}
                                   >
-                                    <div>
-                                      <div className="tag-suggestion-title">
-                                        <span className="font-mono font-bold text-gold">{stock.tag_no}</span>
-                                        <span className="font-semibold text-main text-xs">
+                                    <div className="stock-suggestion-info">
+                                      <div className="stock-suggestion-header-line">
+                                        <strong className="stock-suggestion-name">
                                           {stock.product_name || stock.notes || 'Jewellery Item'}
+                                        </strong>
+                                        <span className="stock-suggestion-tag font-mono">
+                                          {stock.tag_no}
                                         </span>
                                       </div>
-                                      <div className="tag-suggestion-meta">
-                                        {stock.metal_name || 'Gold'} • {stock.purity_name || `${stock.tunch_percent}%`} • Gross: {stock.gross_weight}g | Net: {stock.net_weight}g
+                                      <div className="stock-suggestion-details-line font-mono">
+                                        <span className="stock-metal-tag font-sans font-semibold">
+                                          {stock.metal_name?.toUpperCase().includes('SILVER') ? '⚪' : '🟡'} {stock.metal_name || 'Gold'} {stock.purity_name || (stock.tunch_percent ? `${stock.tunch_percent}%` : '')}
+                                        </span>
+                                        <span className="detail-separator">•</span>
+                                        <span>Gross: <strong>{Number(stock.gross_weight).toFixed(3)}g</strong></span>
+                                        <span className="detail-separator">•</span>
+                                        <span className="text-emerald-600 font-bold">Net: <strong>{Number(stock.net_weight || stock.gross_weight).toFixed(3)}g</strong></span>
+                                        {Boolean(stock.making_charge && stock.making_charge > 0) && (
+                                          <>
+                                            <span className="detail-separator">•</span>
+                                            <span>MC: ₹{stock.making_charge}</span>
+                                          </>
+                                        )}
                                       </div>
                                     </div>
-                                    <span className="badge-in-stock-pill">
-                                      In Stock
+                                    <span className="stock-status-pill">
+                                      ✓ IN STOCK
                                     </span>
                                   </div>
                                 ))}
                               {stockItems.filter((s) => {
-                                const q = (item.tag_no || '').trim().toUpperCase();
+                                const q = (item.item_name || '').trim().toUpperCase();
                                 if (!q) return true;
                                 return (
-                                  s.tag_no.toUpperCase().includes(q) ||
                                   (s.product_name && s.product_name.toUpperCase().includes(q)) ||
-                                  (s.metal_name && s.metal_name.toUpperCase().includes(q))
+                                  (s.tag_no && s.tag_no.toUpperCase().includes(q)) ||
+                                  (s.metal_name && s.metal_name.toUpperCase().includes(q)) ||
+                                  (s.notes && s.notes.toUpperCase().includes(q))
                                 );
                               }).length === 0 && (
                                 <div className="p-3 text-center text-xs text-muted">
-                                  No matching in-stock tags.
+                                  No matching in-stock items.
                                   <div className="text-[10px] mt-1 text-amber-400">
-                                    Custom tag will be recorded as direct counter sale.
+                                    Custom item will be billed as direct counter sale.
                                   </div>
                                 </div>
                               )}
                             </div>
-                          </div>
+                          </div>,
+                          document.body
                         )}
-                      </td>
-                      <td>
-                        <input
-                          type="text"
-                          className={`grid-input font-semibold uppercase ${!item.item_name?.trim() ? 'input-field-required' : ''}`}
-                          value={item.item_name ?? ''}
-                          onChange={(e) => handleUpdateSaleRow(item.id, { item_name: e.target.value })}
-                          placeholder="ITEM NAME *"
-                          required
-                        />
                       </td>
                       <td>
                         <select
@@ -2805,19 +3156,21 @@ export const CreateInvoicePage: React.FC = () => {
                           ))}
                         </select>
                       </td>
-                      <td>
-                        <input
-                          type="text"
-                          inputMode="decimal"
-                          className={`grid-input text-right font-mono text-xs ${!item.tunch_percent || Number(item.tunch_percent) <= 0 ? 'input-field-required' : ''}`}
-                          value={item.tunch_percent ?? ''}
-                          onFocus={(e) => e.target.select()}
-                          onChange={(e) => handleUpdateSaleRow(item.id, { tunch_percent: parseDecimalInput(e.target.value, 4) })}
-                          placeholder="TUNCH% *"
-                          title={item.purity_name ? `${item.purity_name} (Tunch: ${item.tunch_percent}%)` : 'Tunch% * (Purity)'}
-                          required
-                        />
-                      </td>
+                      {invoiceColumns.show_tunch && (
+                        <td>
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            className={`grid-input text-right font-mono text-xs ${!item.tunch_percent || Number(item.tunch_percent) <= 0 ? 'input-field-required' : ''}`}
+                            value={item.tunch_percent ?? ''}
+                            onFocus={(e) => e.target.select()}
+                            onChange={(e) => handleUpdateSaleRow(item.id, { tunch_percent: parseDecimalInput(e.target.value, 4) })}
+                            placeholder="TUNCH% *"
+                            title={item.purity_name ? `${item.purity_name} (Tunch: ${item.tunch_percent}%)` : 'Tunch% * (Purity)'}
+                            required
+                          />
+                        </td>
+                      )}
                       <td>
                         <input
                           type="text"
@@ -2830,173 +3183,189 @@ export const CreateInvoicePage: React.FC = () => {
                           required
                         />
                       </td>
-                      <td>
-                        <div className="less-cell-wrap">
+                      {invoiceColumns.show_less_weight && (
+                        <td>
+                          <div className="less-cell-wrap">
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              className={`grid-input text-right font-mono text-muted ${item.less_weight === '' || item.less_weight === null || item.less_weight === undefined ? 'input-field-required' : ''}`}
+                              value={item.less_weight ?? ''}
+                              onFocus={(e) => e.target.select()}
+                              onChange={(e) => handleUpdateSaleRow(item.id, { less_weight: parseDecimalInput(e.target.value, 4) })}
+                              placeholder="LESS (g) *"
+                              title="Less Weight in grams (Stones, Wax, etc.) *"
+                              required
+                            />
+                            <button
+                              type="button"
+                              className={`btn-less-calc ${item.less_breakdown && item.less_breakdown.length > 0 ? 'has-breakdown' : ''}`}
+                              onClick={() => handleOpenSaleLessCalculator(item)}
+                              title={
+                                item.less_breakdown && item.less_breakdown.length > 0
+                                  ? `Less Weight Breakdown (${item.less_breakdown.length} entries: ${formatWeight(item.less_weight, 3)}g)`
+                                  : "Open Less Weight Breakdown Calculator"
+                              }
+                            >
+                              <Calculator size={12} />
+                            </button>
+                          </div>
+                        </td>
+                      )}
+                      {invoiceColumns.show_net_weight && (
+                        <td className="text-right">
+                          <div className="grid-readonly-cell net">
+                            {hasGross && item.less_weight !== '' && item.less_weight !== null && item.less_weight !== undefined ? formatWeight(net, 3) : '-'}
+                          </div>
+                        </td>
+                      )}
+                      {invoiceColumns.show_badla && (
+                        <td>
+                          <input
+                            type="text"
+                            inputMode="text"
+                            className={`grid-input text-right font-mono text-xs ${item.badla_percent === '' || item.badla_percent === null || item.badla_percent === undefined ? 'input-field-required' : ''}`}
+                            value={item.badla_percent ?? ''}
+                            onFocus={(e) => e.target.select()}
+                            onChange={(e) => handleUpdateSaleRow(item.id, { badla_percent: parseDecimalInput(e.target.value, 2, true) })}
+                            placeholder="BADLA% *"
+                            title={!badla.isZero() ? `Badla: ${badlaWeight.gt(0) ? '+' : ''}${formatFineWeight(badlaWeight.toNumber(), 4)}g (${formatCurrency(badlaWeight.times(rate).toNumber())})` : 'Badla % * (Commercial margin/discount)'}
+                            required
+                          />
+                        </td>
+                      )}
+                      {invoiceColumns.show_wastage && (
+                        <td>
+                          <input
+                            type="text"
+                            inputMode="text"
+                            className={`grid-input text-right font-mono text-xs ${item.wastage_percent === '' || item.wastage_percent === null || item.wastage_percent === undefined ? 'input-field-required' : ''}`}
+                            value={item.wastage_percent ?? ''}
+                            onFocus={(e) => e.target.select()}
+                            onChange={(e) => handleUpdateSaleRow(item.id, { wastage_percent: parseDecimalInput(e.target.value, 2, true) })}
+                            placeholder="WASTE% *"
+                            title={!wastage.isZero() ? `Waste: +${formatFineWeight(wasteWeight.toNumber(), 4)}g (${formatCurrency(wasteWeight.times(rate).toNumber())})` : 'Waste % * (Manufacturing wastage)'}
+                            required
+                          />
+                        </td>
+                      )}
+                      {invoiceColumns.show_making_charge && (
+                        <td>
+                          <div className="making-cell-wrap">
+                            <div className="making-input-group">
+                              <select
+                                className="making-select font-mono"
+                                value={item.making_charge_type}
+                                onChange={(e) =>
+                                  handleUpdateSaleRow(item.id, {
+                                    making_charge_type: e.target.value as any,
+                                  })
+                                }
+                                title="Making Charge Mode: /g (Per Gram), /pc (Per Piece), Fix (Fixed Lump Sum), or % (Percentage)"
+                              >
+                                <option value="PER_GRAM">/g</option>
+                                <option value="PER_PIECE">/pc</option>
+                                <option value="FIXED">Fix</option>
+                                <option value="PERCENTAGE">%</option>
+                              </select>
+                              {item.making_charge_type === 'PER_PIECE' && (
+                                <div className="making-pcs-box" title="Number of pieces">
+                                  <input
+                                    type="number"
+                                    min={1}
+                                    className="making-pcs-input font-mono"
+                                    value={item.pieces ?? 1}
+                                    onFocus={(e) => e.target.select()}
+                                    onChange={(e) => handleUpdateSaleRow(item.id, { pieces: parseInt(e.target.value) || 1 })}
+                                    placeholder="1"
+                                  />
+                                  <span className="making-pcs-unit">pc</span>
+                                </div>
+                              )}
+                              <div className="making-rate-box">
+                                <input
+                                  type="text"
+                                  inputMode="decimal"
+                                  className={`making-rate-input font-mono text-right ${item.making_rate === '' || item.making_rate === null || item.making_rate === undefined ? 'input-field-required' : ''}`}
+                                  value={item.making_rate ?? ''}
+                                  onFocus={(e) => e.target.select()}
+                                  onChange={(e) => handleUpdateSaleRow(item.id, { making_rate: parseDecimalInput(e.target.value, 2) })}
+                                  placeholder={
+                                    item.making_charge_type === 'PER_PIECE'
+                                      ? '₹/PC *'
+                                      : item.making_charge_type === 'FIXED'
+                                      ? 'FIXED ₹ *'
+                                      : item.making_charge_type === 'PERCENTAGE'
+                                      ? '% *'
+                                      : 'RATE/G *'
+                                  }
+                                  title={
+                                    item.making_charge_type === 'PER_PIECE'
+                                      ? 'Making charge rate per piece (₹/pc) *'
+                                      : item.making_charge_type === 'FIXED'
+                                      ? 'Fixed lump-sum making charge (₹) *'
+                                      : item.making_charge_type === 'PERCENTAGE'
+                                      ? 'Making charge percentage of metal value (%) *'
+                                      : 'Making charge rate per gram (₹/g) *'
+                                  }
+                                  required
+                                />
+                              </div>
+                            </div>
+                            <div className="making-sub-label font-mono">
+                              {!hasMaking
+                                ? '-'
+                                : makingRate.lte(0)
+                                ? '₹0.00 (Zero Labour)'
+                                : item.making_charge_type === 'PER_PIECE'
+                                ? `₹${making.toFixed(2)} (${item.pieces || 1} pc @ ₹${item.making_rate})`
+                                : item.making_charge_type === 'FIXED'
+                                ? `₹${making.toFixed(2)} (Fixed)`
+                                : item.making_charge_type === 'PERCENTAGE'
+                                ? `₹${making.toFixed(2)} (${item.making_rate}%)`
+                                : `₹${making.toFixed(2)} (@₹${item.making_rate}/g)`}
+                            </div>
+                          </div>
+                        </td>
+                      )}
+                      {(isWholesale || invoiceColumns.show_fine_weight) && (
+                        <td className="text-right">
+                          <div
+                            className="grid-readonly-cell fine font-mono font-bold text-gold"
+                            title={
+                              billableFine.gt(0)
+                                ? !totalAdditionPercent.isZero()
+                                  ? `Pure Fine Wt: ${formatFineWeight(pureFine, 4)}g | Final Billable Wt: ${formatFineWeight(billableFine, 4)}g (Badla/Waste: ${totalAdditionPercent.gt(0) ? '+' : ''}${totalAdditionPercent.toFixed(2)}%)`
+                                  : `Fine Weight: ${formatFineWeight(billableFine, 4)}g`
+                                : 'Fine Weight: 0.0000g'
+                            }
+                          >
+                            {pureFine.gt(0) ? `${formatFineWeight(billableFine, 4)}g` : '-'}
+                          </div>
+                        </td>
+                      )}
+                      {!isWholesale && (
+                        <td>
                           <input
                             type="text"
                             inputMode="decimal"
-                            className={`grid-input text-right font-mono text-muted ${item.less_weight === '' || item.less_weight === null || item.less_weight === undefined ? 'input-field-required' : ''}`}
-                            value={item.less_weight ?? ''}
+                            className={`grid-input text-right font-mono font-semibold text-main ${!item.rate_per_gram || Number(item.rate_per_gram) <= 0 ? 'input-field-required' : ''}`}
+                            value={item.rate_per_gram ?? ''}
                             onFocus={(e) => e.target.select()}
-                            onChange={(e) => handleUpdateSaleRow(item.id, { less_weight: parseDecimalInput(e.target.value, 4) })}
-                            placeholder="LESS (g) *"
-                            title="Less Weight in grams (Stones, Wax, etc.) *"
+                            onChange={(e) => handleUpdateSaleRow(item.id, { rate_per_gram: parseDecimalInput(e.target.value, 2) })}
+                            placeholder="24K RATE *"
+                            title="24K / Pure Metal Base Rate (Amount calculates: Fine Weight × 24K Rate)"
                             required
                           />
-                          <button
-                            type="button"
-                            className={`btn-less-calc ${item.less_breakdown && item.less_breakdown.length > 0 ? 'has-breakdown' : ''}`}
-                            onClick={() => handleOpenSaleLessCalculator(item)}
-                            title={
-                              item.less_breakdown && item.less_breakdown.length > 0
-                                ? `Less Weight Breakdown (${item.less_breakdown.length} entries: ${formatWeight(item.less_weight, 3)}g)`
-                                : "Open Less Weight Breakdown Calculator"
-                            }
-                          >
-                            <Calculator size={12} />
-                          </button>
-                        </div>
-                      </td>
-                      <td className="text-right">
-                        <div className="grid-readonly-cell net">
-                          {hasGross && item.less_weight !== '' && item.less_weight !== null && item.less_weight !== undefined ? formatWeight(net, 3) : '-'}
-                        </div>
-                      </td>
-                      <td>
-                        <input
-                          type="text"
-                          inputMode="text"
-                          className={`grid-input text-right font-mono text-xs ${item.badla_percent === '' || item.badla_percent === null || item.badla_percent === undefined ? 'input-field-required' : ''}`}
-                          value={item.badla_percent ?? ''}
-                          onFocus={(e) => e.target.select()}
-                          onChange={(e) => handleUpdateSaleRow(item.id, { badla_percent: parseDecimalInput(e.target.value, 2, true) })}
-                          placeholder="BADLA% *"
-                          title={!badla.isZero() ? `Badla: ${badlaWeight.gt(0) ? '+' : ''}${formatFineWeight(badlaWeight.toNumber(), 4)}g (${formatCurrency(badlaWeight.times(rate).toNumber())})` : 'Badla % * (Commercial margin/discount)'}
-                          required
-                        />
-                      </td>
-                      <td>
-                        <input
-                          type="text"
-                          inputMode="text"
-                          className={`grid-input text-right font-mono text-xs ${item.wastage_percent === '' || item.wastage_percent === null || item.wastage_percent === undefined ? 'input-field-required' : ''}`}
-                          value={item.wastage_percent ?? ''}
-                          onFocus={(e) => e.target.select()}
-                          onChange={(e) => handleUpdateSaleRow(item.id, { wastage_percent: parseDecimalInput(e.target.value, 2, true) })}
-                          placeholder="WASTE% *"
-                          title={!wastage.isZero() ? `Waste: +${formatFineWeight(wasteWeight.toNumber(), 4)}g (${formatCurrency(wasteWeight.times(rate).toNumber())})` : 'Waste % * (Manufacturing wastage)'}
-                          required
-                        />
-                      </td>
-                      <td>
-                        <div className="making-cell-wrap">
-                          <div className="making-input-group">
-                            <select
-                              className="making-select font-mono"
-                              value={item.making_charge_type}
-                              onChange={(e) =>
-                                handleUpdateSaleRow(item.id, {
-                                  making_charge_type: e.target.value as any,
-                                })
-                              }
-                              title="Making Charge Mode: /g (Per Gram), /pc (Per Piece), Fix (Fixed Lump Sum), or % (Percentage)"
-                            >
-                              <option value="PER_GRAM">/g</option>
-                              <option value="PER_PIECE">/pc</option>
-                              <option value="FIXED">Fix</option>
-                              <option value="PERCENTAGE">%</option>
-                            </select>
-                            {item.making_charge_type === 'PER_PIECE' && (
-                              <div className="making-pcs-box" title="Number of pieces">
-                                <input
-                                  type="number"
-                                  min={1}
-                                  className="making-pcs-input font-mono"
-                                  value={item.pieces ?? 1}
-                                  onFocus={(e) => e.target.select()}
-                                  onChange={(e) => handleUpdateSaleRow(item.id, { pieces: parseInt(e.target.value) || 1 })}
-                                  placeholder="1"
-                                />
-                                <span className="making-pcs-unit">pc</span>
-                              </div>
-                            )}
-                            <div className="making-rate-box">
-                              <input
-                                type="text"
-                                inputMode="decimal"
-                                className={`making-rate-input font-mono text-right ${item.making_rate === '' || item.making_rate === null || item.making_rate === undefined ? 'input-field-required' : ''}`}
-                                value={item.making_rate ?? ''}
-                                onFocus={(e) => e.target.select()}
-                                onChange={(e) => handleUpdateSaleRow(item.id, { making_rate: parseDecimalInput(e.target.value, 2) })}
-                                placeholder={
-                                  item.making_charge_type === 'PER_PIECE'
-                                    ? '₹/PC *'
-                                    : item.making_charge_type === 'FIXED'
-                                    ? 'FIXED ₹ *'
-                                    : item.making_charge_type === 'PERCENTAGE'
-                                    ? '% *'
-                                    : 'RATE/G *'
-                                }
-                                title={
-                                  item.making_charge_type === 'PER_PIECE'
-                                    ? 'Making charge rate per piece (₹/pc) *'
-                                    : item.making_charge_type === 'FIXED'
-                                    ? 'Fixed lump-sum making charge (₹) *'
-                                    : item.making_charge_type === 'PERCENTAGE'
-                                    ? 'Making charge percentage of metal value (%) *'
-                                    : 'Making charge rate per gram (₹/g) *'
-                                }
-                                required
-                              />
-                            </div>
+                        </td>
+                      )}
+                      {!isWholesale && (
+                        <td className="text-right">
+                          <div className="grid-readonly-cell amount">
+                            {rowAmount.gt(0) ? formatCurrency(rowAmount.toNumber()) : '-'}
                           </div>
-                          <div className="making-sub-label font-mono">
-                            {!hasMaking
-                              ? '-'
-                              : makingRate.lte(0)
-                              ? '₹0.00 (Zero Labour)'
-                              : item.making_charge_type === 'PER_PIECE'
-                              ? `₹${making.toFixed(2)} (${item.pieces || 1} pc @ ₹${item.making_rate})`
-                              : item.making_charge_type === 'FIXED'
-                              ? `₹${making.toFixed(2)} (Fixed)`
-                              : item.making_charge_type === 'PERCENTAGE'
-                              ? `₹${making.toFixed(2)} (${item.making_rate}%)`
-                              : `₹${making.toFixed(2)} (@₹${item.making_rate}/g)`}
-                          </div>
-                        </div>
-                      </td>
-                      <td className="text-right">
-                        <div
-                          className="grid-readonly-cell fine font-mono font-bold"
-                          title={
-                            billableFine.gt(0)
-                              ? !totalAdditionPercent.isZero()
-                                ? `Pure Fine Wt: ${formatFineWeight(pureFine, 4)}g | Final Billable Wt: ${formatFineWeight(billableFine, 4)}g (Badla/Waste: ${totalAdditionPercent.gt(0) ? '+' : ''}${totalAdditionPercent.toFixed(2)}%)`
-                                : `Fine Weight: ${formatFineWeight(billableFine, 4)}g`
-                              : 'Fine Weight: 0.0000g'
-                          }
-                        >
-                          {pureFine.gt(0) ? formatFineWeight(billableFine, 4) : '-'}
-                        </div>
-                      </td>
-                      <td>
-                        <input
-                          type="text"
-                          inputMode="decimal"
-                          className={`grid-input text-right font-mono font-semibold text-main ${!item.rate_per_gram || Number(item.rate_per_gram) <= 0 ? 'input-field-required' : ''}`}
-                          value={item.rate_per_gram ?? ''}
-                          onFocus={(e) => e.target.select()}
-                          onChange={(e) => handleUpdateSaleRow(item.id, { rate_per_gram: parseDecimalInput(e.target.value, 2) })}
-                          placeholder="24K RATE *"
-                          title="24K / Pure Metal Base Rate (Amount calculates: Fine Weight × 24K Rate)"
-                          required
-                        />
-                      </td>
-                      <td className="text-right">
-                        <div className="grid-readonly-cell amount">
-                          {rowAmount.gt(0) ? formatCurrency(rowAmount.toNumber()) : '-'}
-                        </div>
-                      </td>
+                        </td>
+                      )}
                       <td className="text-center">
                         <div className="grid-action-cell">
                           <button
@@ -3025,7 +3394,7 @@ export const CreateInvoicePage: React.FC = () => {
             {/* TOTALS FOOTER ROW */}
             <tfoot>
               <tr className="pos-totals-row">
-                <td colSpan={5} className="font-bold text-main text-xs uppercase tracking-wider pos-totals-label-cell">
+                <td colSpan={saleLeadColSpan} className="font-bold text-main text-xs uppercase tracking-wider pos-totals-label-cell">
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <span className="totals-tag font-bold text-gold">TOTALS:</span>
                     {calculations.metalBreakdowns.map((mb) => (
@@ -3053,149 +3422,163 @@ export const CreateInvoicePage: React.FC = () => {
                     formatWeight(calculations.totalGrossWeight, 3)
                   )}
                 </td>
-                <td className="text-right font-mono text-muted whitespace-nowrap">
-                  {calculations.metalBreakdowns.length > 1 ? (
-                    <div className="metal-split-weights">
-                      {calculations.metalBreakdowns.map((mb) => (
-                        <div key={mb.metalName} className="metal-split-line">
-                          <span className="metal-tag-mini">{mb.metalName.slice(0, 3)}:</span>
-                          <span>{formatWeight(mb.lessWeight, 3)}</span>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    formatWeight(calculations.totalLessWeight, 3)
-                  )}
-                </td>
-                <td className="text-right font-mono font-bold text-amber-300 whitespace-nowrap">
-                  {calculations.metalBreakdowns.length === 0 ? (
-                    <span>0.000g</span>
-                  ) : (
-                    <div className="metal-split-weights">
-                      {calculations.metalBreakdowns.map((mb) => {
-                        const isGold = mb.metalName.toLowerCase().includes('gold');
-                        const isSilver = mb.metalName.toLowerCase().includes('silver');
-                        return (
-                          <div key={mb.metalName} className="metal-split-line" title={`${mb.metalName} Net Weight`}>
-                            <span className={`metal-tag-mini ${isGold ? 'text-amber-400' : isSilver ? 'text-slate-300' : 'text-muted'}`}>
-                              {mb.metalName}:
-                            </span>
-                            <span className="font-bold">{formatWeight(mb.netWeight, 3)}g</span>
+                {invoiceColumns.show_less_weight && (
+                  <td className="text-right font-mono text-muted whitespace-nowrap">
+                    {calculations.metalBreakdowns.length > 1 ? (
+                      <div className="metal-split-weights">
+                        {calculations.metalBreakdowns.map((mb) => (
+                          <div key={mb.metalName} className="metal-split-line">
+                            <span className="metal-tag-mini">{mb.metalName.slice(0, 3)}:</span>
+                            <span>{formatWeight(mb.lessWeight, 3)}</span>
                           </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </td>
+                        ))}
+                      </div>
+                    ) : (
+                      formatWeight(calculations.totalLessWeight, 3)
+                    )}
+                  </td>
+                )}
+                {invoiceColumns.show_net_weight && (
+                  <td className="text-right font-mono font-bold text-amber-300 whitespace-nowrap">
+                    {calculations.metalBreakdowns.length === 0 ? (
+                      <span>0.000g</span>
+                    ) : (
+                      <div className="metal-split-weights">
+                        {calculations.metalBreakdowns.map((mb) => {
+                          const isGold = mb.metalName.toLowerCase().includes('gold');
+                          const isSilver = mb.metalName.toLowerCase().includes('silver');
+                          return (
+                            <div key={mb.metalName} className="metal-split-line" title={`${mb.metalName} Net Weight`}>
+                              <span className={`metal-tag-mini ${isGold ? 'text-amber-400' : isSilver ? 'text-slate-300' : 'text-muted'}`}>
+                                {mb.metalName}:
+                              </span>
+                              <span className="font-bold">{formatWeight(mb.netWeight, 3)}g</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </td>
+                )}
                 {/* Badla Total Column */}
-                <td className="text-right font-mono font-bold text-main whitespace-nowrap">
-                  {calculations.metalBreakdowns.length === 0 ? (
-                    <span>0.000g</span>
-                  ) : (
-                    <div className="metal-split-weights">
-                      {calculations.metalBreakdowns.map((mb) => {
-                        const isGold = mb.metalName.toLowerCase().includes('gold');
-                        const isSilver = mb.metalName.toLowerCase().includes('silver');
-                        return (
-                          <div
-                            key={mb.metalName}
-                            className="metal-split-line"
-                            title={`${mb.metalName} Badla Weight: ${formatWeight(mb.badlaWeight, 3)}g (${formatCurrency(mb.badlaAmount)})`}
-                          >
-                            <span className={`metal-tag-mini ${isGold ? 'text-amber-400' : isSilver ? 'text-slate-300' : 'text-muted'}`}>
-                              {mb.metalName}:
-                            </span>
-                            <span className="font-bold">{formatWeight(mb.badlaWeight, 3)}g</span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </td>
+                {invoiceColumns.show_badla && (
+                  <td className="text-right font-mono font-bold text-main whitespace-nowrap">
+                    {calculations.metalBreakdowns.length === 0 ? (
+                      <span>0.000g</span>
+                    ) : (
+                      <div className="metal-split-weights">
+                        {calculations.metalBreakdowns.map((mb) => {
+                          const isGold = mb.metalName.toLowerCase().includes('gold');
+                          const isSilver = mb.metalName.toLowerCase().includes('silver');
+                          return (
+                            <div
+                              key={mb.metalName}
+                              className="metal-split-line"
+                              title={`${mb.metalName} Badla Weight: ${formatWeight(mb.badlaWeight, 3)}g (${formatCurrency(mb.badlaAmount)})`}
+                            >
+                              <span className={`metal-tag-mini ${isGold ? 'text-amber-400' : isSilver ? 'text-slate-300' : 'text-muted'}`}>
+                                {mb.metalName}:
+                              </span>
+                              <span className="font-bold">{formatWeight(mb.badlaWeight, 3)}g</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </td>
+                )}
 
                 {/* Waste Total Column */}
-                <td className="text-right font-mono font-bold text-main whitespace-nowrap">
-                  {calculations.metalBreakdowns.length === 0 ? (
-                    <span>0.000g</span>
-                  ) : (
-                    <div className="metal-split-weights">
-                      {calculations.metalBreakdowns.map((mb) => {
-                        const isGold = mb.metalName.toLowerCase().includes('gold');
-                        const isSilver = mb.metalName.toLowerCase().includes('silver');
-                        return (
-                          <div
-                            key={mb.metalName}
-                            className="metal-split-line"
-                            title={`${mb.metalName} Waste Weight: ${formatWeight(mb.wasteWeight, 3)}g (${formatCurrency(mb.wasteAmount)})`}
-                          >
-                            <span className={`metal-tag-mini ${isGold ? 'text-amber-400' : isSilver ? 'text-slate-300' : 'text-muted'}`}>
-                              {mb.metalName}:
-                            </span>
-                            <span className="font-bold">{formatWeight(mb.wasteWeight, 3)}g</span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </td>
+                {invoiceColumns.show_wastage && (
+                  <td className="text-right font-mono font-bold text-main whitespace-nowrap">
+                    {calculations.metalBreakdowns.length === 0 ? (
+                      <span>0.000g</span>
+                    ) : (
+                      <div className="metal-split-weights">
+                        {calculations.metalBreakdowns.map((mb) => {
+                          const isGold = mb.metalName.toLowerCase().includes('gold');
+                          const isSilver = mb.metalName.toLowerCase().includes('silver');
+                          return (
+                            <div
+                              key={mb.metalName}
+                              className="metal-split-line"
+                              title={`${mb.metalName} Waste Weight: ${formatWeight(mb.wasteWeight, 3)}g (${formatCurrency(mb.wasteAmount)})`}
+                            >
+                              <span className={`metal-tag-mini ${isGold ? 'text-amber-400' : isSilver ? 'text-slate-300' : 'text-muted'}`}>
+                                {mb.metalName}:
+                              </span>
+                              <span className="font-bold">{formatWeight(mb.wasteWeight, 3)}g</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </td>
+                )}
                 {/* Labour / Making Charge Total Column */}
-                <td className="text-right font-mono text-xs text-muted whitespace-nowrap">
-                  {calculations.metalBreakdowns.length === 0 ? (
-                    <span>Labour: ₹0.00</span>
-                  ) : (
-                    <div className="metal-split-weights">
-                      {calculations.metalBreakdowns.map((mb) => {
-                        const isGold = mb.metalName.toLowerCase().includes('gold');
-                        const isSilver = mb.metalName.toLowerCase().includes('silver');
-                        return (
-                          <div
-                            key={mb.metalName}
-                            className="metal-split-line"
-                            title={`${mb.metalName} Labour / Making Charge: ${formatCurrency(mb.makingCharges)}`}
-                          >
-                            <span className={`metal-tag-mini ${isGold ? 'text-amber-400' : isSilver ? 'text-slate-300' : 'text-muted'}`}>
-                              {mb.metalName}:
-                            </span>
-                            <span className="font-bold">{formatCurrency(mb.makingCharges)}</span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </td>
-                <td className="text-right font-mono font-bold text-muted whitespace-nowrap">
-                  {calculations.metalBreakdowns.length === 0 ? (
-                    <span>0.0000g</span>
-                  ) : (
-                    <div className="metal-split-weights">
-                      {calculations.metalBreakdowns.map((mb) => {
-                        const isGold = mb.metalName.toLowerCase().includes('gold');
-                        const isSilver = mb.metalName.toLowerCase().includes('silver');
-                        return (
-                          <div
-                            key={mb.metalName}
-                            className="metal-split-line"
-                            title={`${mb.metalName} Pure Fine: ${formatFineWeight(mb.pureFineWeight, 4)}g | Billable Fine: ${formatFineWeight(mb.billableFineWeight, 4)}g`}
-                          >
-                            <span className={`metal-tag-mini ${isGold ? 'text-amber-400' : isSilver ? 'text-slate-300' : 'text-muted'}`}>
-                              {mb.metalName}:
-                            </span>
-                            <span className="font-bold">{formatFineWeight(mb.billableFineWeight, 4)}g</span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </td>
-                <td></td>
-                <td className="text-right font-mono font-bold text-gold text-base whitespace-nowrap">
-                  {formatCurrency(calculations.totalSaleAmount)}
-                </td>
+                {invoiceColumns.show_making_charge && (
+                  <td className="text-right font-mono text-xs text-muted whitespace-nowrap">
+                    {calculations.metalBreakdowns.length === 0 ? (
+                      <span>Labour: ₹0.00</span>
+                    ) : (
+                      <div className="metal-split-weights">
+                        {calculations.metalBreakdowns.map((mb) => {
+                          const isGold = mb.metalName.toLowerCase().includes('gold');
+                          const isSilver = mb.metalName.toLowerCase().includes('silver');
+                          return (
+                            <div
+                              key={mb.metalName}
+                              className="metal-split-line"
+                              title={`${mb.metalName} Labour / Making Charge: ${formatCurrency(mb.makingCharges)}`}
+                            >
+                              <span className={`metal-tag-mini ${isGold ? 'text-amber-400' : isSilver ? 'text-slate-300' : 'text-muted'}`}>
+                                {mb.metalName}:
+                              </span>
+                              <span className="font-bold">{formatCurrency(mb.makingCharges)}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </td>
+                )}
+                {(isWholesale || invoiceColumns.show_fine_weight) && (
+                  <td className="text-right font-mono font-bold text-gold whitespace-nowrap">
+                    {calculations.metalBreakdowns.length === 0 ? (
+                      <span>0.0000g</span>
+                    ) : (
+                      <div className="metal-split-weights">
+                        {calculations.metalBreakdowns.map((mb) => {
+                          const isGold = mb.metalName.toLowerCase().includes('gold');
+                          const isSilver = mb.metalName.toLowerCase().includes('silver');
+                          return (
+                            <div
+                              key={mb.metalName}
+                              className="metal-split-line"
+                              title={`${mb.metalName} Pure Fine: ${formatFineWeight(mb.pureFineWeight, 4)}g | Billable Fine: ${formatFineWeight(mb.billableFineWeight, 4)}g`}
+                            >
+                              <span className={`metal-tag-mini ${isGold ? 'text-amber-400' : isSilver ? 'text-slate-300' : 'text-muted'}`}>
+                                {mb.metalName}:
+                              </span>
+                              <span className="font-bold">{formatFineWeight(mb.billableFineWeight, 4)}g</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </td>
+                )}
+                {!isWholesale && <td></td>}
+                {!isWholesale && (
+                  <td className="text-right font-mono font-bold text-gold text-base whitespace-nowrap">
+                    {formatCurrency(calculations.totalSaleAmount)}
+                  </td>
+                )}
                 <td></td>
               </tr>
               {calculations.metalBreakdowns.length > 1 && (
                 <tr className="pos-totals-multi-breakdown-row">
-                  <td colSpan={15}>
+                  <td colSpan={totalVisibleSaleCols}>
                     <div className="multi-metal-footer-bar">
                       <span className="bar-title">Separate Metal Totals:</span>
                       {calculations.metalBreakdowns.map((mb) => {
@@ -3274,17 +3657,17 @@ export const CreateInvoicePage: React.FC = () => {
               <thead>
                 <tr>
                   <th className="col-idx">#</th>
-                  <th className="col-tag">Tag No <span className="req-star">*</span></th>
+                  {invoiceColumns.show_tag_no && <th className="col-tag">Tag No</th>}
                   <th className="col-desc">Item Description <span className="req-star">*</span></th>
                   <th className="col-metal">Metal <span className="req-star">*</span></th>
-                  <th className="col-purity text-right" title="Tunch% (Acts as Purity)">Tunch% <span className="req-star">*</span></th>
+                  {invoiceColumns.show_tunch && <th className="col-purity text-right" title="Tunch% (Acts as Purity)">Tunch% <span className="req-star">*</span></th>}
                   <th className="col-gross text-right">Gross (g) <span className="req-star">*</span></th>
-                  <th className="col-less text-right">Less (g) <span className="req-star">*</span></th>
-                  <th className="col-net text-right" title="Calculated: Gross - Less">Net (g)</th>
-                  <th className="col-badla text-right" title="Badla% (Added to/Subtracted from Fine Weight)">Badla% <span className="req-star">*</span></th>
-                  <th className="col-waste text-right" title="Waste% (Refining / Melting Loss)">Waste% <span className="req-star">*</span></th>
-                  <th className="col-making text-center" title="Making / Melting / Deduction Charge">Deduction <span className="req-star">*</span></th>
-                  <th className="col-fine text-right" title="Calculated Pure Fine Weight">Fine Wt</th>
+                  {invoiceColumns.show_less_weight && <th className="col-less text-right">Less (g) <span className="req-star">*</span></th>}
+                  {invoiceColumns.show_net_weight && <th className="col-net text-right" title="Calculated: Gross - Less">Net (g)</th>}
+                  {invoiceColumns.show_badla && <th className="col-badla text-right" title="Badla% (Added to/Subtracted from Fine Weight)">Badla%</th>}
+                  {invoiceColumns.show_wastage && <th className="col-waste text-right" title="Waste% (Refining / Melting Loss)">Waste%</th>}
+                  {invoiceColumns.show_making_charge && <th className="col-making text-center" title="Making / Melting / Deduction Charge">Deduction</th>}
+                  {invoiceColumns.show_fine_weight && <th className="col-fine text-right">Fine Wt</th>}
                   <th className="col-rate text-right" title="24K / Pure Metal Benchmark Rate (₹/g)">Rate/g (24K ₹) <span className="req-star">*</span></th>
                   <th className="col-amount text-right" title="Calculated Total Exchange Amount">Amount (₹)</th>
                   <th className="col-action text-center">✕</th>
@@ -3337,15 +3720,17 @@ export const CreateInvoicePage: React.FC = () => {
                       <td className="text-center">
                         <div className="grid-index-cell font-mono text-muted text-xs">{idx + 1}</div>
                       </td>
-                      <td>
-                        <input
-                          type="text"
-                          className="grid-input font-mono text-xs text-gold uppercase"
-                          value={ex.tag_no}
-                          onChange={(e) => handleUpdateExchangeRow(ex.id, { tag_no: e.target.value })}
-                          placeholder="EX-TAG"
-                        />
-                      </td>
+                      {invoiceColumns.show_tag_no && (
+                        <td>
+                          <input
+                            type="text"
+                            className="grid-input font-mono text-xs text-gold uppercase"
+                            value={ex.tag_no}
+                            onChange={(e) => handleUpdateExchangeRow(ex.id, { tag_no: e.target.value })}
+                            placeholder="EX-TAG"
+                          />
+                        </td>
+                      )}
                       <td>
                         <input
                           type="text"
@@ -3369,20 +3754,22 @@ export const CreateInvoicePage: React.FC = () => {
                           ))}
                         </select>
                       </td>
-                      <td>
-                        <input
-                          type="text"
-                          inputMode="decimal"
-                          className={`grid-input text-right font-mono text-xs ${!ex.tunch_percent || Number(ex.tunch_percent) <= 0 ? 'input-field-required' : ''}`}
-                          value={ex.tunch_percent ?? ''}
-                          onFocus={(e) => e.target.select()}
-                          onChange={(e) =>
-                            handleUpdateExchangeRow(ex.id, { tunch_percent: parseDecimalInput(e.target.value, 4) })
-                          }
-                          placeholder="TUNCH% *"
-                          title={ex.purity_name ? `${ex.purity_name} (Tunch: ${ex.tunch_percent}%)` : 'Tunch% * (Purity)'}
-                        />
-                      </td>
+                      {invoiceColumns.show_tunch && (
+                        <td>
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            className={`grid-input text-right font-mono text-xs ${!ex.tunch_percent || Number(ex.tunch_percent) <= 0 ? 'input-field-required' : ''}`}
+                            value={ex.tunch_percent ?? ''}
+                            onFocus={(e) => e.target.select()}
+                            onChange={(e) =>
+                              handleUpdateExchangeRow(ex.id, { tunch_percent: parseDecimalInput(e.target.value, 4) })
+                            }
+                            placeholder="TUNCH% *"
+                            title={ex.purity_name ? `${ex.purity_name} (Tunch: ${ex.tunch_percent}%)` : 'Tunch% * (Purity)'}
+                          />
+                        </td>
+                      )}
                       <td>
                         <input
                           type="text"
@@ -3396,157 +3783,169 @@ export const CreateInvoicePage: React.FC = () => {
                           placeholder="GROSS (g) *"
                         />
                       </td>
-                      <td>
-                        <div className="less-cell-wrap">
+                      {invoiceColumns.show_less_weight && (
+                        <td>
+                          <div className="less-cell-wrap">
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              className={`grid-input text-right font-mono text-muted ${ex.less_weight === '' || ex.less_weight === null || ex.less_weight === undefined ? 'input-field-required' : ''}`}
+                              value={ex.less_weight ?? ''}
+                              onFocus={(e) => e.target.select()}
+                              onChange={(e) =>
+                                handleUpdateExchangeRow(ex.id, { less_weight: parseDecimalInput(e.target.value, 4) })
+                              }
+                              placeholder="LESS (g) *"
+                              title="Less Weight in grams *"
+                            />
+                            <button
+                              type="button"
+                              className={`btn-less-calc ${ex.less_breakdown && ex.less_breakdown.length > 0 ? 'has-breakdown' : ''}`}
+                              onClick={() => handleOpenExchangeLessCalculator(ex)}
+                              title={
+                                ex.less_breakdown && ex.less_breakdown.length > 0
+                                  ? `Less Breakdown (${ex.less_breakdown.length} entries: ${formatWeight(ex.less_weight, 3)}g)`
+                                  : 'Open Less Weight Breakdown Calculator'
+                              }
+                            >
+                              <Calculator size={12} />
+                            </button>
+                          </div>
+                        </td>
+                      )}
+                      {invoiceColumns.show_net_weight && (
+                        <td className="text-right">
+                          <div className="grid-readonly-cell net">
+                            {gross.gt(0) && ex.less_weight !== '' && ex.less_weight !== null && ex.less_weight !== undefined ? formatWeight(net, 3) : '-'}
+                          </div>
+                        </td>
+                      )}
+                      {invoiceColumns.show_badla && (
+                        <td>
                           <input
                             type="text"
-                            inputMode="decimal"
-                            className={`grid-input text-right font-mono text-muted ${ex.less_weight === '' || ex.less_weight === null || ex.less_weight === undefined ? 'input-field-required' : ''}`}
-                            value={ex.less_weight ?? ''}
+                            inputMode="text"
+                            className="grid-input text-right font-mono text-xs"
+                            value={ex.badla_percent ?? ''}
                             onFocus={(e) => e.target.select()}
-                            onChange={(e) =>
-                              handleUpdateExchangeRow(ex.id, { less_weight: parseDecimalInput(e.target.value, 4) })
-                            }
-                            placeholder="LESS (g) *"
-                            title="Less Weight in grams *"
+                            onChange={(e) => handleUpdateExchangeRow(ex.id, { badla_percent: parseDecimalInput(e.target.value, 2, true) })}
+                            placeholder="BADLA% *"
+                            title={!badla.isZero() ? `Badla: ${badlaWeight.gt(0) ? '+' : ''}${formatFineWeight(badlaWeight.toNumber(), 4)}g (${formatCurrency(badlaWeight.times(rate).toNumber())})` : 'Badla % (Commercial margin/discount)'}
                           />
-                          <button
-                            type="button"
-                            className={`btn-less-calc ${ex.less_breakdown && ex.less_breakdown.length > 0 ? 'has-breakdown' : ''}`}
-                            onClick={() => handleOpenExchangeLessCalculator(ex)}
-                            title={
-                              ex.less_breakdown && ex.less_breakdown.length > 0
-                                ? `Less Breakdown (${ex.less_breakdown.length} entries: ${formatWeight(ex.less_weight, 3)}g)`
-                                : 'Open Less Weight Breakdown Calculator'
-                            }
-                          >
-                            <Calculator size={12} />
-                          </button>
-                        </div>
-                      </td>
-                      <td className="text-right">
-                        <div className="grid-readonly-cell net">
-                          {gross.gt(0) && ex.less_weight !== '' && ex.less_weight !== null && ex.less_weight !== undefined ? formatWeight(net, 3) : '-'}
-                        </div>
-                      </td>
-                      <td>
-                        <input
-                          type="text"
-                          inputMode="text"
-                          className="grid-input text-right font-mono text-xs"
-                          value={ex.badla_percent ?? ''}
-                          onFocus={(e) => e.target.select()}
-                          onChange={(e) => handleUpdateExchangeRow(ex.id, { badla_percent: parseDecimalInput(e.target.value, 2, true) })}
-                          placeholder="BADLA% *"
-                          title={!badla.isZero() ? `Badla: ${badlaWeight.gt(0) ? '+' : ''}${formatFineWeight(badlaWeight.toNumber(), 4)}g (${formatCurrency(badlaWeight.times(rate).toNumber())})` : 'Badla % (Commercial margin/discount)'}
-                        />
-                      </td>
-                      <td>
-                        <input
-                          type="text"
-                          inputMode="text"
-                          className="grid-input text-right font-mono text-xs"
-                          value={ex.wastage_percent ?? ''}
-                          onFocus={(e) => e.target.select()}
-                          onChange={(e) => handleUpdateExchangeRow(ex.id, { wastage_percent: parseDecimalInput(e.target.value, 2, true) })}
-                          placeholder="WASTE% *"
-                          title={!wastage.isZero() ? `Waste: +${formatFineWeight(wasteWeight.toNumber(), 4)}g (${formatCurrency(wasteWeight.times(rate).toNumber())})` : 'Waste % (Refining/melting loss)'}
-                        />
-                      </td>
-                      <td>
-                        <div className="making-cell-wrap">
-                          <div className="making-input-group">
-                            <select
-                              className="making-select font-mono"
-                              value={chargeType}
-                              onChange={(e) =>
-                                handleUpdateExchangeRow(ex.id, {
-                                  making_charge_type: e.target.value as any,
-                                })
-                              }
-                              title="Deduction / Charge Mode: /g (Per Gram), /pc (Per Piece), Fix (Fixed Lump Sum), or % (Percentage)"
-                            >
-                              <option value="PER_GRAM">/g</option>
-                              <option value="PER_PIECE">/pc</option>
-                              <option value="FIXED">Fix</option>
-                              <option value="PERCENTAGE">%</option>
-                            </select>
-                            {chargeType === 'PER_PIECE' && (
-                              <div className="making-pcs-box" title="Number of pieces">
-                                <input
-                                  type="number"
-                                  min={1}
-                                  className="making-pcs-input font-mono"
-                                  value={ex.pieces ?? 1}
-                                  onFocus={(e) => e.target.select()}
-                                  onChange={(e) => handleUpdateExchangeRow(ex.id, { pieces: parseInt(e.target.value) || 1 })}
-                                  placeholder="1"
-                                />
-                                <span className="making-pcs-unit">pc</span>
-                              </div>
-                            )}
-                            <div className="making-rate-box">
-                              <input
-                                type="text"
-                                inputMode="decimal"
-                                className="making-rate-input font-mono text-right"
-                                value={ex.making_rate !== undefined ? ex.making_rate : (ex.deduction_percent ?? '')}
-                                onFocus={(e) => e.target.select()}
-                                onChange={(e) => {
-                                  const val = parseDecimalInput(e.target.value, 2);
+                        </td>
+                      )}
+                      {invoiceColumns.show_wastage && (
+                        <td>
+                          <input
+                            type="text"
+                            inputMode="text"
+                            className="grid-input text-right font-mono text-xs"
+                            value={ex.wastage_percent ?? ''}
+                            onFocus={(e) => e.target.select()}
+                            onChange={(e) => handleUpdateExchangeRow(ex.id, { wastage_percent: parseDecimalInput(e.target.value, 2, true) })}
+                            placeholder="WASTE% *"
+                            title={!wastage.isZero() ? `Waste: +${formatFineWeight(wasteWeight.toNumber(), 4)}g (${formatCurrency(wasteWeight.times(rate).toNumber())})` : 'Waste % (Refining/melting loss)'}
+                          />
+                        </td>
+                      )}
+                      {invoiceColumns.show_making_charge && (
+                        <td>
+                          <div className="making-cell-wrap">
+                            <div className="making-input-group">
+                              <select
+                                className="making-select font-mono"
+                                value={chargeType}
+                                onChange={(e) =>
                                   handleUpdateExchangeRow(ex.id, {
-                                    making_rate: val,
-                                    deduction_percent: chargeType === 'PERCENTAGE' ? val : ex.deduction_percent,
-                                  });
-                                }}
-                                placeholder={
-                                  chargeType === 'PER_PIECE'
-                                    ? '₹/PC *'
-                                    : chargeType === 'FIXED'
-                                    ? 'FIXED ₹ *'
-                                    : chargeType === 'PERCENTAGE'
-                                    ? '% *'
-                                    : 'RATE/G *'
+                                    making_charge_type: e.target.value as any,
+                                  })
                                 }
-                                title={
-                                  chargeType === 'PER_PIECE'
-                                    ? 'Deduction rate per piece (₹/pc)'
-                                    : chargeType === 'FIXED'
-                                    ? 'Fixed lump-sum deduction (₹)'
-                                    : chargeType === 'PERCENTAGE'
-                                    ? 'Deduction percentage of metal value (%)'
-                                    : 'Deduction rate per gram (₹/g)'
-                                }
-                              />
+                                title="Deduction / Charge Mode: /g (Per Gram), /pc (Per Piece), Fix (Fixed Lump Sum), or % (Percentage)"
+                              >
+                                <option value="PER_GRAM">/g</option>
+                                <option value="PER_PIECE">/pc</option>
+                                <option value="FIXED">Fix</option>
+                                <option value="PERCENTAGE">%</option>
+                              </select>
+                              {chargeType === 'PER_PIECE' && (
+                                <div className="making-pcs-box" title="Number of pieces">
+                                  <input
+                                    type="number"
+                                    min={1}
+                                    className="making-pcs-input font-mono"
+                                    value={ex.pieces ?? 1}
+                                    onFocus={(e) => e.target.select()}
+                                    onChange={(e) => handleUpdateExchangeRow(ex.id, { pieces: parseInt(e.target.value) || 1 })}
+                                    placeholder="1"
+                                  />
+                                  <span className="making-pcs-unit">pc</span>
+                                </div>
+                              )}
+                              <div className="making-rate-box">
+                                <input
+                                  type="text"
+                                  inputMode="decimal"
+                                  className="making-rate-input font-mono text-right"
+                                  value={ex.making_rate !== undefined ? ex.making_rate : (ex.deduction_percent ?? '')}
+                                  onFocus={(e) => e.target.select()}
+                                  onChange={(e) => {
+                                    const val = parseDecimalInput(e.target.value, 2);
+                                    handleUpdateExchangeRow(ex.id, {
+                                      making_rate: val,
+                                      deduction_percent: chargeType === 'PERCENTAGE' ? val : ex.deduction_percent,
+                                    });
+                                  }}
+                                  placeholder={
+                                    chargeType === 'PER_PIECE'
+                                      ? '₹/PC *'
+                                      : chargeType === 'FIXED'
+                                      ? 'FIXED ₹ *'
+                                      : chargeType === 'PERCENTAGE'
+                                      ? '% *'
+                                      : 'RATE/G *'
+                                  }
+                                  title={
+                                    chargeType === 'PER_PIECE'
+                                      ? 'Deduction rate per piece (₹/pc)'
+                                      : chargeType === 'FIXED'
+                                      ? 'Fixed lump-sum deduction (₹)'
+                                      : chargeType === 'PERCENTAGE'
+                                      ? 'Deduction percentage of metal value (%)'
+                                      : 'Deduction rate per gram (₹/g)'
+                                  }
+                                />
+                              </div>
+                            </div>
+                            <div className="making-sub-label font-mono">
+                              {deduction.gt(0) ? (
+                                chargeType === 'PER_PIECE'
+                                  ? `−₹${deduction.toFixed(2)} (${ex.pieces || 1} pc @ ₹${makingRate})`
+                                  : chargeType === 'FIXED'
+                                  ? `−₹${deduction.toFixed(2)} (Fixed)`
+                                  : chargeType === 'PERCENTAGE'
+                                  ? `−₹${deduction.toFixed(2)} (${makingRate}%)`
+                                  : `−₹${deduction.toFixed(2)} (@₹${makingRate}/g)`
+                              ) : (
+                                <span className="text-muted">-</span>
+                              )}
                             </div>
                           </div>
-                          <div className="making-sub-label font-mono">
-                            {deduction.gt(0) ? (
-                              chargeType === 'PER_PIECE'
-                                ? `−₹${deduction.toFixed(2)} (${ex.pieces || 1} pc @ ₹${makingRate})`
-                                : chargeType === 'FIXED'
-                                ? `−₹${deduction.toFixed(2)} (Fixed)`
-                                : chargeType === 'PERCENTAGE'
-                                ? `−₹${deduction.toFixed(2)} (${makingRate}%)`
-                                : `−₹${deduction.toFixed(2)} (@₹${makingRate}/g)`
-                            ) : (
-                              <span className="text-muted">-</span>
-                            )}
+                        </td>
+                      )}
+                      {invoiceColumns.show_fine_weight && (
+                        <td className="text-right">
+                          <div
+                            className="grid-readonly-cell fine font-mono font-bold"
+                            title={
+                              pureFine.gt(0) && !totalAdditionPercent.isZero()
+                                ? `Pure Fine Wt: ${formatFineWeight(pureFine, 4)}g | Billable Fine Wt: ${formatFineWeight(billableFine, 4)}g (Badla/Waste: ${totalAdditionPercent.gt(0) ? '+' : ''}${totalAdditionPercent.toFixed(2)}%)`
+                                : `Fine Weight: ${formatFineWeight(billableFine, 4)}g`
+                            }
+                          >
+                            {pureFine.gt(0) ? formatFineWeight(billableFine, 4) : '-'}
                           </div>
-                        </div>
-                      </td>
-                      <td className="text-right">
-                        <div
-                          className="grid-readonly-cell fine font-mono font-bold"
-                          title={
-                            pureFine.gt(0) && !totalAdditionPercent.isZero()
-                              ? `Pure Fine Wt: ${formatFineWeight(pureFine, 4)}g | Billable Fine Wt: ${formatFineWeight(billableFine, 4)}g (Badla/Waste: ${totalAdditionPercent.gt(0) ? '+' : ''}${totalAdditionPercent.toFixed(2)}%)`
-                              : `Fine Weight: ${formatFineWeight(billableFine, 4)}g`
-                          }
-                        >
-                          {pureFine.gt(0) ? formatFineWeight(billableFine, 4) : '-'}
-                        </div>
-                      </td>
+                        </td>
+                      )}
                       <td>
                         <input
                           type="text"
@@ -3593,7 +3992,7 @@ export const CreateInvoicePage: React.FC = () => {
               </tbody>
               <tfoot>
                 <tr className="pos-totals-row exchange-totals">
-                  <td colSpan={5} className="font-bold text-main text-xs uppercase tracking-wider whitespace-nowrap pos-totals-label-cell">
+                  <td colSpan={exchLeadColSpan} className="font-bold text-main text-xs uppercase tracking-wider whitespace-nowrap pos-totals-label-cell">
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <span className="totals-tag font-bold text-emerald-400">EXCHANGE TOTALS:</span>
                       {calculations.exchangeMetalBreakdowns.map((mb) => (
@@ -3621,127 +4020,140 @@ export const CreateInvoicePage: React.FC = () => {
                       formatWeight(calculations.totalExchangeGross, 3)
                     )}
                   </td>
-                  <td className="text-right font-mono text-muted whitespace-nowrap">
-                    {calculations.exchangeMetalBreakdowns.length > 1 ? (
-                      <div className="metal-split-weights">
-                        {calculations.exchangeMetalBreakdowns.map((mb) => (
-                          <div key={mb.metalName} className="metal-split-line">
-                            <span className="metal-tag-mini">{mb.metalName.slice(0, 3)}:</span>
-                            <span>{formatWeight(mb.lessWeight, 3)}</span>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      formatWeight(calculations.totalExchangeLess, 3)
-                    )}
-                  </td>
-                  <td className="text-right font-mono font-bold text-amber-300 whitespace-nowrap">
-                    {calculations.exchangeMetalBreakdowns.length === 0 ? (
-                      <span>0.000g</span>
-                    ) : (
-                      <div className="metal-split-weights">
-                        {calculations.exchangeMetalBreakdowns.map((mb) => {
-                          const isGold = mb.metalName.toLowerCase().includes('gold');
-                          const isSilver = mb.metalName.toLowerCase().includes('silver');
-                          return (
-                            <div key={mb.metalName} className="metal-split-line" title={`${mb.metalName} Exchange Net Weight`}>
-                              <span className={`metal-tag-mini ${isGold ? 'text-amber-400' : isSilver ? 'text-slate-300' : 'text-muted'}`}>
-                                {mb.metalName}:
-                              </span>
-                              <span className="font-bold">{formatWeight(mb.netWeight, 3)}g</span>
+                  {invoiceColumns.show_less_weight && (
+                    <td className="text-right font-mono text-muted whitespace-nowrap">
+                      {calculations.exchangeMetalBreakdowns.length > 1 ? (
+                        <div className="metal-split-weights">
+                          {calculations.exchangeMetalBreakdowns.map((mb) => (
+                            <div key={mb.metalName} className="metal-split-line">
+                              <span className="metal-tag-mini">{mb.metalName.slice(0, 3)}:</span>
+                              <span>{formatWeight(mb.lessWeight, 3)}</span>
                             </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </td>
+                          ))}
+                        </div>
+                      ) : (
+                        formatWeight(calculations.totalExchangeLess, 3)
+                      )}
+                    </td>
+                  )}
+                  {invoiceColumns.show_net_weight && (
+                    <td className="text-right font-mono font-bold text-amber-300 whitespace-nowrap">
+                      {calculations.exchangeMetalBreakdowns.length === 0 ? (
+                        <span>0.000g</span>
+                      ) : (
+                        <div className="metal-split-weights">
+                          {calculations.exchangeMetalBreakdowns.map((mb) => {
+                            const isGold = mb.metalName.toLowerCase().includes('gold');
+                            const isSilver = mb.metalName.toLowerCase().includes('silver');
+                            return (
+                              <div key={mb.metalName} className="metal-split-line" title={`${mb.metalName} Exchange Net Weight`}>
+                                <span className={`metal-tag-mini ${isGold ? 'text-amber-400' : isSilver ? 'text-slate-300' : 'text-muted'}`}>
+                                  {mb.metalName}:
+                                </span>
+                                <span className="font-bold">{formatWeight(mb.netWeight, 3)}g</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </td>
+                  )}
                   {/* Badla Total Column */}
-                  <td className="text-right font-mono font-bold text-main whitespace-nowrap">
-                    {calculations.exchangeMetalBreakdowns.length === 0 ? (
-                      <span>0.000g</span>
-                    ) : (
-                      <div className="metal-split-weights">
-                        {calculations.exchangeMetalBreakdowns.map((mb) => {
-                          const isGold = mb.metalName.toLowerCase().includes('gold');
-                          const isSilver = mb.metalName.toLowerCase().includes('silver');
-                          return (
-                            <div key={mb.metalName} className="metal-split-line" title={`${mb.metalName} Badla: ${formatWeight(mb.badlaWeight, 3)}g (${formatCurrency(mb.badlaAmount)})`}>
-                              <span className={`metal-tag-mini ${isGold ? 'text-amber-400' : isSilver ? 'text-slate-300' : 'text-muted'}`}>
-                                {mb.metalName.slice(0, 3)}:
-                              </span>
-                              <span>{formatWeight(mb.badlaWeight, 3)}</span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </td>
+                  {invoiceColumns.show_badla && (
+                    <td className="text-right font-mono font-bold text-main whitespace-nowrap">
+                      {calculations.exchangeMetalBreakdowns.length === 0 ? (
+                        <span>0.000g</span>
+                      ) : (
+                        <div className="metal-split-weights">
+                          {calculations.exchangeMetalBreakdowns.map((mb) => {
+                            const isGold = mb.metalName.toLowerCase().includes('gold');
+                            const isSilver = mb.metalName.toLowerCase().includes('silver');
+                            return (
+                              <div key={mb.metalName} className="metal-split-line" title={`${mb.metalName} Badla: ${formatWeight(mb.badlaWeight, 3)}g (${formatCurrency(mb.badlaAmount)})`}>
+                                <span className={`metal-tag-mini ${isGold ? 'text-amber-400' : isSilver ? 'text-slate-300' : 'text-muted'}`}>
+                                  {mb.metalName.slice(0, 3)}:
+                                </span>
+                                <span>{formatWeight(mb.badlaWeight, 3)}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </td>
+                  )}
                   {/* Waste Total Column */}
-                  <td className="text-right font-mono font-bold text-main whitespace-nowrap">
-                    {calculations.exchangeMetalBreakdowns.length === 0 ? (
-                      <span>0.000g</span>
-                    ) : (
-                      <div className="metal-split-weights">
-                        {calculations.exchangeMetalBreakdowns.map((mb) => {
-                          const isGold = mb.metalName.toLowerCase().includes('gold');
-                          const isSilver = mb.metalName.toLowerCase().includes('silver');
-                          return (
-                            <div key={mb.metalName} className="metal-split-line" title={`${mb.metalName} Waste: ${formatWeight(mb.wasteWeight, 3)}g (${formatCurrency(mb.wasteAmount)})`}>
-                              <span className={`metal-tag-mini ${isGold ? 'text-amber-400' : isSilver ? 'text-slate-300' : 'text-muted'}`}>
-                                {mb.metalName.slice(0, 3)}:
-                              </span>
-                              <span>{formatWeight(mb.wasteWeight, 3)}</span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </td>
+                  {invoiceColumns.show_wastage && (
+                    <td className="text-right font-mono font-bold text-main whitespace-nowrap">
+                      {calculations.exchangeMetalBreakdowns.length === 0 ? (
+                        <span>0.000g</span>
+                      ) : (
+                        <div className="metal-split-weights">
+                          {calculations.exchangeMetalBreakdowns.map((mb) => {
+                            const isGold = mb.metalName.toLowerCase().includes('gold');
+                            const isSilver = mb.metalName.toLowerCase().includes('silver');
+                            return (
+                              <div key={mb.metalName} className="metal-split-line" title={`${mb.metalName} Waste: ${formatWeight(mb.wasteWeight, 3)}g (${formatCurrency(mb.wasteAmount)})`}>
+                                <span className={`metal-tag-mini ${isGold ? 'text-amber-400' : isSilver ? 'text-slate-300' : 'text-muted'}`}>
+                                  {mb.metalName.slice(0, 3)}:
+                                </span>
+                                <span>{formatWeight(mb.wasteWeight, 3)}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </td>
+                  )}
                   {/* Deduction Column */}
-                  <td className="text-right font-mono text-xs text-muted whitespace-nowrap">
-                    {calculations.exchangeMetalBreakdowns.length === 0 ? (
-                      <span>Deduct: ₹0.00</span>
-                    ) : (
-                      <div className="metal-split-weights">
-                        {calculations.exchangeMetalBreakdowns.map((mb) => {
-                          const isGold = mb.metalName.toLowerCase().includes('gold');
-                          const isSilver = mb.metalName.toLowerCase().includes('silver');
-                          return (
-                            <div key={mb.metalName} className="metal-split-line" title={`${mb.metalName} Deduction: −${formatCurrency(mb.deductionAmount)}`}>
-                              <span className={`metal-tag-mini ${isGold ? 'text-amber-400' : isSilver ? 'text-slate-300' : 'text-muted'}`}>
-                                {mb.metalName.slice(0, 3)}:
-                              </span>
-                              <span>−{formatCurrency(mb.deductionAmount)}</span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </td>
-                  <td className="text-right font-mono font-bold text-muted whitespace-nowrap">
-                    {calculations.exchangeMetalBreakdowns.length === 0 ? (
-                      <span>0.0000g</span>
-                    ) : (
-                      <div className="metal-split-weights">
-                        {calculations.exchangeMetalBreakdowns.map((mb) => {
-                          const isGold = mb.metalName.toLowerCase().includes('gold');
-                          const isSilver = mb.metalName.toLowerCase().includes('silver');
-                          return (
-                            <div
-                              key={mb.metalName}
-                              className="metal-split-line"
-                              title={`${mb.metalName} Exchange Fine: ${formatFineWeight(mb.billableFineWeight, 4)}g`}
-                            >
-                              <span className={`metal-tag-mini ${isGold ? 'text-amber-400' : isSilver ? 'text-slate-300' : 'text-muted'}`}>
-                                {mb.metalName}:
-                              </span>
-                              <span className="font-bold">{formatFineWeight(mb.billableFineWeight, 4)}g</span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </td>
+                  {invoiceColumns.show_making_charge && (
+                    <td className="text-right font-mono text-xs text-muted whitespace-nowrap">
+                      {calculations.exchangeMetalBreakdowns.length === 0 ? (
+                        <span>Deduct: ₹0.00</span>
+                      ) : (
+                        <div className="metal-split-weights">
+                          {calculations.exchangeMetalBreakdowns.map((mb) => {
+                            const isGold = mb.metalName.toLowerCase().includes('gold');
+                            const isSilver = mb.metalName.toLowerCase().includes('silver');
+                            return (
+                              <div key={mb.metalName} className="metal-split-line" title={`${mb.metalName} Deduction: −${formatCurrency(mb.deductionAmount)}`}>
+                                <span className={`metal-tag-mini ${isGold ? 'text-amber-400' : isSilver ? 'text-slate-300' : 'text-muted'}`}>
+                                  {mb.metalName.slice(0, 3)}:
+                                </span>
+                                <span>−{formatCurrency(mb.deductionAmount)}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </td>
+                  )}
+                  {/* Fine Wt Column */}
+                  {invoiceColumns.show_fine_weight && (
+                    <td className="text-right font-mono font-bold text-muted whitespace-nowrap">
+                      {calculations.exchangeMetalBreakdowns.length === 0 ? (
+                        <span>0.0000g</span>
+                      ) : (
+                        <div className="metal-split-weights">
+                          {calculations.exchangeMetalBreakdowns.map((mb) => {
+                            const isGold = mb.metalName.toLowerCase().includes('gold');
+                            const isSilver = mb.metalName.toLowerCase().includes('silver');
+                            return (
+                              <div
+                                key={mb.metalName}
+                                className="metal-split-line"
+                                title={`${mb.metalName} Exchange Fine: ${formatFineWeight(mb.billableFineWeight, 4)}g`}
+                              >
+                                <span className={`metal-tag-mini ${isGold ? 'text-amber-400' : isSilver ? 'text-slate-300' : 'text-muted'}`}>
+                                  {mb.metalName}:
+                                </span>
+                                <span className="font-bold">{formatFineWeight(mb.billableFineWeight, 4)}g</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </td>
+                  )}
                   <td></td>
                   <td className="text-right font-mono font-bold text-emerald-400 text-base whitespace-nowrap">
                     − {formatCurrency(calculations.totalExchangeValue)}
@@ -3750,7 +4162,7 @@ export const CreateInvoicePage: React.FC = () => {
                 </tr>
                 {calculations.exchangeMetalBreakdowns.length > 1 && (
                   <tr className="pos-totals-multi-breakdown-row exchange-breakdown-row">
-                    <td colSpan={15}>
+                    <td colSpan={totalVisibleExchCols}>
                       <div className="multi-metal-footer-bar">
                         <span className="bar-title text-emerald-400">Separate Exchange Metal Totals:</span>
                         {calculations.exchangeMetalBreakdowns.map((mb) => {
@@ -4069,192 +4481,256 @@ export const CreateInvoicePage: React.FC = () => {
                       </div>
                     )}
 
-                    {/* Input Fields Row: Gold ____ / Silver ____ / Amount ___ / Bank ______ / Note ______ */}
-                    <div className="payment-fields-row">
-                      {/* GOLD Weight Input (Shown if mode is GOLD) */}
-                      {isGold && (
-                        <div className="field-block gold-block">
-                          <div className="field-header">
-                            <label className="field-title">Gold (g) *</label>
-                            <span className="auto-rate-pill gold-pill">
-                              @ {formatMetalRate(p.metal_rate, true)}/g (Today's Gold Rate)
-                            </span>
-                          </div>
-                          <div className="input-group-styled">
-                            <input
-                              type="text"
-                              inputMode="decimal"
-                              className="styled-input font-mono font-bold text-amber-400"
-                              value={p.metal_weight !== undefined ? p.metal_weight : ''}
-                              onChange={(e) => handleMetalWeightChange(p.id, e.target.value)}
-                              placeholder="0.000"
-                            />
-                            <span className="unit-label">g</span>
-                          </div>
-                          {availablePurities.length > 1 && (
-                            <select
-                              className="purity-mini-select font-mono"
-                              value={p.purity_id || ''}
-                              onChange={(e) => handleUpdatePaymentRow(p.id, { purity_id: e.target.value })}
-                              title="Gold Purity (Auto-calculates rate from dashboard)"
-                            >
-                              {availablePurities.map((pur) => (
-                                <option key={pur.id} value={pur.id}>
-                                  {pur.name}
-                                </option>
-                              ))}
-                            </select>
-                          )}
-                        </div>
-                      )}
-
-                      {/* SILVER Weight Input (Shown if mode is SILVER) */}
-                      {isSilver && (
-                        <div className="field-block silver-block">
-                          <div className="field-header">
-                            <label className="field-title">Silver (g) *</label>
-                            <span className="auto-rate-pill silver-pill">
-                              @ {formatMetalRate(p.metal_rate, true)}/g (Today's Silver Rate)
-                            </span>
-                          </div>
-                          <div className="input-group-styled">
-                            <input
-                              type="text"
-                              inputMode="decimal"
-                              className="styled-input font-mono font-bold text-slate-200"
-                              value={p.metal_weight !== undefined ? p.metal_weight : ''}
-                              onChange={(e) => handleMetalWeightChange(p.id, e.target.value)}
-                              placeholder="0.000"
-                            />
-                            <span className="unit-label">g</span>
-                          </div>
-                          {availablePurities.length > 1 && (
-                            <select
-                              className="purity-mini-select font-mono"
-                              value={p.purity_id || ''}
-                              onChange={(e) => handleUpdatePaymentRow(p.id, { purity_id: e.target.value })}
-                              title="Silver Purity (Auto-calculates rate from dashboard)"
-                            >
-                              {availablePurities.map((pur) => (
-                                <option key={pur.id} value={pur.id}>
-                                  {pur.name}
-                                </option>
-                              ))}
-                            </select>
-                          )}
-                        </div>
-                      )}
-
-                      {/* BANK Input (Shown if mode is BANK) */}
-                      {isBank && (
-                        <div className="field-block bank-block">
-                          <label className="field-title">Bank *</label>
-                          <div className="input-group-styled">
-                            {receivingAccounts.filter((a) => a.is_active && (a.account_type === 'BANK' || a.account_type === 'UPI')).length > 0 ? (
-                              <select
-                                className="styled-input font-mono"
-                                value={p.received_in || ''}
-                                onChange={(e) =>
-                                  handleUpdatePaymentRow(p.id, {
-                                    received_in: e.target.value,
-                                    payer_bank: e.target.value,
-                                  })
-                                }
+                    {/* Input Fields Row */}
+                    <div className={`payment-fields-row ${isMetal ? (isWholesale ? 'is-metal-fields is-wholesale-metal' : 'is-metal-fields') : ''}`}>
+                      {isMetal ? (
+                        <>
+                          {/* 1. Metal: Gold / Silver */}
+                          <div className="field-block metal-select-block">
+                            <label className="field-title">Metal *</label>
+                            <div className="segmented-toggle metal-type-segmented">
+                              <button
+                                type="button"
+                                className={`segment-btn metal-gold-btn ${isGold ? 'active' : ''}`}
+                                onClick={() => handleSetPaymentMode(p.id, 'GOLD')}
                               >
-                                <option value="">-- Choose Bank Account --</option>
-                                {receivingAccounts
-                                  .filter((a) => a.is_active)
-                                  .map((acc) => (
-                                    <option key={acc.id} value={acc.account_name}>
-                                      {acc.account_name} ({acc.account_type})
-                                    </option>
-                                  ))}
+                                🟡 Gold
+                              </button>
+                              <button
+                                type="button"
+                                className={`segment-btn metal-silver-btn ${isSilver ? 'active' : ''}`}
+                                onClick={() => handleSetPaymentMode(p.id, 'SILVER')}
+                              >
+                                ⚪ Silver
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* 2. Purity: Dropdown (Placed next to Metal in Wholesale) */}
+                          {isWholesale && (
+                            <div className="field-block purity-block">
+                              <label className="field-title">Purity *</label>
+                              <select
+                                className="styled-input font-mono text-xs"
+                                value={p.purity_id || ''}
+                                onChange={(e) => handlePaymentPurityChange(p.id, e.target.value)}
+                                title="Select Purity for Metal Rate"
+                              >
+                                {availablePurities.map((pur) => (
+                                  <option key={pur.id} value={pur.id}>
+                                    {pur.name}
+                                  </option>
+                                ))}
                               </select>
-                            ) : (
+                            </div>
+                          )}
+
+                          {/* Rate (₹/g) - Only for Retail */}
+                          {!isWholesale && (
+                            <div className="field-block rate-block">
+                              <label className="field-title">Rate (₹/g)</label>
+                              <div className="input-group-styled">
+                                <span className="unit-label-prefix">₹</span>
+                                <input
+                                  type="text"
+                                  inputMode="decimal"
+                                  className="styled-input font-mono font-bold"
+                                  value={p.metal_rate !== undefined ? p.metal_rate : ''}
+                                  onChange={(e) => handleMetalRateChange(p.id, e.target.value)}
+                                  placeholder="Rate/g"
+                                />
+                              </div>
+                            </div>
+                          )}
+
+                          {/* 3. Weight: Weight (g) with Auto mode toggle underneath */}
+                          <div className="field-block weight-block">
+                            <div className="field-header">
+                              <label className="field-title">{isWholesale ? 'Tender Wt (g) *' : 'Weight (g) *'}</label>
+                              {p.fine_weight && Number(p.fine_weight) > 0 && (
+                                <span className="weight-fine-badge font-mono" title="Calculated Fine Weight">
+                                  Fine: {formatFineWeight(p.fine_weight, 4)}g
+                                </span>
+                              )}
+                            </div>
+                            <div className="input-group-styled">
                               <input
                                 type="text"
-                                list="indian-banks-list"
-                                className="styled-input font-mono"
-                                placeholder="e.g. State Bank of India"
-                                value={p.received_in || p.payer_bank || ''}
-                                onChange={(e) =>
-                                  handleUpdatePaymentRow(p.id, {
-                                    received_in: e.target.value,
-                                    payer_bank: e.target.value,
-                                  })
+                                inputMode="decimal"
+                                className={`styled-input font-mono font-bold ${isGold ? 'text-amber-400' : 'text-slate-200'}`}
+                                value={p.metal_weight !== undefined ? p.metal_weight : ''}
+                                onChange={(e) => {
+                                  handleUpdatePaymentRow(p.id, { is_auto: false });
+                                  handleMetalWeightChange(p.id, e.target.value);
+                                }}
+                                placeholder="0.000"
+                              />
+                              <span className="unit-label">g</span>
+                            </div>
+
+                            {/* Auto mode indicator & toggle directly below Weight */}
+                            <div className="auto-mode-toggle-subrow mt-1">
+                              <button
+                                type="button"
+                                className={`auto-mode-pill-btn ${isGold ? 'gold-auto' : 'silver-auto'} ${p.is_auto ? 'active' : ''}`}
+                                onClick={() => handleToggleAutoMode(p.id, isGold ? 'GOLD' : 'SILVER')}
+                                title="Click to toggle Auto mode linked to Balance Fine"
+                              >
+                                <span className="auto-dot-icon">{isGold ? '🟢' : '🔴'}</span>
+                                <span className="auto-label-text">
+                                  {p.is_auto ? 'Auto Selected' : 'Auto Mode'}
+                                </span>
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Amount (₹) - Only for Retail */}
+                          {!isWholesale && (
+                            <div className="field-block amount-block">
+                              <label className="field-title">Amount (₹)</label>
+                              <div className="input-group-styled">
+                                <span className="unit-label-prefix">₹</span>
+                                <input
+                                  type="text"
+                                  inputMode="decimal"
+                                  className="styled-input font-mono font-bold text-emerald-400"
+                                  value={p.amount !== undefined ? p.amount : ''}
+                                  onChange={(e) => {
+                                    handleUpdatePaymentRow(p.id, { is_auto: false });
+                                    handlePaymentAmountChange(p.id, e.target.value);
+                                  }}
+                                  placeholder="0.00"
+                                />
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Purity: Dropdown - For Retail at the end */}
+                          {!isWholesale && (
+                            <div className="field-block purity-block">
+                              <label className="field-title">Purity *</label>
+                              <select
+                                className="styled-input font-mono text-xs"
+                                value={p.purity_id || ''}
+                                onChange={(e) => handlePaymentPurityChange(p.id, e.target.value)}
+                                title="Select Purity for Metal Rate"
+                              >
+                                {availablePurities.map((pur) => (
+                                  <option key={pur.id} value={pur.id}>
+                                    {pur.name}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          {/* BANK Input (Shown if mode is BANK) */}
+                          {isBank && (
+                            <div className="field-block bank-block">
+                              <label className="field-title">Bank *</label>
+                              <div className="input-group-styled">
+                                {receivingAccounts.filter((a) => a.is_active && (a.account_type === 'BANK' || a.account_type === 'UPI')).length > 0 ? (
+                                  <select
+                                    className="styled-input font-mono"
+                                    value={p.received_in || ''}
+                                    onChange={(e) =>
+                                      handleUpdatePaymentRow(p.id, {
+                                        received_in: e.target.value,
+                                        payer_bank: e.target.value,
+                                      })
+                                    }
+                                  >
+                                    <option value="">-- Choose Bank Account --</option>
+                                    {receivingAccounts
+                                      .filter((a) => a.is_active)
+                                      .map((acc) => (
+                                        <option key={acc.id} value={acc.account_name}>
+                                          {acc.account_name} ({acc.account_type})
+                                        </option>
+                                      ))}
+                                  </select>
+                                ) : (
+                                  <input
+                                    type="text"
+                                    list="indian-banks-list"
+                                    className="styled-input font-mono"
+                                    placeholder="e.g. State Bank of India"
+                                    value={p.received_in || p.payer_bank || ''}
+                                    onChange={(e) =>
+                                      handleUpdatePaymentRow(p.id, {
+                                        received_in: e.target.value,
+                                        payer_bank: e.target.value,
+                                      })
+                                    }
+                                  />
+                                )}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* AMOUNT Input (Shown for non-metal) */}
+                          <div className="field-block amount-block">
+                            <label className="field-title">Amount *</label>
+                            <div className="input-group-styled">
+                              <span className="unit-label-prefix">₹</span>
+                              <input
+                                type="text"
+                                inputMode="decimal"
+                                className="styled-input font-mono font-bold text-emerald-400"
+                                value={p.amount !== undefined ? p.amount : ''}
+                                onChange={(e) => handlePaymentAmountChange(p.id, e.target.value)}
+                                placeholder="0.00"
+                              />
+                            </div>
+                          </div>
+
+                          {/* NOTE Input */}
+                          <div className="field-block note-block flex-grow">
+                            <label className="field-title">Note</label>
+                            <div className="input-group-styled">
+                              <input
+                                type="text"
+                                className="styled-input"
+                                value={p.notes || ''}
+                                onChange={(e) => handleUpdatePaymentRow(p.id, { notes: e.target.value })}
+                                placeholder={
+                                  isBank
+                                    ? 'UTR / Transfer Ref / Cheque No'
+                                    : isCredit
+                                    ? 'Customer running ledger balance baaki'
+                                    : 'Payment note (optional)'
                                 }
                               />
-                            )}
+                            </div>
                           </div>
-                        </div>
+                        </>
                       )}
+                    </div>
 
-                      {/* FINE WT (Shown for Gold & Silver - replaces editable Amount box) */}
-                      {isMetal && (
-                        <div className="field-block fine-block">
-                          <div className="field-header">
-                            <label className="field-title">Fine Wt (g)</label>
-                            {Number(p.amount) > 0 && (
-                              <span className="auto-rate-pill fine-value-pill">
-                                = {formatCurrency(p.amount)} (in Summary)
-                              </span>
-                            )}
-                          </div>
+                    {/* 6. Note row for Metal payment (clean full-width underneath 5 metal columns) */}
+                    {isMetal && (
+                      <div className="payment-metal-note-row mt-2">
+                        <div className="field-block note-block w-full">
+                          <label className="field-title">Note / Bullion Memo</label>
                           <div className="input-group-styled">
                             <input
                               type="text"
-                              inputMode="decimal"
-                              className={`styled-input font-mono font-bold ${isGold ? 'text-amber-300' : 'text-slate-200'}`}
-                              value={p.fine_weight !== undefined ? p.fine_weight : ''}
-                              onChange={(e) => handleMetalFineWeightChange(p.id, e.target.value)}
-                              placeholder="0.000"
-                              title="Fine metal weight (auto-calculated from purity tunch or enter directly)"
-                            />
-                            <span className="unit-label">g</span>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* AMOUNT Input (Shown ONLY for Cash, Bank, Credit - NOT for Gold/Silver) */}
-                      {!isMetal && (
-                        <div className="field-block amount-block">
-                          <label className="field-title">Amount *</label>
-                          <div className="input-group-styled">
-                            <span className="unit-label-prefix">₹</span>
-                            <input
-                              type="text"
-                              inputMode="decimal"
-                              className="styled-input font-mono font-bold text-emerald-400"
-                              value={p.amount !== undefined ? p.amount : ''}
-                              onChange={(e) => handlePaymentAmountChange(p.id, e.target.value)}
-                              placeholder="0.00"
+                              className="styled-input font-mono text-xs"
+                              value={p.notes || p.reference_number || ''}
+                              onChange={(e) =>
+                                handleUpdatePaymentRow(p.id, {
+                                  notes: e.target.value,
+                                  reference_number: e.target.value,
+                                })
+                              }
+                              placeholder="Tender remarks / Bullion Bar No / Purity memo..."
                             />
                           </div>
-                        </div>
-                      )}
-
-                      {/* NOTE Input */}
-                      <div className="field-block note-block flex-grow">
-                        <label className="field-title">Note</label>
-                        <div className="input-group-styled">
-                          <input
-                            type="text"
-                            className="styled-input"
-                            value={p.notes || ''}
-                            onChange={(e) => handleUpdatePaymentRow(p.id, { notes: e.target.value })}
-                            placeholder={
-                              isBank
-                                ? 'UTR / Transfer Ref / Cheque No'
-                                : isMetal
-                                ? 'Tender remarks / Bullion note'
-                                : isCredit
-                                ? 'Customer running ledger balance baaki'
-                                : 'Payment note (optional)'
-                            }
-                          />
                         </div>
                       </div>
-                    </div>
+                    )}
 
                     {p.rate_error && (
                       <div className="payment-row-warning flex items-center gap-1 mt-1">
@@ -4291,108 +4767,218 @@ export const CreateInvoicePage: React.FC = () => {
               </div>
             </div>
 
-            {/* SEPARATE METAL WEIGHTS PANEL (NET & FINE PER METAL) */}
-            <div className="summary-metal-weights-panel">
-              <div className="panel-sub-header">
-                <div className="flex items-center gap-1.5">
-                  <Scale size={13} className="text-gold" />
-                  <span className="text-xs font-bold uppercase tracking-wider text-muted">
-                    Item Weights (Net & Fine)
+            {/* NET METAL & RETURN BALANCE TALLY (FINE & VALUE BALANCE) */}
+            <div className="summary-metal-tally-card">
+              <div className="tally-card-header">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <Scale size={13} className="text-gold shrink-0" />
+                  <span className="tally-card-title text-xs font-bold uppercase tracking-wider text-muted truncate">
+                    Net Metal & Return Balance
                   </span>
                 </div>
-                <span className="text-3xs text-gold uppercase font-semibold">Separate by Metal</span>
+                <span className="tally-card-badge text-3xs text-gold uppercase font-semibold shrink-0">
+                  Fine & Value
+                </span>
               </div>
 
-              <div className="metal-weights-grid">
-                {calculations.metalBreakdowns.length === 0 ? (
-                  <div className="metal-weight-empty text-xs text-muted py-2 text-center w-full">
-                    No sale items added yet
+              <div className="tally-cards-container">
+                {/* 🟡 GOLD TALLY */}
+                <div className="tally-metal-block gold-tally">
+                  <div className="tally-header-row flex items-center justify-between">
+                    <span className="tally-metal-title font-bold text-xs text-amber-300">
+                      🟡 Gold Balance
+                    </span>
+                    <button
+                      type="button"
+                      className={`tally-auto-btn gold-auto-btn ${
+                        payments.some((p) => p.payment_mode === 'GOLD' && p.is_auto) ? 'is-active' : ''
+                      }`}
+                      onClick={() => handleApplyAutoFromSummary('GOLD')}
+                      title="Click to toggle Auto mode for Gold payment (auto-binds Bal Fine & Bal Amt)"
+                    >
+                      <span className="dot">🟢</span>
+                      <span>
+                        {payments.some((p) => p.payment_mode === 'GOLD' && p.is_auto)
+                          ? 'Auto Selected'
+                          : 'Auto'}
+                      </span>
+                      <span className="val-preview font-mono">{formatFineWeight(calculations.goldBalFine, 3)}g</span>
+                    </button>
                   </div>
-                ) : (
-                  calculations.metalBreakdowns.map((mb) => {
-                    const isGold = mb.metalName.toLowerCase().includes('gold');
-                    const isSilver = mb.metalName.toLowerCase().includes('silver');
-                    const theme = isGold ? 'metal-gold' : isSilver ? 'metal-silver' : 'metal-other';
-                    return (
-                      <div key={mb.metalName} className={`metal-weight-card ${theme}`}>
-                        <div className="metal-card-header">
-                          <span className="metal-name-badge">
-                            {isGold ? '🟡' : isSilver ? '⚪' : '💎'} {mb.metalName}
-                          </span>
-                          <span className="metal-item-count">
-                            {mb.itemCount} {mb.itemCount === 1 ? 'item' : 'items'}
-                          </span>
-                        </div>
-                        <div className="metal-card-body">
-                          <div className="weight-metric-row">
-                            <span className="weight-metric-label">Net Wt:</span>
-                            <span className="weight-metric-value font-mono font-bold">
-                              {formatWeight(mb.netWeight, 3)} g
-                            </span>
-                          </div>
-                          <div className="weight-metric-row">
-                            <span className="weight-metric-label">Fine Wt:</span>
-                            <span className="weight-metric-value font-mono font-bold text-amber-300">
-                              {formatFineWeight(mb.billableFineWeight, 4)} g
-                            </span>
-                          </div>
-                          {Math.abs(mb.billableFineWeight - mb.pureFineWeight) > 0.0001 && (
-                            <div className="weight-metric-sub">
-                              <span>Pure Fine: {formatFineWeight(mb.pureFineWeight, 4)}g</span>
-                            </div>
-                          )}
-                        </div>
+
+                  <div className="tally-equation-grid font-mono text-xs">
+                    <div className="equation-line">
+                      <span className="eq-label text-muted">Fine Wt:</span>
+                      <span className="eq-formula">
+                        <span className="val-sold" title="Fine Gold Sold">{formatFineWeight(calculations.goldFineWeight, 4)}g</span>
+                        <span className="op">−</span>
+                        <span className="val-ret text-rose-300" title="Return Exchange Fine Gold">{formatFineWeight(calculations.goldExchangeFineWeight, 4)}g</span>
+                        <span className="op">=</span>
+                        <strong className="val-bal text-amber-300" title="Balance Gold Fine">{formatFineWeight(calculations.goldBalFine, 4)}g</strong>
+                      </span>
+                    </div>
+                    {!isWholesale && (
+                      <div className="equation-line">
+                        <span className="eq-label text-muted">Amount:</span>
+                        <span className="eq-formula">
+                          <span className="val-sold" title="Sale Gold Amount">{formatCurrency(calculations.goldSaleAmount)}</span>
+                          <span className="op">−</span>
+                          <span className="val-ret text-rose-300" title="Return Exchange Gold Amount">{formatCurrency(calculations.goldExchangeAmount)}</span>
+                          <span className="op">=</span>
+                          <strong className="val-bal text-emerald-400" title="Balance Gold Amount">{formatCurrency(calculations.goldBalAmount)}</strong>
+                        </span>
                       </div>
-                    );
-                  })
+                    )}
+                  </div>
+                </div>
+
+                {/* ⚪ SILVER TALLY */}
+                {(calculations.silverFineWeight > 0 || calculations.silverExchangeFineWeight > 0 || calculations.silverBalFine > 0) && (
+                  <div className="tally-metal-block silver-tally mt-2">
+                    <div className="tally-header-row flex items-center justify-between">
+                      <span className="tally-metal-title font-bold text-xs text-slate-200">
+                        ⚪ Silver Balance
+                      </span>
+                      <button
+                        type="button"
+                        className={`tally-auto-btn silver-auto-btn ${
+                          payments.some((p) => p.payment_mode === 'SILVER' && p.is_auto) ? 'is-active' : ''
+                        }`}
+                        onClick={() => handleApplyAutoFromSummary('SILVER')}
+                        title="Click to toggle Auto mode for Silver payment (auto-binds Bal Fine & Bal Amt)"
+                      >
+                        <span className="dot">🔴</span>
+                        <span>
+                          {payments.some((p) => p.payment_mode === 'SILVER' && p.is_auto)
+                            ? 'Auto Selected'
+                            : 'Auto'}
+                        </span>
+                        <span className="val-preview font-mono">{formatFineWeight(calculations.silverBalFine, 3)}g</span>
+                      </button>
+                    </div>
+
+                    <div className="tally-equation-grid font-mono text-xs">
+                      <div className="equation-line">
+                        <span className="eq-label text-muted">Fine Wt:</span>
+                        <span className="eq-formula">
+                          <span className="val-sold" title="Fine Silver Sold">{formatFineWeight(calculations.silverFineWeight, 4)}g</span>
+                          <span className="op">−</span>
+                          <span className="val-ret text-rose-300" title="Return Exchange Fine Silver">{formatFineWeight(calculations.silverExchangeFineWeight, 4)}g</span>
+                          <span className="op">=</span>
+                          <strong className="val-bal text-slate-200" title="Balance Silver Fine">{formatFineWeight(calculations.silverBalFine, 4)}g</strong>
+                        </span>
+                      </div>
+                      {!isWholesale && (
+                        <div className="equation-line">
+                          <span className="eq-label text-muted">Amount:</span>
+                          <span className="eq-formula">
+                            <span className="val-sold" title="Sale Silver Amount">{formatCurrency(calculations.silverSaleAmount)}</span>
+                            <span className="op">−</span>
+                            <span className="val-ret text-rose-300" title="Return Exchange Silver Amount">{formatCurrency(calculations.silverExchangeAmount)}</span>
+                            <span className="op">=</span>
+                            <strong className="val-bal text-emerald-400" title="Balance Silver Amount">{formatCurrency(calculations.silverBalAmount)}</strong>
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 )}
               </div>
+            </div>
 
-              {/* If Exchange Return Metals Exist */}
-              {calculations.exchangeMetalBreakdowns.length > 0 && (
-                <div className="exchange-weights-section mt-2 pt-2 border-t border-dashed border-border/60">
-                  <div className="panel-sub-header text-emerald-400 mb-1">
-                    <div className="flex items-center gap-1.5">
-                      <Coins size={12} />
-                      <span className="text-3xs font-bold uppercase tracking-wider">
-                        Exchange Return Weights
+            {isWholesale ? (
+              <div className="wholesale-summary-box p-3">
+                <div className="wholesale-badge-banner mb-3 pb-2 border-b border-border/40">
+                  <div className="flex items-center gap-1.5 text-gold font-bold text-xs uppercase tracking-wide">
+                    <Sparkles size={14} />
+                    <span>Wholesale Fine to Fine (सोन से सोना)</span>
+                  </div>
+                  <div className="text-3xs text-muted mt-0.5">
+                    Pure fine metal weight settlement • No rate & currency amount
+                  </div>
+                </div>
+
+                {/* Pure Gold Balance Section */}
+                <div className="wholesale-metal-balance-card gold-card mb-3 p-2.5 rounded bg-surface/80 border border-gold/30">
+                  <div className="flex justify-between items-center mb-1.5 pb-1 border-b border-border/40">
+                    <span className="font-bold text-xs text-gold">🟡 Pure Fine Gold (24K)</span>
+                    <span className={`font-mono font-bold text-xs ${calculations.goldWholesaleBal <= 0.0005 ? 'text-emerald-400' : 'text-amber-400'}`}>
+                      {calculations.goldWholesaleBal <= 0.0005 ? 'SETTLED ✓' : `${formatFineWeight(calculations.goldWholesaleBal, 4)}g BAAKI`}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-xs py-0.5 text-muted">
+                    <span>Sale Billable Fine:</span>
+                    <span className="font-mono font-bold text-gold">+{formatFineWeight(calculations.goldAdjustedFineWeight, 4)} g</span>
+                  </div>
+                  {calculations.goldExchangeFineWeight > 0 && (
+                    <div className="flex justify-between text-xs py-0.5 text-rose-400">
+                      <span>Inward Return Fine:</span>
+                      <span className="font-mono">−{formatFineWeight(calculations.goldExchangeFineWeight, 4)} g</span>
+                    </div>
+                  )}
+                  {calculations.goldPaymentFineGrams > 0 && (
+                    <div className="flex justify-between text-xs py-0.5 text-emerald-400">
+                      <span>Gold Tender Received:</span>
+                      <span className="font-mono">−{formatFineWeight(calculations.goldPaymentFineGrams, 4)} g</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between items-center pt-1.5 mt-1 border-t border-dashed border-border/50">
+                    <span className="font-bold text-xs">Remaining Gold Fine:</span>
+                    <span className={`font-mono font-bold text-sm ${calculations.goldWholesaleBal <= 0.0005 ? 'text-emerald-400' : 'text-amber-400'}`}>
+                      {calculations.goldWholesaleBal <= 0.0005 ? '0.0000 g' : `${formatFineWeight(calculations.goldWholesaleBal, 4)} g`}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Pure Silver Balance Section (if any silver) */}
+                {(calculations.silverAdjustedFineWeight > 0 || calculations.silverExchangeFineWeight > 0 || calculations.silverPaymentFineGrams > 0) && (
+                  <div className="wholesale-metal-balance-card silver-card mb-3 p-2.5 rounded bg-surface/80 border border-slate-400/30">
+                    <div className="flex justify-between items-center mb-1.5 pb-1 border-b border-border/40">
+                      <span className="font-bold text-xs text-slate-300">⚪ Pure Fine Silver</span>
+                      <span className={`font-mono font-bold text-xs ${calculations.silverWholesaleBal <= 0.0005 ? 'text-emerald-400' : 'text-slate-200'}`}>
+                        {calculations.silverWholesaleBal <= 0.0005 ? 'SETTLED ✓' : `${formatFineWeight(calculations.silverWholesaleBal, 4)}g BAAKI`}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-xs py-0.5 text-muted">
+                      <span>Sale Billable Fine:</span>
+                      <span className="font-mono font-bold text-slate-200">+{formatFineWeight(calculations.silverAdjustedFineWeight, 4)} g</span>
+                    </div>
+                    {calculations.silverExchangeFineWeight > 0 && (
+                      <div className="flex justify-between text-xs py-0.5 text-rose-400">
+                        <span>Inward Return Fine:</span>
+                        <span className="font-mono">−{formatFineWeight(calculations.silverExchangeFineWeight, 4)} g</span>
+                      </div>
+                    )}
+                    {calculations.silverPaymentFineGrams > 0 && (
+                      <div className="flex justify-between text-xs py-0.5 text-emerald-400">
+                        <span>Silver Tender Received:</span>
+                        <span className="font-mono">−{formatFineWeight(calculations.silverPaymentFineGrams, 4)} g</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between items-center pt-1.5 mt-1 border-t border-dashed border-border/50">
+                      <span className="font-bold text-xs">Remaining Silver Fine:</span>
+                      <span className={`font-mono font-bold text-sm ${calculations.silverWholesaleBal <= 0.0005 ? 'text-emerald-400' : 'text-slate-200'}`}>
+                        {calculations.silverWholesaleBal <= 0.0005 ? '0.0000 g' : `${formatFineWeight(calculations.silverWholesaleBal, 4)} g`}
                       </span>
                     </div>
                   </div>
-                  <div className="metal-weights-grid">
-                    {calculations.exchangeMetalBreakdowns.map((ex) => {
-                      const isGold = ex.metalName.toLowerCase().includes('gold');
-                      const isSilver = ex.metalName.toLowerCase().includes('silver');
-                      const theme = isGold ? 'metal-gold' : isSilver ? 'metal-silver' : 'metal-other';
-                      return (
-                        <div key={ex.metalName} className={`metal-weight-card ${theme} exchange-card`}>
-                          <div className="metal-card-header">
-                            <span className="metal-name-badge">
-                              {isGold ? '🟡' : isSilver ? '⚪' : '💎'} {ex.metalName}
-                            </span>
-                            <span className="metal-item-count">{ex.itemCount} exch</span>
-                          </div>
-                          <div className="metal-card-body">
-                            <div className="weight-metric-row">
-                              <span className="weight-metric-label">Exch Net:</span>
-                              <span className="weight-metric-value font-mono font-bold text-rose-300">
-                                −{formatWeight(ex.netWeight, 3)} g
-                              </span>
-                            </div>
-                            <div className="weight-metric-row">
-                              <span className="weight-metric-label">Exch Fine:</span>
-                              <span className="weight-metric-value font-mono font-bold text-rose-300">
-                                −{formatFineWeight(ex.billableFineWeight, 4)} g
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                )}
+
+                <div className="balance-status-badge mt-2">
+                  {calculations.wholesaleIsSettled ? (
+                    <div className="settled-pill">
+                      <Check size={14} />
+                      <span>Settled ✓ (Fine to Fine)</span>
+                    </div>
+                  ) : (
+                    <div className="pending-pill">
+                      <AlertCircle size={14} />
+                      <span>Pending Metal {calculations.goldWholesaleBal > 0.0005 ? `${formatFineWeight(calculations.goldWholesaleBal, 3)}g Gold` : ''} Baaki</span>
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
+              </div>
+            ) : (
 
             <div className="summary-breakdown-list">
               <div className="summary-line">
@@ -4571,180 +5157,30 @@ export const CreateInvoicePage: React.FC = () => {
                   </div>
                 )}
               </div>
+            </div>
+            )}
 
-              {/* Fine Metal Reconciliation: Separate by Metal */}
-              <div className="metal-fine-reconciliation mt-3 pt-3 border-t">
-                <div className="reconciliation-header flex items-center justify-between pb-1.5 mb-1.5 border-b border-border/40">
-                  <span className="text-2xs font-bold uppercase tracking-wider text-muted">
-                    Metal Settlement & Purity Balance
-                  </span>
-                  <span className="text-3xs text-gold font-semibold">Separate by Metal</span>
-                </div>
-
-                {/* GOLD RECONCILIATION */}
-                {(calculations.goldFineWeight > 0 || calculations.goldExchangeFineWeight > 0) && (
-                  <div className="metal-recon-block gold-recon mb-2 pb-2 border-b border-dashed border-border/40">
-                    <div className="flex justify-between items-center text-xs font-semibold text-gold mb-1">
-                      <span>🟡 Gold Settlement:</span>
-                      <span className="font-mono text-xs text-muted">
-                        {calculations.goldNetWeight > 0
-                          ? `Net Sold: ${formatWeight(calculations.goldNetWeight, 3)}g`
-                          : `Old Gold Inward: ${formatWeight(calculations.goldExchangeNetWeight, 3)}g`}
-                      </span>
-                    </div>
-                    {calculations.goldFineWeight > 0 && (
-                      <div className="flex justify-between text-xs py-0.5">
-                        <span className="text-muted">Fine Gold Sold (Pure):</span>
-                        <strong className="font-mono text-gold">{formatFineWeight(calculations.goldFineWeight, 4)} g</strong>
-                      </div>
-                    )}
-
-                    {calculations.totalBadlaWeight !== 0 && (
-                      <div className="flex justify-between text-xs py-0.5">
-                        <span className={calculations.totalBadlaWeight < 0 ? 'text-rose-400' : 'text-emerald-400'}>
-                          ↳ Badla ({calculations.totalBadlaWeight > 0 ? '+' : ''}{formatFineWeight(calculations.totalBadlaWeight, 3)} g):
-                        </span>
-                        <span className={`font-mono font-semibold ${calculations.totalBadlaWeight < 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
-                          {calculations.totalBadlaWeight > 0 ? '+' : ''}{formatCurrency(calculations.totalBadlaAmount)}
-                        </span>
-                      </div>
-                    )}
-
-                    {calculations.totalWasteOnlyWeight > 0 && (
-                      <div className="flex justify-between text-xs py-0.5 text-amber-400">
-                        <span>↳ Wastage (+{formatFineWeight(calculations.totalWasteOnlyWeight, 3)} g):</span>
-                        <span className="font-mono font-semibold text-amber-400">+{formatCurrency(calculations.totalWasteOnlyAmount)}</span>
-                      </div>
-                    )}
-
-                    {Math.abs(calculations.goldAdjustedFineWeight - calculations.goldFineWeight) > 0.00005 && (
-                      <div className="flex justify-between text-xs py-0.5 font-semibold text-blue-400">
-                        <span>Billable Fine Gold:</span>
-                        <strong className="font-mono">
-                          {formatFineWeight(calculations.goldAdjustedFineWeight, 4)} g
-                        </strong>
-                      </div>
-                    )}
-
-                    {calculations.goldExchangeFineWeight > 0 && (
-                      <div className="flex justify-between text-xs py-0.5 text-rose-400">
-                        <span>Inward Exchange Fine Gold:</span>
-                        <strong className="font-mono">−{formatFineWeight(calculations.goldExchangeFineWeight, 4)} g</strong>
-                      </div>
-                    )}
-
-                    {(() => {
-                      const netGoldFine = calculations.goldFineWeight - calculations.goldExchangeFineWeight;
-                      const isNegative = netGoldFine < -0.00005;
-                      const isPositive = netGoldFine > 0.00005;
-                      return (
-                        <div
-                          className="flex justify-between text-xs py-1 mt-1 border-t border-dashed border-border/60 font-semibold"
-                          title="Net Gold Fine Balance (Sold − Exchange)"
-                        >
-                          <span className="text-muted font-bold">
-                            Net Balance (Gold Fine):
-                          </span>
-                          <strong className={`font-mono text-sm ${isNegative ? 'text-emerald-400' : isPositive ? 'text-gold' : 'text-muted'}`}>
-                            {isNegative
-                              ? `−${formatFineWeight(Math.abs(netGoldFine), 4)} g`
-                              : `${formatFineWeight(netGoldFine, 4)} g`}
-                            {isNegative && (
-                              <span className="text-3xs ml-1.5 px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-sans font-normal uppercase">
-                                Jama / Purchase
-                              </span>
-                            )}
-                            {isPositive && (
-                              <span className="text-3xs ml-1.5 px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-sans font-normal uppercase">
-                                Baaki / Sold
-                              </span>
-                            )}
-                          </strong>
-                        </div>
-                      );
-                    })()}
-                  </div>
-                )}
-
-                {/* SILVER RECONCILIATION */}
-                {(calculations.silverFineWeight > 0 || calculations.silverExchangeFineWeight > 0) && (
-                  <div className="metal-recon-block silver-recon mb-1">
-                    <div className="flex justify-between items-center text-xs font-semibold text-slate-300 mb-1">
-                      <span>⚪ Silver Settlement:</span>
-                      <span className="font-mono text-xs text-muted">
-                        {calculations.silverNetWeight > 0
-                          ? `Net Sold: ${formatWeight(calculations.silverNetWeight, 3)}g`
-                          : `Old Silver Inward: ${formatWeight(calculations.silverExchangeNetWeight, 3)}g`}
-                      </span>
-                    </div>
-                    {calculations.silverFineWeight > 0 && (
-                      <div className="flex justify-between text-xs py-0.5">
-                        <span className="text-muted">Fine Silver Sold:</span>
-                        <strong className="font-mono text-slate-200">{formatFineWeight(calculations.silverFineWeight, 4)} g</strong>
-                      </div>
-                    )}
-
-                    {calculations.silverExchangeFineWeight > 0 && (
-                      <div className="flex justify-between text-xs py-0.5 text-rose-400">
-                        <span>Inward Exchange Fine Silver:</span>
-                        <strong className="font-mono">−{formatFineWeight(calculations.silverExchangeFineWeight, 4)} g</strong>
-                      </div>
-                    )}
-
-                    {(() => {
-                      const netSilverFine = calculations.silverFineWeight - calculations.silverExchangeFineWeight;
-                      const isNegative = netSilverFine < -0.00005;
-                      const isPositive = netSilverFine > 0.00005;
-                      return (
-                        <div
-                          className="flex justify-between text-xs py-1 mt-1 border-t border-dashed border-border/60 font-semibold"
-                          title="Net Silver Fine Balance (Sold − Exchange)"
-                        >
-                          <span className="text-muted font-bold">
-                            Net Balance (Silver Fine):
-                          </span>
-                          <strong className={`font-mono text-sm ${isNegative ? 'text-emerald-400' : isPositive ? 'text-slate-200' : 'text-muted'}`}>
-                            {isNegative
-                              ? `−${formatFineWeight(Math.abs(netSilverFine), 4)} g`
-                              : `${formatFineWeight(netSilverFine, 4)} g`}
-                            {isNegative && (
-                              <span className="text-3xs ml-1.5 px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-sans font-normal uppercase">
-                                Jama / Purchase
-                              </span>
-                            )}
-                            {isPositive && (
-                              <span className="text-3xs ml-1.5 px-1.5 py-0.5 rounded bg-slate-500/20 text-slate-300 font-sans font-normal uppercase">
-                                Baaki / Sold
-                              </span>
-                            )}
-                          </strong>
-                        </div>
-                      );
-                    })()}
-                  </div>
-                )}
-              </div>
-
-              {/* Main Submit Button */}
-              <div className="summary-actions mt-4">
-                <button
-                  type="button"
-                  className="btn btn-primary w-full btn-lg font-bold"
-                  onClick={() => handleSaveInvoice(true)}
-                  disabled={isSubmitting}
-                >
-                  <Save size={18} />
-                  <span>
-                    {isSubmitting
-                      ? 'Saving Bill...'
-                      : calculations.grandTotal > 0
-                      ? `Save & Finalize Bill (${formatCurrency(calculations.grandTotal)})`
-                      : calculations.totalExchangeValue > 0
-                      ? `Save & Finalize Exchange Purchase (${formatCurrency(calculations.totalExchangeValue)})`
-                      : 'Save & Finalize Bill'}
-                  </span>
-                </button>
-              </div>
+            {/* Main Submit Button */}
+            <div className="summary-actions mt-4">
+              <button
+                type="button"
+                className="btn btn-primary w-full btn-lg font-bold"
+                onClick={() => handleSaveInvoice(true)}
+                disabled={isSubmitting}
+              >
+                <Save size={18} />
+                <span>
+                  {isSubmitting
+                    ? 'Saving Bill...'
+                    : isWholesale
+                    ? 'Save & Finalize Wholesale Bill (Fine to Fine)'
+                    : calculations.grandTotal > 0
+                    ? `Save & Finalize Bill (${formatCurrency(calculations.grandTotal)})`
+                    : calculations.totalExchangeValue > 0
+                    ? `Save & Finalize Exchange Purchase (${formatCurrency(calculations.totalExchangeValue)})`
+                    : 'Save & Finalize Bill'}
+                </span>
+              </button>
             </div>
           </div>
         </div>
@@ -4943,25 +5379,17 @@ export const CreateInvoicePage: React.FC = () => {
 
                       <div className="flex items-center gap-2 flex-wrap">
                         {/* Primary Direction Toggle */}
-                        <div className="flex items-center gap-0.5 bg-[var(--bg-app)] p-0.5 rounded border border-[var(--border-subtle)] text-[10px]">
+                        <div className="opening-direction-toggle">
                           <button
                             type="button"
-                            className={`px-2 py-0.5 rounded font-medium transition-colors ${
-                              customerPrimaryDirection === 'DEBIT'
-                                ? 'bg-[var(--gold-primary)] text-black font-bold'
-                                : 'text-[var(--text-dim)] hover:text-[var(--text-main)]'
-                            }`}
+                            className={`opening-dir-btn ${customerPrimaryDirection === 'DEBIT' ? 'active' : ''}`}
                             onClick={() => handleCustomerPrimaryDirectionChange('DEBIT')}
                           >
                             Customer Owes Us / Baaki (Dr - बाकी)
                           </button>
                           <button
                             type="button"
-                            className={`px-2 py-0.5 rounded font-medium transition-colors ${
-                              customerPrimaryDirection === 'CREDIT'
-                                ? 'bg-[var(--gold-primary)] text-black font-bold'
-                                : 'text-[var(--text-dim)] hover:text-[var(--text-main)]'
-                            }`}
+                            className={`opening-dir-btn ${customerPrimaryDirection === 'CREDIT' ? 'active' : ''}`}
                             onClick={() => handleCustomerPrimaryDirectionChange('CREDIT')}
                           >
                             We Owe Customer / Jama (Cr - जमा)
@@ -5021,7 +5449,7 @@ export const CreateInvoicePage: React.FC = () => {
                             Cash Opening (₹)
                           </span>
                           <select
-                            className="bg-[var(--bg-app)] border border-[var(--border-subtle)] text-[10px] rounded px-1.5 py-0.5 font-mono"
+                            className="opening-type-select"
                             value={customerForm.opening_cash_type}
                             onChange={(e) =>
                               setCustomerForm({
@@ -5058,7 +5486,7 @@ export const CreateInvoicePage: React.FC = () => {
                             Bank / RTGS Opening (₹)
                           </span>
                           <select
-                            className="bg-[var(--bg-app)] border border-[var(--border-subtle)] text-[10px] rounded px-1.5 py-0.5 font-mono"
+                            className="opening-type-select"
                             value={customerForm.opening_bank_type}
                             onChange={(e) =>
                               setCustomerForm({
@@ -5095,7 +5523,7 @@ export const CreateInvoicePage: React.FC = () => {
                             Gold Opening (grams)
                           </span>
                           <select
-                            className="bg-[var(--bg-app)] border border-[var(--border-subtle)] text-[10px] rounded px-1.5 py-0.5 font-mono"
+                            className="opening-type-select"
                             value={customerForm.opening_gold_type}
                             onChange={(e) =>
                               setCustomerForm({
@@ -5188,7 +5616,7 @@ export const CreateInvoicePage: React.FC = () => {
                             Silver Opening (grams)
                           </span>
                           <select
-                            className="bg-[var(--bg-app)] border border-[var(--border-subtle)] text-[10px] rounded px-1.5 py-0.5 font-mono"
+                            className="opening-type-select"
                             value={customerForm.opening_silver_type}
                             onChange={(e) =>
                               setCustomerForm({
@@ -5379,9 +5807,10 @@ export const CreateInvoicePage: React.FC = () => {
                 <h1 className="tax-invoice-shop-title">
                   {shopProfile?.name || 'JEWEL SUITE DEMO STORE'}
                 </h1>
-                {shopProfile?.legal_name && (
-                  <p className="tax-invoice-shop-subtitle">{shopProfile.legal_name}</p>
-                )}
+                {shopProfile?.legal_name &&
+                  shopProfile.legal_name.trim().toLowerCase() !== (shopProfile?.name || '').trim().toLowerCase() && (
+                    <p className="tax-invoice-shop-subtitle">{shopProfile.legal_name}</p>
+                  )}
                 <p className="tax-invoice-shop-address">
                   {shopProfile?.address ? `${shopProfile.address}, ` : ''}
                   {shopProfile?.city ? `${shopProfile.city}, ` : ''}
@@ -5458,235 +5887,296 @@ export const CreateInvoicePage: React.FC = () => {
                 </div>
               </div>
 
-              {/* Items Table with ALL Input Fields */}
-              <div className="print-table-wrapper">
-                <table className="print-items-table">
-                  <thead>
-                    <tr>
-                      <th style={{ width: '28px', textAlign: 'center' }}>#</th>
-                      <th>Tag #</th>
-                      <th>Item Description</th>
-                      <th>Purity</th>
-                      <th className="text-right">Gross (g)</th>
-                      <th className="text-right">Less (g)</th>
-                      <th className="text-right">Net (g)</th>
-                      <th className="text-right">Tunch %</th>
-                      <th className="text-right">Fine Wt</th>
-                      <th className="text-right">Badla/Waste</th>
-                      <th className="text-right">Rate (₹/g)</th>
-                      <th className="text-right">Making (₹)</th>
-                      <th className="text-right">Total (₹)</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(createdInvoice.items || []).map((it, idx) => {
-                      const gross = Number(it.gross_weight || 0);
-                      const less = Number(it.less_weight || 0);
-                      const net = Number(it.net_weight || Math.max(0, gross - less));
-                      const tunch = Number(it.tunch_percent || 0);
-                      const pureFine = Number(it.fine_weight || (net * tunch) / 100);
-                      const metalRate = Number(it.rate_per_gram ?? it.metal_rate ?? 0);
-                      const wastagePercent = Number(it.wastage_percent ?? 0);
-                      const badlaPercent = Number(it.badla_percent ?? 0);
-                      const totalAdditionPercent = wastagePercent + badlaPercent;
-                      const wastageWeight = Number(it.wastage_weight ?? (totalAdditionPercent !== 0 ? (pureFine * totalAdditionPercent) / 100 : 0));
-                      const billableFine = Number(it.billable_weight ?? (totalAdditionPercent !== 0 ? Math.max(0, pureFine + wastageWeight) : pureFine));
-                      const makingCharge = Number(it.making_charge ?? it.making_charges ?? 0);
-                      const metalValue = Number(it.metal_value ?? (billableFine * metalRate));
-                      const itemTotal = Number(it.item_amount ?? it.item_total ?? (metalValue + makingCharge));
+              {/* Items Table with Dynamic Configured Columns */}
+              {(() => {
+                const hasRealTags = (createdInvoice.items || []).some(
+                  (it) => it.tag_no && it.tag_no.trim() !== '' && !/^TAG-\d+-\d+$/i.test(it.tag_no.trim())
+                );
+                const showPrintTagCol = invoiceColumns.show_tag_no && hasRealTags;
+                const hasBadlaWaste =
+                  (invoiceColumns.show_badla || invoiceColumns.show_wastage) &&
+                  (createdInvoice.items || []).some(
+                    (it) => Number(it.badla_percent || 0) > 0 || Number(it.wastage_percent || 0) > 0
+                  );
+                const printLeadColSpan = 1 + (showPrintTagCol ? 1 : 0) + 1 + 1; // # + (Tag) + Desc + Purity
 
-                      return (
-                        <tr key={it.id || idx}>
-                          <td style={{ textAlign: 'center' }} className="font-mono">{idx + 1}</td>
-                          <td className="font-mono text-xs font-semibold whitespace-nowrap">{it.tag_no || '-'}</td>
-                          <td>
-                            <div className="font-semibold leading-tight">{it.item_name || 'Jewellery Item'}</div>
-                            {it.metal_name && (
-                              <div className="text-[10px] text-muted">{it.metal_name}</div>
-                            )}
-                          </td>
-                          <td className="whitespace-nowrap">
-                            <div>{it.purity_name || '22K (916)'}</div>
-                            {it.huid && (
-                              <div className="text-[10px] text-muted font-mono">HUID: {it.huid}</div>
-                            )}
-                          </td>
-                          <td className="text-right font-mono whitespace-nowrap">{formatWeight(gross, 3)}</td>
-                          <td className="text-right font-mono text-muted whitespace-nowrap">{formatWeight(less, 3)}</td>
-                          <td className="text-right font-mono font-bold whitespace-nowrap">{formatWeight(net, 3)}</td>
-                          <td className="text-right font-mono whitespace-nowrap">{tunch > 0 ? `${tunch.toFixed(2)}%` : '-'}</td>
-                          <td className="text-right font-mono whitespace-nowrap">
-                            <div className="font-semibold">{billableFine > 0 ? formatFineWeight(billableFine, 4) : '-'}</div>
-                          </td>
-                          <td className="text-right font-mono text-xs whitespace-nowrap">
-                            {totalAdditionPercent !== 0 ? (
-                              <div>
-                                <div>{wastageWeight > 0 ? '+' : ''}{formatWeight(wastageWeight, 3)}g</div>
-                                <div className="text-[10px] text-muted">
-                                  {badlaPercent !== 0 && <span>B:{badlaPercent > 0 ? '+' : ''}{badlaPercent}% </span>}
-                                  {wastagePercent !== 0 && <span>W:{wastagePercent > 0 ? '+' : ''}{wastagePercent}%</span>}
-                                </div>
-                              </div>
-                            ) : (
-                              <span className="text-muted">-</span>
-                            )}
-                          </td>
-                          <td className="text-right font-mono whitespace-nowrap">{formatMetalRate(metalRate)}</td>
-                          <td className="text-right font-mono whitespace-nowrap">
-                            <div className="font-semibold">{formatCurrency(makingCharge, false)}</div>
-                            {it.making_rate ? (
-                              <div className="text-[10px] text-muted">
-                                {it.making_charge_type === 'PER_PIECE'
-                                  ? `(${it.pieces || 1} pc @ ₹${it.making_rate})`
-                                  : it.making_charge_type === 'FIXED'
-                                  ? '(Fix)'
-                                  : it.making_charge_type === 'PERCENTAGE'
-                                  ? `(${it.making_rate}%)`
-                                  : `(@₹${it.making_rate}/g)`}
-                              </div>
-                            ) : null}
-                          </td>
-                          <td className="text-right font-mono font-bold whitespace-nowrap">
-                            {formatCurrency(itemTotal)}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                  <tfoot>
-                    <tr className="print-totals-row">
-                      <td colSpan={4} className="text-right font-bold uppercase whitespace-nowrap">
-                        Totals ({createdInvoice.items?.length || 0} item{createdInvoice.items?.length === 1 ? '' : 's'}):
-                      </td>
-                      <td className="text-right font-mono font-bold whitespace-nowrap">
-                        {formatWeight(
-                          (createdInvoice.items || []).reduce((acc, it) => acc + Number(it.gross_weight || 0), 0),
-                          3
-                        )}
-                      </td>
-                      <td className="text-right font-mono font-bold text-muted whitespace-nowrap">
-                        {formatWeight(
-                          (createdInvoice.items || []).reduce((acc, it) => acc + Number(it.less_weight || 0), 0),
-                          3
-                        )}
-                      </td>
-                      <td className="text-right font-mono font-bold text-amber-700 whitespace-nowrap">
-                        {formatWeight(
-                          (createdInvoice.items || []).reduce((acc, it) => acc + Number(it.net_weight || 0), 0),
-                          3
-                        )}
-                      </td>
-                      <td></td>
-                      <td className="text-right font-mono font-bold text-muted whitespace-nowrap">
-                        <div>
-                          {formatFineWeight(
-                            (createdInvoice.items || []).reduce((acc, it) => {
-                              const gross = Number(it.gross_weight || 0);
-                              const less = Number(it.less_weight || 0);
-                              const net = Number(it.net_weight || Math.max(0, gross - less));
-                              const tunch = Number(it.tunch_percent || 0);
-                              const pureFine = Number(it.fine_weight || (net * tunch) / 100);
-                              const badlaPercent = Number(it.badla_percent ?? 0);
-                              const wastagePercent = Number(it.wastage_percent ?? 0);
-                              const totalAdditionPercent = badlaPercent + wastagePercent;
-                              const additionWeight = Number(it.wastage_weight ?? ((pureFine * totalAdditionPercent) / 100));
-                              return acc + Number(it.billable_weight ?? (totalAdditionPercent !== 0 ? Math.max(0, pureFine + additionWeight) : pureFine));
-                            }, 0),
-                            4
-                          )}
-                        </div>
-                      </td>
-                      <td></td>
-                      <td></td>
-                      <td className="text-right font-mono font-bold whitespace-nowrap">
-                        {formatCurrency(
-                          (createdInvoice.items || []).reduce((acc, it) => acc + Number(it.making_charge ?? it.making_charges ?? 0), 0)
-                        )}
-                      </td>
-                      <td className="text-right font-mono font-bold text-base text-amber-800 whitespace-nowrap">
-                        {formatCurrency(
-                          (createdInvoice.items || []).reduce((acc, it) => {
-                            const metalRate = Number(it.rate_per_gram ?? it.metal_rate ?? 0);
-                            const makingCharge = Number(it.making_charge ?? it.making_charges ?? 0);
-                            const tunch = Number(it.tunch_percent || 0);
-                            const net = Number(it.net_weight || 0);
-                            const fine = Number(it.fine_weight || (net * tunch) / 100);
-                            const metalValue = Number(it.metal_value ?? (fine * metalRate));
-                            return acc + Number(it.item_amount ?? it.item_total ?? (metalValue + makingCharge));
-                          }, 0)
-                        )}
-                      </td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-
-              {/* Customer Scrap / Old Metal Exchange Table (If any) */}
-              {createdInvoice.exchange && createdInvoice.exchange.items && createdInvoice.exchange.items.length > 0 && (
-                <div className="tax-invoice-exchange-section">
-                  <div className="exchange-section-title">
-                    <span>Customer Old Scrap / Metal Exchange Return</span>
-                    <span className="font-mono text-xs text-muted">
-                      Exchange Ref: {createdInvoice.exchange.exchange_number}
-                    </span>
-                  </div>
+                return (
                   <div className="print-table-wrapper">
                     <table className="print-items-table">
                       <thead>
                         <tr>
-                          <th style={{ width: '30px', textAlign: 'center' }}>#</th>
-                          <th>Tag #</th>
-                          <th>Old Scrap Item</th>
-                          <th>Metal & Purity</th>
+                          <th style={{ width: '28px', textAlign: 'center' }}>#</th>
+                          {showPrintTagCol && <th>Tag #</th>}
+                          <th>Item Description</th>
+                          <th>Purity</th>
                           <th className="text-right">Gross (g)</th>
-                          <th className="text-right">Less (g)</th>
-                          <th className="text-right">Net (g)</th>
-                          <th className="text-right">Tunch %</th>
-                          <th className="text-right">Fine Wt</th>
-                          <th className="text-right">Deduct %</th>
-                          <th className="text-right">Ex. Rate</th>
-                          <th className="text-right">Credit / Jama Value (₹ - जमा)</th>
+                          {invoiceColumns.show_less_weight && <th className="text-right">Less (g)</th>}
+                          {invoiceColumns.show_net_weight && <th className="text-right">Net (g)</th>}
+                          {invoiceColumns.show_tunch && <th className="text-right">Tunch %</th>}
+                          {invoiceColumns.show_fine_weight && <th className="text-right">Fine Wt</th>}
+                          {hasBadlaWaste && <th className="text-right">Badla/Waste</th>}
+                          <th className="text-right">Rate (₹/g)</th>
+                          {invoiceColumns.show_making_charge && <th className="text-right">Making (₹)</th>}
+                          <th className="text-right">Total (₹)</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {createdInvoice.exchange.items.map((exIt: any, exIdx: number) => (
-                          <tr key={exIt.id || exIdx}>
-                            <td style={{ textAlign: 'center' }} className="font-mono">{exIdx + 1}</td>
-                            <td className="font-mono text-xs">{exIt.tag_no || '-'}</td>
-                            <td className="font-semibold">{exIt.item_name || 'Customer Scrap'}</td>
-                            <td>{exIt.metal_name || 'Gold'} {exIt.purity_name || ''}</td>
-                            <td className="text-right font-mono">{formatWeight(exIt.gross_weight, 3)}</td>
-                            <td className="text-right font-mono text-muted">{formatWeight(exIt.less_weight, 3)}</td>
-                            <td className="text-right font-mono font-bold">{formatWeight(exIt.net_weight, 3)}</td>
-                            <td className="text-right font-mono">{Number(exIt.tunch_percent || 0).toFixed(2)}%</td>
-                            <td className="text-right font-mono">{formatFineWeight(exIt.fine_weight, 4)}</td>
-                            <td className="text-right font-mono">{Number(exIt.deduction_percent || 0).toFixed(1)}%</td>
-                            <td className="text-right font-mono">{formatMetalRate(exIt.exchange_rate)}</td>
-                            <td className="text-right font-mono font-bold text-emerald-700">
-                              {formatCurrency(exIt.exchange_value)}
-                            </td>
-                          </tr>
-                        ))}
+                        {(createdInvoice.items || []).map((it, idx) => {
+                          const gross = Number(it.gross_weight || 0);
+                          const less = Number(it.less_weight || 0);
+                          const net = Number(it.net_weight || Math.max(0, gross - less));
+                          const tunch = Number(it.tunch_percent || 0);
+                          const pureFine = Number(it.fine_weight || (net * tunch) / 100);
+                          const metalRate = Number(it.rate_per_gram ?? it.metal_rate ?? 0);
+                          const wastagePercent = Number(it.wastage_percent ?? 0);
+                          const badlaPercent = Number(it.badla_percent ?? 0);
+                          const totalAdditionPercent = wastagePercent + badlaPercent;
+                          const wastageWeight = Number(it.wastage_weight ?? (totalAdditionPercent !== 0 ? (pureFine * totalAdditionPercent) / 100 : 0));
+                          const billableFine = Number(it.billable_weight ?? (totalAdditionPercent !== 0 ? Math.max(0, pureFine + wastageWeight) : pureFine));
+                          const makingCharge = Number(it.making_charge ?? it.making_charges ?? 0);
+                          const metalValue = Number(it.metal_value ?? (billableFine * metalRate));
+                          const itemTotal = Number(it.item_amount ?? it.item_total ?? (metalValue + makingCharge));
+
+                          return (
+                            <tr key={it.id || idx}>
+                              <td style={{ textAlign: 'center' }} className="font-mono">{idx + 1}</td>
+                              {showPrintTagCol && (
+                                <td className="font-mono text-xs font-semibold whitespace-nowrap">{it.tag_no || '-'}</td>
+                              )}
+                              <td>
+                                <div className="font-semibold leading-tight">{it.item_name || 'Jewellery Item'}</div>
+                                {it.metal_name && (
+                                  <div className="text-[10px] text-muted">{it.metal_name}</div>
+                                )}
+                              </td>
+                              <td className="whitespace-nowrap">
+                                <div>{it.purity_name || '22K (916)'}</div>
+                                {it.huid && (
+                                  <div className="text-[10px] text-muted font-mono">HUID: {it.huid}</div>
+                                )}
+                              </td>
+                              <td className="text-right font-mono whitespace-nowrap">{formatWeight(gross, 3)}</td>
+                              {invoiceColumns.show_less_weight && (
+                                <td className="text-right font-mono text-muted whitespace-nowrap">{formatWeight(less, 3)}</td>
+                              )}
+                              {invoiceColumns.show_net_weight && (
+                                <td className="text-right font-mono font-bold whitespace-nowrap">{formatWeight(net, 3)}</td>
+                              )}
+                              {invoiceColumns.show_tunch && (
+                                <td className="text-right font-mono whitespace-nowrap">{tunch > 0 ? `${tunch.toFixed(2)}%` : '-'}</td>
+                              )}
+                              {invoiceColumns.show_fine_weight && (
+                                <td className="text-right font-mono whitespace-nowrap">
+                                  <div className="font-semibold">{billableFine > 0 ? formatFineWeight(billableFine, 4) : '-'}</div>
+                                </td>
+                              )}
+                              {hasBadlaWaste && (
+                                <td className="text-right font-mono text-xs whitespace-nowrap">
+                                  {totalAdditionPercent !== 0 ? (
+                                    <div>
+                                      <div>{wastageWeight > 0 ? '+' : ''}{formatWeight(wastageWeight, 3)}g</div>
+                                      <div className="text-[10px] text-muted">
+                                        {badlaPercent !== 0 && <span>B:{badlaPercent > 0 ? '+' : ''}{badlaPercent}% </span>}
+                                        {wastagePercent !== 0 && <span>W:{wastagePercent > 0 ? '+' : ''}{wastagePercent}%</span>}
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <span className="text-muted">-</span>
+                                  )}
+                                </td>
+                              )}
+                              <td className="text-right font-mono whitespace-nowrap">{formatMetalRate(metalRate)}</td>
+                              {invoiceColumns.show_making_charge && (
+                                <td className="text-right font-mono whitespace-nowrap">
+                                  <div className="font-semibold">{formatCurrency(makingCharge, false)}</div>
+                                  {it.making_rate ? (
+                                    <div className="text-[10px] text-muted">
+                                      {it.making_charge_type === 'PER_PIECE'
+                                        ? `(${it.pieces || 1} pc @ ₹${it.making_rate})`
+                                        : it.making_charge_type === 'FIXED'
+                                        ? '(Fix)'
+                                        : it.making_charge_type === 'PERCENTAGE'
+                                        ? `(${it.making_rate}%)`
+                                        : `(@₹${it.making_rate}/g)`}
+                                    </div>
+                                  ) : null}
+                                </td>
+                              )}
+                              <td className="text-right font-mono font-bold whitespace-nowrap">
+                                {formatCurrency(itemTotal)}
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                       <tfoot>
                         <tr className="print-totals-row">
-                          <td colSpan={4} className="text-right font-bold uppercase">Total Old Metal Deducted:</td>
-                          <td className="text-right font-mono font-bold">{formatWeight(createdInvoice.exchange.total_gross_weight, 3)}</td>
-                          <td className="text-right font-mono text-muted">{formatWeight(createdInvoice.exchange.total_less_weight, 3)}</td>
-                          <td className="text-right font-mono font-bold">{formatWeight(createdInvoice.exchange.total_net_weight, 3)}</td>
+                          <td colSpan={printLeadColSpan} className="text-right font-bold uppercase whitespace-nowrap">
+                            Totals ({createdInvoice.items?.length || 0} item{createdInvoice.items?.length === 1 ? '' : 's'}):
+                          </td>
+                          <td className="text-right font-mono font-bold whitespace-nowrap">
+                            {formatWeight(
+                              (createdInvoice.items || []).reduce((acc, it) => acc + Number(it.gross_weight || 0), 0),
+                              3
+                            )}
+                          </td>
+                          {invoiceColumns.show_less_weight && (
+                            <td className="text-right font-mono font-bold text-muted whitespace-nowrap">
+                              {formatWeight(
+                                (createdInvoice.items || []).reduce((acc, it) => acc + Number(it.less_weight || 0), 0),
+                                3
+                              )}
+                            </td>
+                          )}
+                          {invoiceColumns.show_net_weight && (
+                            <td className="text-right font-mono font-bold text-amber-700 whitespace-nowrap">
+                              {formatWeight(
+                                (createdInvoice.items || []).reduce((acc, it) => acc + Number(it.net_weight || (Math.max(0, Number(it.gross_weight || 0) - Number(it.less_weight || 0)))), 0),
+                                3
+                              )}
+                            </td>
+                          )}
+                          {invoiceColumns.show_tunch && <td></td>}
+                          {invoiceColumns.show_fine_weight && (
+                            <td className="text-right font-mono font-bold text-muted whitespace-nowrap">
+                              <div>
+                                {formatFineWeight(
+                                  (createdInvoice.items || []).reduce((acc, it) => {
+                                    const gross = Number(it.gross_weight || 0);
+                                    const less = Number(it.less_weight || 0);
+                                    const net = Number(it.net_weight || Math.max(0, gross - less));
+                                    const tunch = Number(it.tunch_percent || 0);
+                                    const pureFine = Number(it.fine_weight || (net * tunch) / 100);
+                                    const badlaPercent = Number(it.badla_percent ?? 0);
+                                    const wastagePercent = Number(it.wastage_percent ?? 0);
+                                    const totalAdditionPercent = badlaPercent + wastagePercent;
+                                    const additionWeight = Number(it.wastage_weight ?? ((pureFine * totalAdditionPercent) / 100));
+                                    return acc + Number(it.billable_weight ?? (totalAdditionPercent !== 0 ? Math.max(0, pureFine + additionWeight) : pureFine));
+                                  }, 0),
+                                  4
+                                )}
+                              </div>
+                            </td>
+                          )}
+                          {hasBadlaWaste && <td></td>}
                           <td></td>
-                          <td className="text-right font-mono font-bold">{formatFineWeight(createdInvoice.exchange.total_fine_weight, 4)}</td>
-                          <td></td>
-                          <td></td>
-                          <td className="text-right font-mono font-bold text-emerald-700">
-                            − {formatCurrency(createdInvoice.exchange.total_exchange_value)}
+                          {invoiceColumns.show_making_charge && (
+                            <td className="text-right font-mono font-bold whitespace-nowrap">
+                              {formatCurrency(
+                                (createdInvoice.items || []).reduce((acc, it) => acc + Number(it.making_charge ?? it.making_charges ?? 0), 0)
+                              )}
+                            </td>
+                          )}
+                          <td className="text-right font-mono font-bold text-base text-amber-800 whitespace-nowrap">
+                            {formatCurrency(
+                              (createdInvoice.items || []).reduce((acc, it) => {
+                                const metalRate = Number(it.rate_per_gram ?? it.metal_rate ?? 0);
+                                const makingCharge = Number(it.making_charge ?? it.making_charges ?? 0);
+                                const tunch = Number(it.tunch_percent || 0);
+                                const net = Number(it.net_weight || 0);
+                                const fine = Number(it.fine_weight || (net * tunch) / 100);
+                                const metalValue = Number(it.metal_value ?? (fine * metalRate));
+                                return acc + Number(it.item_amount ?? it.item_total ?? (metalValue + makingCharge));
+                              }, 0)
+                            )}
                           </td>
                         </tr>
                       </tfoot>
                     </table>
                   </div>
-                </div>
-              )}
+                );
+              })()}
+
+              {/* Customer Scrap / Old Metal Exchange Table (If any) */}
+              {createdInvoice.exchange && createdInvoice.exchange.items && createdInvoice.exchange.items.length > 0 && (() => {
+                const hasRealExchTags = (createdInvoice.exchange.items || []).some(
+                  (exIt: any) => exIt.tag_no && exIt.tag_no.trim() !== '' && !/^TAG-\d+-\d+$/i.test(exIt.tag_no.trim())
+                );
+                const showPrintExchTagCol = invoiceColumns.show_tag_no && hasRealExchTags;
+                const printExchLeadColSpan = 1 + (showPrintExchTagCol ? 1 : 0) + 1 + 1; // # + (Tag) + Name + Purity
+
+                return (
+                  <div className="tax-invoice-exchange-section">
+                    <div className="exchange-section-title">
+                      <span>Customer Old Scrap / Metal Exchange Return</span>
+                      <span className="font-mono text-xs text-muted">
+                        Exchange Ref: {createdInvoice.exchange.exchange_number}
+                      </span>
+                    </div>
+                    <div className="print-table-wrapper">
+                      <table className="print-items-table">
+                        <thead>
+                          <tr>
+                            <th style={{ width: '30px', textAlign: 'center' }}>#</th>
+                            {showPrintExchTagCol && <th>Tag #</th>}
+                            <th>Old Scrap Item</th>
+                            <th>Metal & Purity</th>
+                            <th className="text-right">Gross (g)</th>
+                            {invoiceColumns.show_less_weight && <th className="text-right">Less (g)</th>}
+                            {invoiceColumns.show_net_weight && <th className="text-right">Net (g)</th>}
+                            {invoiceColumns.show_tunch && <th className="text-right">Tunch %</th>}
+                            {invoiceColumns.show_fine_weight && <th className="text-right">Fine Wt</th>}
+                            {invoiceColumns.show_making_charge && <th className="text-right">Deduct %</th>}
+                            <th className="text-right">Ex. Rate</th>
+                            <th className="text-right">Credit / Jama Value (₹ - जमा)</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {createdInvoice.exchange.items.map((exIt: any, exIdx: number) => (
+                            <tr key={exIt.id || exIdx}>
+                              <td style={{ textAlign: 'center' }} className="font-mono">{exIdx + 1}</td>
+                              {showPrintExchTagCol && <td className="font-mono text-xs">{exIt.tag_no || '-'}</td>}
+                              <td className="font-semibold">{exIt.item_name || 'Customer Scrap'}</td>
+                              <td>{exIt.metal_name || 'Gold'} {exIt.purity_name || ''}</td>
+                              <td className="text-right font-mono">{formatWeight(exIt.gross_weight, 3)}</td>
+                              {invoiceColumns.show_less_weight && (
+                                <td className="text-right font-mono text-muted">{formatWeight(exIt.less_weight, 3)}</td>
+                              )}
+                              {invoiceColumns.show_net_weight && (
+                                <td className="text-right font-mono font-bold">{formatWeight(exIt.net_weight, 3)}</td>
+                              )}
+                              {invoiceColumns.show_tunch && (
+                                <td className="text-right font-mono">{Number(exIt.tunch_percent || 0).toFixed(2)}%</td>
+                              )}
+                              {invoiceColumns.show_fine_weight && (
+                                <td className="text-right font-mono">{formatFineWeight(exIt.fine_weight, 4)}</td>
+                              )}
+                              {invoiceColumns.show_making_charge && (
+                                <td className="text-right font-mono">{Number(exIt.deduction_percent || 0).toFixed(1)}%</td>
+                              )}
+                              <td className="text-right font-mono">{formatMetalRate(exIt.exchange_rate)}</td>
+                              <td className="text-right font-mono font-bold text-emerald-700">
+                                {formatCurrency(exIt.exchange_value)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot>
+                          <tr className="print-totals-row">
+                            <td colSpan={printExchLeadColSpan} className="text-right font-bold uppercase">Total Old Metal Deducted:</td>
+                            <td className="text-right font-mono font-bold">{formatWeight(createdInvoice.exchange.total_gross_weight, 3)}</td>
+                            {invoiceColumns.show_less_weight && (
+                              <td className="text-right font-mono text-muted">{formatWeight(createdInvoice.exchange.total_less_weight, 3)}</td>
+                            )}
+                            {invoiceColumns.show_net_weight && (
+                              <td className="text-right font-mono font-bold">{formatWeight(createdInvoice.exchange.total_net_weight, 3)}</td>
+                            )}
+                            {invoiceColumns.show_tunch && <td></td>}
+                            {invoiceColumns.show_fine_weight && (
+                              <td className="text-right font-mono font-bold">{formatFineWeight(createdInvoice.exchange.total_fine_weight, 4)}</td>
+                            )}
+                            {invoiceColumns.show_making_charge && <td></td>}
+                            <td></td>
+                            <td className="text-right font-mono font-bold text-emerald-700">
+                              − {formatCurrency(createdInvoice.exchange.total_exchange_value)}
+                            </td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Bottom Split Section: Payment Breakdown, Notes, Signatures & Ledger */}
               <div className="tax-invoice-bottom-grid">

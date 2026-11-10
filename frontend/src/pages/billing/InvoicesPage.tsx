@@ -91,7 +91,13 @@ export const InvoicesPage: React.FC = () => {
   // View Invoice Details
   const handleViewInvoice = async (id: string) => {
     try {
-      const details = await salesApi.getDetails(id);
+      const [details, cols] = await Promise.all([
+        salesApi.getDetails(id),
+        settingsApi.getInvoiceColumns().catch(() => null),
+      ]);
+      if (cols) {
+        setInvoiceColumns(cols);
+      }
       setSelectedInvoice(details);
       setShowDetailModal(true);
     } catch (err: any) {
@@ -470,9 +476,10 @@ export const InvoicesPage: React.FC = () => {
                   <h1 className="tax-invoice-shop-title">
                     {shopProfile?.name || 'JEWEL SUITE DEMO STORE'}
                   </h1>
-                  {shopProfile?.legal_name && (
-                    <p className="tax-invoice-shop-subtitle">{shopProfile.legal_name}</p>
-                  )}
+                  {shopProfile?.legal_name &&
+                    shopProfile.legal_name.trim().toLowerCase() !== (shopProfile?.name || '').trim().toLowerCase() && (
+                      <p className="tax-invoice-shop-subtitle">{shopProfile.legal_name}</p>
+                    )}
                   <p className="tax-invoice-shop-address">
                     {shopProfile?.address ? `${shopProfile.address}, ` : ''}
                     {shopProfile?.city ? `${shopProfile.city}, ` : ''}

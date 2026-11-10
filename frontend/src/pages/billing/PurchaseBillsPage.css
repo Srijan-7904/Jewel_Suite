@@ -1379,4 +1379,206 @@
   color: #f59e0b;
 }
 
+/* ==========================================================================
+   METAL PAYMENT 5-COLUMN ROW & AUTO MODE
+   ========================================================================== */
+.payment-fields-row.is-metal-fields {
+  display: grid;
+  grid-template-columns: 130px 105px 155px 145px 135px 1fr;
+  align-items: flex-start;
+  gap: 0.65rem;
+  width: 100%;
+}
+
+@media (max-width: 1250px) {
+  .payment-fields-row.is-metal-fields {
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  }
+}
+
+.field-block.metal-select-block {
+  min-width: 120px;
+}
+
+.field-block.metal-select-block .metal-type-segmented {
+  width: 100%;
+}
+
+.field-block.metal-select-block .segment-btn {
+  flex: 1;
+  padding: 0.35rem 0.4rem;
+  font-size: 0.72rem;
+}
+
+.field-block.rate-block {
+  min-width: 95px;
+}
+
+.field-block.weight-block {
+  min-width: 145px;
+}
+
+.field-block.purity-block {
+  min-width: 125px;
+}
+
+/* Auto Mode Pill Directly Under Weight */
+.auto-mode-toggle-subrow {
+  display: flex;
+  align-items: center;
+  margin-top: 0.3rem;
+}
+
+.auto-mode-pill-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.22rem 0.55rem;
+  border-radius: 9999px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  cursor: pointer;
+  border: 1px solid var(--border-default, #334155);
+  background: var(--bg-surface, #0f172a);
+  color: var(--text-muted, #94a3b8);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  white-space: nowrap;
+}
+
+.auto-mode-pill-btn:hover {
+  border-color: var(--gold-primary, #d4af37);
+  color: var(--text-main, #f8fafc);
+  transform: translateY(-1px);
+}
+
+.auto-mode-pill-btn.gold-auto.active {
+  background: linear-gradient(135deg, rgba(212, 175, 55, 0.24) 0%, rgba(212, 175, 55, 0.12) 100%);
+  border-color: #d4af37;
+  color: #fbbf24;
+  box-shadow: 0 0 10px rgba(212, 175, 55, 0.3);
+}
+
+.auto-mode-pill-btn.silver-auto.active {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.24) 0%, rgba(239, 68, 68, 0.12) 100%);
+  border-color: #ef4444;
+  color: #fca5a5;
+  box-shadow: 0 0 10px rgba(239, 68, 68, 0.3);
+}
+
+.auto-dot-icon {
+  font-size: 0.75rem;
+  line-height: 1;
+}
+
+/* ==========================================================================
+   SUMMARY NET METAL & RETURN BALANCE TALLY CARD
+   ========================================================================== */
+.summary-metal-tally-card {
+  padding: 0.75rem 1rem;
+  background: #fffdf7;
+  border-bottom: 1px solid var(--border-subtle);
+  border-left: 3px solid var(--gold-primary, #d4af37);
+}
+
+.summary-metal-tally-card .tally-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.tally-cards-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.tally-metal-block {
+  background: var(--bg-surface, #1e293b);
+  border: 1px solid var(--border-subtle, #334155);
+  border-radius: 6px;
+  padding: 0.55rem 0.75rem;
+  transition: all 0.2s ease;
+}
+
+.tally-metal-block.gold-tally {
+  border-color: rgba(212, 175, 55, 0.35);
+  background: linear-gradient(135deg, rgba(212, 175, 55, 0.08) 0%, var(--bg-surface, #1e293b) 100%);
+}
+
+.tally-metal-block.silver-tally {
+  border-color: rgba(148, 163, 184, 0.35);
+  background: linear-gradient(135deg, rgba(148, 163, 184, 0.08) 0%, var(--bg-surface, #1e293b) 100%);
+}
+
+.tally-auto-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 9999px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  cursor: pointer;
+  border: 1px solid var(--border-default, #334155);
+  background: var(--bg-surface, #0f172a);
+  color: var(--text-main, #f8fafc);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.tally-auto-btn:hover {
+  transform: translateY(-1px);
+}
+
+.tally-auto-btn.gold-auto-btn.is-active {
+  background: #d4af37;
+  color: #121317;
+  border-color: #d4af37;
+  box-shadow: 0 0 10px rgba(212, 175, 55, 0.45);
+}
+
+.tally-auto-btn.silver-auto-btn.is-active {
+  background: #ef4444;
+  color: #ffffff;
+  border-color: #ef4444;
+  box-shadow: 0 0 10px rgba(239, 68, 68, 0.45);
+}
+
+.tally-auto-btn .val-preview {
+  font-size: 0.66rem;
+  opacity: 0.9;
+  background: rgba(0, 0, 0, 0.25);
+  padding: 0.05rem 0.3rem;
+  border-radius: 3px;
+}
+
+.tally-equation-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-top: 0.35rem;
+  padding-top: 0.35rem;
+  border-top: 1px dashed var(--border-subtle, rgba(255, 255, 255, 0.08));
+}
+
+.tally-equation-grid .equation-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  line-height: 1.35;
+}
+
+.tally-equation-grid .eq-formula {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.tally-equation-grid .op {
+  color: var(--text-muted, #94a3b8);
+  font-weight: 700;
+  padding: 0 0.1rem;
+}
+
+
 
