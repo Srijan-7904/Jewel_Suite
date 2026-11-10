@@ -3053,8 +3053,30 @@
 
 .tag-stock-badge.in-stock {
   background: rgba(34, 197, 94, 0.15);
-  color: #4ade80;
+  color: #0d8252;
   border: 1px solid rgba(34, 197, 94, 0.4);
+}
+
+.tag-stock-badge.negative-stock {
+  background: rgba(220, 38, 38, 0.12);
+  color: #dc2626;
+  border: 1px solid rgba(220, 38, 38, 0.35);
+  font-weight: 700;
+  letter-spacing: 0.2px;
+}
+
+.negative-stock-header-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #b91c1c;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  padding: 0.12rem 0.55rem;
+  border-radius: 9999px;
+  letter-spacing: 0.2px;
 }
 
 .tag-unlink-btn {

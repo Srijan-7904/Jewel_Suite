@@ -214,9 +214,11 @@ export class SalesService {
           if (!stockItemId) {
             const stock = stockRepository.findByTag(itemInput.tag_no);
             if (stock) {
-              stockItemId = stock.id;
-              if (stock.status !== StockStatus.IN_STOCK) {
-                throw new BadRequestError(`Stock item '${itemInput.tag_no}' is not IN_STOCK (Current status: ${stock.status})`);
+              if (stock.status === StockStatus.IN_STOCK) {
+                stockItemId = stock.id;
+              } else {
+                // Tally Negative Stock Mode: allow direct/negative sale without failing
+                stockItemId = null;
               }
             }
           }
@@ -630,7 +632,7 @@ export class SalesService {
             });
           }
         } else {
-          // If no pre-existing stock item was inwarded, record outward stock item and movement
+          // If no pre-existing stock item was inwarded, record outward negative stock item and movement
           const newStock = stockRepository.create({
             tag_no: item.tag_no || `SALE-${invoice.invoice_number}-${Date.now().toString().slice(-4)}`,
             product_id: '',
@@ -646,11 +648,11 @@ export class SalesService {
             rate_per_gram: item.rate_per_gram,
             metal_value: item.metal_value,
             current_value: item.metal_value,
-            acquisition_type: 'DIRECT_SALE',
+            acquisition_type: 'NEGATIVE_STOCK',
             acquisition_reference: invoice.invoice_number,
             status: StockStatus.SOLD,
             huid: item.huid || null,
-            notes: `Direct counter sale on invoice ${invoice.invoice_number} to ${invoice.customer_name || 'customer'}`,
+            notes: `Negative stock counter sale on invoice ${invoice.invoice_number} to ${invoice.customer_name || 'customer'}`,
           });
 
           salesRepository.updateItemStockId(item.id, newStock.id);
@@ -662,11 +664,11 @@ export class SalesService {
             reference_id: invoice.id,
             from_status: StockStatus.IN_STOCK,
             to_status: StockStatus.SOLD,
-            quantity: 1,
+            quantity: -1,
             gross_weight: item.gross_weight,
             net_weight: item.net_weight,
             fine_weight: item.fine_weight,
-            notes: `Counter sale outward on invoice ${invoice.invoice_number}`,
+            notes: `Tally-style negative stock outward on invoice ${invoice.invoice_number}`,
             created_by: userId || null,
           });
         }

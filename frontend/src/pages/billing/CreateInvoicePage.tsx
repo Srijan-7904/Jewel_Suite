@@ -2909,6 +2909,17 @@ export const CreateInvoicePage: React.FC = () => {
             <Sparkles size={17} className="gold" />
             <h2 className="section-title">Sale Items</h2>
             <span className="item-count-badge font-mono">{saleItems.length} item(s)</span>
+            {(() => {
+              const negCount = saleItems.filter((i) => !i.stock_item_id && Boolean(i.item_name?.trim())).length;
+              if (negCount > 0) {
+                return (
+                  <span className="negative-stock-header-badge" title="Tally Negative Stock: Items not in stock inventory are tracked as Negative Stock">
+                    ⚠️ {negCount} Negative Stock (-{negCount} Pc)
+                  </span>
+                );
+              }
+              return null;
+            })()}
           </div>
           <button
             type="button"
@@ -3042,7 +3053,7 @@ export const CreateInvoicePage: React.FC = () => {
                               placeholder="TAG NO"
                               title="Enter or scan barcode tag"
                             />
-                            {item.stock_item_id && (
+                            {item.stock_item_id ? (
                               <div
                                 className="tag-stock-badge in-stock"
                                 title="Linked to in-stock inventory. Stock will be marked SOLD on invoice finalization."
@@ -3060,7 +3071,14 @@ export const CreateInvoicePage: React.FC = () => {
                                   ✕
                                 </button>
                               </div>
-                            )}
+                            ) : item.tag_no?.trim() ? (
+                              <div
+                                className="tag-stock-badge negative-stock"
+                                title="Tag not in inward stock. Billed as Negative Stock like in Tally (-1 Pc)."
+                              >
+                                <span>⚠️ Neg (-1 Pc)</span>
+                              </div>
+                            ) : null}
                           </div>
                         </td>
                       )}
@@ -3090,7 +3108,7 @@ export const CreateInvoicePage: React.FC = () => {
                             title="Search & select in-stock jewellery item or enter custom name"
                             required
                           />
-                          {item.stock_item_id && (
+                          {item.stock_item_id ? (
                             <div
                               className="tag-stock-badge in-stock"
                               title="Linked to in-stock inventory item. Stock will be marked SOLD on invoice finalization."
@@ -3108,7 +3126,14 @@ export const CreateInvoicePage: React.FC = () => {
                                 ✕
                               </button>
                             </div>
-                          )}
+                          ) : item.item_name?.trim() ? (
+                            <div
+                              className="tag-stock-badge negative-stock"
+                              title="Item is not in stock inventory. Billing as Negative Stock (-1 Pc) like in Tally."
+                            >
+                              <span>⚠️ Negative Stock (-1 Pc | -{Number(item.gross_weight || 0).toFixed(3)}g)</span>
+                            </div>
+                          ) : null}
                         </div>
 
                         {/* In-Stock Autocomplete Suggestions Flyout rendered as Portal so it floats outside any container boundaries */}

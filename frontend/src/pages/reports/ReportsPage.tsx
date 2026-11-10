@@ -853,15 +853,54 @@ export const ReportsPage: React.FC = () => {
           { header: 'Product', render: (r) => <span className="font-bold">{r.productName}</span> },
           { header: 'Category', render: (r) => <span className="text-muted">{r.categoryName}</span> },
           { header: 'Metal / Purity', render: (r) => <span>{r.metalName} ({r.purityName})</span> },
-          { header: 'Gross Wt', render: (r) => <span className="font-mono">{fmtWt(r.grossWeight)}</span>, align: 'right' },
-          { header: 'Net Wt', render: (r) => <span className="font-mono font-bold text-gold">{fmtWt(r.netWeight)}</span>, align: 'right' },
+          {
+            header: 'Gross Wt',
+            render: (r) => (
+              <span className={`font-mono ${Number(r.grossWeight) < 0 ? 'text-danger font-bold' : ''}`}>
+                {Number(r.grossWeight) < 0 ? `-${fmtWt(Math.abs(r.grossWeight))}` : fmtWt(r.grossWeight)}
+              </span>
+            ),
+            align: 'right',
+          },
+          {
+            header: 'Net Wt',
+            render: (r) => (
+              <span className={`font-mono font-bold ${Number(r.netWeight) < 0 ? 'text-danger' : 'text-gold'}`}>
+                {Number(r.netWeight) < 0 ? `-${fmtWt(Math.abs(r.netWeight))}` : fmtWt(r.netWeight)}
+              </span>
+            ),
+            align: 'right',
+          },
           { header: 'Tunch %', render: (r) => <span className="font-mono">{r.tunchPercent}%</span>, align: 'right' },
-          { header: 'Fine Wt', render: (r) => <span className="font-mono text-muted">{fmtWt(r.fineWeight)}</span>, align: 'right' },
+          {
+            header: 'Fine Wt',
+            render: (r) => (
+              <span className={`font-mono ${Number(r.fineWeight) < 0 ? 'text-danger font-bold' : 'text-muted'}`}>
+                {Number(r.fineWeight) < 0 ? `-${fmtWt(Math.abs(r.fineWeight))}` : fmtWt(r.fineWeight)}
+              </span>
+            ),
+            align: 'right',
+          },
           { header: 'Rate/g', render: (r) => <span className="font-mono">{fmt(r.ratePerGram)}</span>, align: 'right' },
-          { header: 'Stock Value', render: (r) => <span className="font-mono font-bold text-green">{fmt(r.currentValue)}</span>, align: 'right' },
+          {
+            header: 'Stock Value',
+            render: (r) => (
+              <span className={`font-mono font-bold ${Number(r.netWeight) < 0 ? 'text-danger' : 'text-green'}`}>
+                {Number(r.netWeight) < 0 ? `-₹${Math.abs(r.currentValue).toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : fmt(r.currentValue)}
+              </span>
+            ),
+            align: 'right',
+          },
           {
             header: 'Status',
-            render: (r) => <span className={`status-badge ${r.status.toLowerCase()}`}>{r.status}</span>,
+            render: (r) =>
+              r.status === 'NEGATIVE_STOCK' ? (
+                <span className="status-badge negative-stock" style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fca5a5', fontWeight: 700, padding: '2px 8px', borderRadius: '4px', fontSize: '10px' }}>
+                  ⚠️ NEGATIVE (-1 PC)
+                </span>
+              ) : (
+                <span className={`status-badge ${r.status.toLowerCase()}`}>{r.status}</span>
+              ),
             align: 'center',
           },
         ];

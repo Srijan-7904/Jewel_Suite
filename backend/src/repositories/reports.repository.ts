@@ -602,12 +602,15 @@ export class ReportsRepository {
     const conditions: string[] = [];
     const params: any[] = [];
 
-    // Default to IN_STOCK if not specified
-    if (filter.status) {
+    // Handle status / negative stock filtering
+    if (filter.status === 'NEGATIVE_STOCK') {
+      conditions.push("(stk.acquisition_type = 'NEGATIVE_STOCK' OR stk.acquisition_type = 'DIRECT_SALE')");
+    } else if (filter.status && filter.status !== 'ALL') {
       conditions.push('stk.status = ?');
       params.push(filter.status);
-    } else {
-      conditions.push("stk.status = 'IN_STOCK'");
+    } else if (!filter.status) {
+      // Default: show both In-Stock and Negative Stock items
+      conditions.push("(stk.status = 'IN_STOCK' OR stk.acquisition_type = 'NEGATIVE_STOCK')");
     }
 
     if (filter.metalId) {
@@ -623,9 +626,9 @@ export class ReportsRepository {
       params.push(filter.categoryId);
     }
     if (filter.search) {
-      conditions.push('(stk.tag_no LIKE ? OR p.name LIKE ? OR stk.huid LIKE ?)');
+      conditions.push('(stk.tag_no LIKE ? OR p.name LIKE ? OR stk.notes LIKE ? OR stk.huid LIKE ?)');
       const term = `%${filter.search}%`;
-      params.push(term, term, term);
+      params.push(term, term, term, term);
     }
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -633,7 +636,7 @@ export class ReportsRepository {
     const countSql = `
       SELECT COUNT(*) as cnt 
       FROM stock_items stk
-      JOIN products p ON p.id = stk.product_id
+      LEFT JOIN products p ON p.id = stk.product_id
       ${whereClause}
     `;
     const countRow = db.prepare(countSql).get(...params) as { cnt: number };
@@ -647,24 +650,24 @@ export class ReportsRepository {
       SELECT 
         stk.id,
         stk.tag_no as tagNo,
-        p.name as productName,
-        cat.name as categoryName,
+        COALESCE(p.name, stk.notes, stk.tag_no, 'Direct Sale Item') as productName,
+        COALESCE(cat.name, 'General') as categoryName,
         m.name as metalName,
         mp.name as purityName,
-        stk.gross_weight as grossWeight,
+        CASE WHEN stk.acquisition_type = 'NEGATIVE_STOCK' THEN -stk.gross_weight ELSE stk.gross_weight END as grossWeight,
         stk.less_weight as lessWeight,
-        stk.net_weight as netWeight,
+        CASE WHEN stk.acquisition_type = 'NEGATIVE_STOCK' THEN -stk.net_weight ELSE stk.net_weight END as netWeight,
         stk.tunch_percent as tunchPercent,
-        stk.fine_weight as fineWeight,
+        CASE WHEN stk.acquisition_type = 'NEGATIVE_STOCK' THEN -stk.fine_weight ELSE stk.fine_weight END as fineWeight,
         stk.wastage_percent as wastagePercent,
         stk.making_charge as makingCharge,
         stk.rate_per_gram as ratePerGram,
         COALESCE(stk.current_value, stk.metal_value, 0) as currentValue,
-        stk.status,
+        CASE WHEN stk.acquisition_type = 'NEGATIVE_STOCK' THEN 'NEGATIVE_STOCK' ELSE stk.status END as status,
         stk.huid
       FROM stock_items stk
-      JOIN products p ON p.id = stk.product_id
-      JOIN categories cat ON cat.id = p.category_id
+      LEFT JOIN products p ON p.id = stk.product_id
+      LEFT JOIN categories cat ON cat.id = p.category_id
       JOIN metals m ON m.id = stk.metal_id
       JOIN metal_purities mp ON mp.id = stk.purity_id
       ${whereClause}
