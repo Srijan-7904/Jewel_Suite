@@ -31,7 +31,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     const initializeAuth = async () => {
-      await refreshHealth();
+      refreshHealth().catch(() => {});
       const token = getStoredToken();
       if (!token) {
         setIsLoading(false);
@@ -41,9 +41,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       try {
         const userData = await authApi.getMe();
         setUser(userData);
-      } catch (err) {
-        console.warn('[Session expired or invalid]', err);
-        setUser(null);
+        if (typeof window !== 'undefined') {
+          sessionStorage.setItem('jewel_suite_user_data', JSON.stringify(userData));
+        }
+      } catch (err: any) {
+        const isAuthError = err?.statusCode === 401 || err?.status === 401 || err?.code === 'UNAUTHORIZED';
+        if (isAuthError) {
+          console.warn('[Session expired or invalid]', err);
+          if (typeof window !== 'undefined') {
+            sessionStorage.removeItem('jewel_suite_user_data');
+          }
+          setUser(null);
+        } else {
+          // If offline or temporary network hitch, restore cached user to keep session continuous
+          if (typeof window !== 'undefined') {
+            const cached = sessionStorage.getItem('jewel_suite_user_data');
+            if (cached) {
+              try {
+                setUser(JSON.parse(cached));
+              } catch {
+                setUser(null);
+              }
+            } else {
+              setUser(null);
+            }
+          } else {
+            setUser(null);
+          }
+        }
       } finally {
         setIsLoading(false);
       }
@@ -55,10 +80,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const login = async (credentials: { username: string; password: string }) => {
     const session = await authApi.login(credentials);
     setUser(session.user);
-    await refreshHealth();
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('jewel_suite_user_data', JSON.stringify(session.user));
+    }
+    refreshHealth().catch(() => {});
   };
 
   const logout = async () => {
+    if (typeof window !== 'undefined') {
+      sessionStorage.removeItem('jewel_suite_user_data');
+    }
     await authApi.logout();
     setUser(null);
   };

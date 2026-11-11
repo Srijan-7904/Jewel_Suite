@@ -110,7 +110,7 @@ export const config = {
   port: parseInt(process.env.PORT || '4500', 10),
   host: process.env.HOST || (isDev ? '127.0.0.1' : '0.0.0.0'),
   jwtSecret: process.env.JWT_SECRET || 'jewel_suite_offline_default_secret_key_2026',
-  jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
+  jwtExpiresIn: process.env.JWT_EXPIRES_IN || '365d',
   dbPath: resolveDbPath(),
   backupDir,
   dataDir,

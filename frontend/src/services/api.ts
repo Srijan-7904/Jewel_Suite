@@ -1,17 +1,36 @@
 import { ApiResponse } from '../types';
 
 const TOKEN_KEY = 'jewel_suite_auth_token';
+const SESSION_ACTIVE_KEY = 'jewel_suite_session_active';
 
 export function getStoredToken(): string | null {
-  return localStorage.getItem(TOKEN_KEY);
+  // If software was closed and reopened afresh, sessionStorage will be empty.
+  // In that case, clear persisted token so user must log in on application launch (.exe / window).
+  if (typeof window !== 'undefined' && !sessionStorage.getItem(SESSION_ACTIVE_KEY)) {
+    localStorage.removeItem(TOKEN_KEY);
+    return null;
+  }
+  return (
+    (typeof window !== 'undefined' && sessionStorage.getItem(TOKEN_KEY)) ||
+    (typeof window !== 'undefined' && localStorage.getItem(TOKEN_KEY)) ||
+    null
+  );
 }
 
 export function setStoredToken(token: string): void {
-  localStorage.setItem(TOKEN_KEY, token);
+  if (typeof window !== 'undefined') {
+    sessionStorage.setItem(SESSION_ACTIVE_KEY, '1');
+    sessionStorage.setItem(TOKEN_KEY, token);
+    localStorage.setItem(TOKEN_KEY, token);
+  }
 }
 
 export function removeStoredToken(): void {
-  localStorage.removeItem(TOKEN_KEY);
+  if (typeof window !== 'undefined') {
+    sessionStorage.removeItem(SESSION_ACTIVE_KEY);
+    sessionStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(TOKEN_KEY);
+  }
 }
 
 export class ApiClientError extends Error {
