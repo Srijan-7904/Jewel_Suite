@@ -3,8 +3,6 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
   settingsApi,
   ShopProfile,
-  GeneralSettings,
-  FinancialYearSettings,
   BillingSettings,
   GSTSettings,
   PaymentModeConfig,
@@ -56,7 +54,6 @@ import {
 import './SettingsPage.css';
 
 type SettingsTab =
-  | 'general'
   | 'shop'
   | 'billing'
   | 'gst'
@@ -78,7 +75,7 @@ export const SettingsPage: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState<SettingsTab>(() => {
     const validTabs: SettingsTab[] = [
-      'general', 'shop', 'billing', 'gst', 'payment_modes',
+      'shop', 'billing', 'gst', 'payment_modes',
       'metal_rates', 'printing', 'users', 'security', 'amc', 'about'
     ];
     return urlTab && validTabs.includes(urlTab) ? urlTab : 'shop';
@@ -119,8 +116,6 @@ export const SettingsPage: React.FC = () => {
 
   // Section States
   const [shop, setShop] = useState<ShopProfile | null>(null);
-  const [general, setGeneral] = useState<GeneralSettings | null>(null);
-  const [fy, setFy] = useState<FinancialYearSettings | null>(null);
   const [billing, setBilling] = useState<BillingSettings | null>(null);
   const [gst, setGst] = useState<GSTSettings | null>(null);
   const [paymentModes, setPaymentModes] = useState<PaymentModeConfig[]>([]);
@@ -196,7 +191,7 @@ export const SettingsPage: React.FC = () => {
 
   useEffect(() => {
     const validTabs: SettingsTab[] = [
-      'general', 'shop', 'billing', 'gst', 'payment_modes',
+      'shop', 'billing', 'gst', 'payment_modes',
       'metal_rates', 'printing', 'users', 'security', 'amc', 'about'
     ];
     if (urlTab && validTabs.includes(urlTab) && urlTab !== activeTab) {
@@ -209,8 +204,6 @@ export const SettingsPage: React.FC = () => {
     try {
       const [
         shopData,
-        generalData,
-        fyData,
         billingData,
         gstData,
         pmData,
@@ -223,14 +216,6 @@ export const SettingsPage: React.FC = () => {
       ] = await Promise.all([
         settingsApi.getShopProfile().catch((e) => {
           console.warn('Failed to load shop profile:', e);
-          return null;
-        }),
-        settingsApi.getGeneral().catch((e) => {
-          console.warn('Failed to load general settings:', e);
-          return null;
-        }),
-        settingsApi.getFinancialYear().catch((e) => {
-          console.warn('Failed to load financial year:', e);
           return null;
         }),
         settingsApi.getBilling().catch((e) => {
@@ -297,29 +282,6 @@ export const SettingsPage: React.FC = () => {
           upi_id: '',
           logo_path: null,
           updated_at: new Date().toISOString(),
-        }
-      );
-
-      setGeneral(
-        generalData || {
-          currency_symbol: '₹',
-          currency_code: 'INR',
-          date_format: 'DD/MM/YYYY',
-          time_format: '12h',
-          weight_decimals: 3,
-          rate_decimals: 2,
-          amount_decimals: 2,
-          default_country: 'India',
-          default_state: 'Maharashtra',
-          default_city: 'Mumbai',
-        }
-      );
-
-      setFy(
-        fyData || {
-          current_fy: '2026-27',
-          start_date: '2026-04-01',
-          end_date: '2027-03-31',
         }
       );
 
@@ -491,26 +453,6 @@ export const SettingsPage: React.FC = () => {
       }
     };
     reader.readAsDataURL(file);
-  };
-
-  // Save General & FY
-  const handleSaveGeneral = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!general || !fy) return;
-    setSaving(true);
-    try {
-      const [updatedGen, updatedFy] = await Promise.all([
-        settingsApi.updateGeneral(general),
-        settingsApi.updateFinancialYear(fy),
-      ]);
-      setGeneral(updatedGen);
-      setFy(updatedFy);
-      showNotification('success', 'General & Financial Year settings saved successfully');
-    } catch (err: any) {
-      showNotification('error', err.message || 'Failed to update general settings');
-    } finally {
-      setSaving(false);
-    }
   };
 
   // Save Billing & Sequences
@@ -1260,15 +1202,6 @@ export const SettingsPage: React.FC = () => {
 
             <button
               type="button"
-              className={`tab-btn ${activeTab === 'general' ? 'active' : ''}`}
-              onClick={() => handleTabChange('general')}
-            >
-              <Sliders size={18} />
-              <span>General & FY</span>
-            </button>
-
-            <button
-              type="button"
               className={`tab-btn ${activeTab === 'billing' ? 'active' : ''}`}
               onClick={() => handleTabChange('billing')}
             >
@@ -1783,140 +1716,6 @@ export const SettingsPage: React.FC = () => {
                   })}
                 </div>
               </div>
-            </div>
-          )}
-
-          {/* TAB 2: GENERAL & FY */}
-          {activeTab === 'general' && general && fy && (
-            <div className="settings-card">
-              <div className="card-header">
-                <div>
-                  <h3 className="card-title font-serif">General Parameters & Financial Year</h3>
-                  <p className="card-desc">Formatting rules, precision decimals, and accounting calendar.</p>
-                </div>
-              </div>
-
-              <form onSubmit={handleSaveGeneral} className="settings-form">
-                <div className="form-grid-3">
-                  <div className="form-group">
-                    <label>Currency Symbol</label>
-                    <input
-                      type="text"
-                      className="form-control font-mono"
-                      value={general.currency_symbol}
-                      onChange={(e) => setGeneral({ ...general, currency_symbol: e.target.value })}
-                    />
-                  </div>
-
-                  <div className="form-group">
-                    <label>Currency Code</label>
-                    <input
-                      type="text"
-                      className="form-control font-mono uppercase"
-                      value={general.currency_code}
-                      onChange={(e) => setGeneral({ ...general, currency_code: e.target.value.toUpperCase() })}
-                    />
-                  </div>
-
-                  <div className="form-group">
-                    <label>Date Format</label>
-                    <select
-                      className="form-control"
-                      value={general.date_format}
-                      onChange={(e) => setGeneral({ ...general, date_format: e.target.value })}
-                    >
-                      <option value="DD/MM/YYYY">DD/MM/YYYY (Indian Standard)</option>
-                      <option value="YYYY-MM-DD">YYYY-MM-DD (ISO Format)</option>
-                      <option value="DD-MMM-YYYY">DD-MMM-YYYY (e.g. 04-Oct-2026)</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="section-divider" />
-                <h4 className="subheading font-serif">Jewellery Precision Decimals</h4>
-
-                <div className="form-grid-3">
-                  <div className="form-group">
-                    <label>Weight Decimal Places (Grams)</label>
-                    <input
-                      type="number"
-                      min={1}
-                      max={4}
-                      className="form-control font-mono"
-                      value={general.weight_decimals}
-                      onChange={(e) => setGeneral({ ...general, weight_decimals: parseInt(e.target.value, 10) || 3 })}
-                    />
-                    <small className="form-hint">Standard jewellery scale: 3 decimals (e.g. 12.450 g)</small>
-                  </div>
-
-                  <div className="form-group">
-                    <label>Rate Decimal Places (₹/g)</label>
-                    <input
-                      type="number"
-                      min={0}
-                      max={4}
-                      className="form-control font-mono"
-                      value={general.rate_decimals}
-                      onChange={(e) => setGeneral({ ...general, rate_decimals: parseInt(e.target.value, 10) || 2 })}
-                    />
-                  </div>
-
-                  <div className="form-group">
-                    <label>Amount Decimal Places</label>
-                    <input
-                      type="number"
-                      min={0}
-                      max={2}
-                      className="form-control font-mono"
-                      value={general.amount_decimals}
-                      onChange={(e) => setGeneral({ ...general, amount_decimals: parseInt(e.target.value, 10) || 2 })}
-                    />
-                  </div>
-                </div>
-
-                <div className="section-divider" />
-                <h4 className="subheading font-serif">Financial Year (FY) Definition</h4>
-
-                <div className="form-grid-3">
-                  <div className="form-group">
-                    <label>Current Financial Year Label</label>
-                    <input
-                      type="text"
-                      className="form-control font-mono"
-                      value={fy.current_fy}
-                      onChange={(e) => setFy({ ...fy, current_fy: e.target.value })}
-                      placeholder="2026-27"
-                    />
-                  </div>
-
-                  <div className="form-group">
-                    <label>FY Start Date</label>
-                    <input
-                      type="date"
-                      className="form-control"
-                      value={fy.start_date}
-                      onChange={(e) => setFy({ ...fy, start_date: e.target.value })}
-                    />
-                  </div>
-
-                  <div className="form-group">
-                    <label>FY End Date</label>
-                    <input
-                      type="date"
-                      className="form-control"
-                      value={fy.end_date}
-                      onChange={(e) => setFy({ ...fy, end_date: e.target.value })}
-                    />
-                  </div>
-                </div>
-
-                <div className="form-actions">
-                  <button type="submit" className="btn btn-primary" disabled={saving}>
-                    <Save size={16} />
-                    <span>{saving ? 'Saving...' : 'Save General Settings'}</span>
-                  </button>
-                </div>
-              </form>
             </div>
           )}
 
