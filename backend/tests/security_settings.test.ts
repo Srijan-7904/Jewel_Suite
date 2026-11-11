@@ -137,3 +137,4 @@ describe('Store Configuration Security, Credentials & Pin Verification Tests', (
     }, admin.id)).rejects.toThrow('New login password must be at least 6 characters long');
   });
 });
+

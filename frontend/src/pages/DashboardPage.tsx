@@ -46,16 +46,11 @@ export const DashboardPage: React.FC = () => {
   const [finance, setFinance] = useState<FinanceSummary | null>(null);
   const [reportMetrics, setReportMetrics] = useState<DashboardMetricsData | null>(null);
 
-  // Privacy / Counter Display Mode Toggle (Hand-drawn: "Dashboard [On/Off] [********]")
-  const [isPrivacyMode, setIsPrivacyMode] = useState<boolean>(() => {
-    // For counter security, default to true (masked) unless explicitly unlocked
-    const stored = localStorage.getItem('jewel_dashboard_privacy');
-    if (stored === 'false') return false;
-    return true;
-  });
+  // Privacy / Counter Display Mode (Always masked on every visit to dashboard)
+  const [isPrivacyMode, setIsPrivacyMode] = useState<boolean>(true);
 
-  // Password / PIN modal state for unlocking Live Figures (Password: 1234)
-  const [showUnlockModal, setShowUnlockModal] = useState<boolean>(false);
+  // Password / PIN modal state for unlocking Live Figures (Prompts on every visit to dashboard)
+  const [showUnlockModal, setShowUnlockModal] = useState<boolean>(true);
   const [unlockPin, setUnlockPin] = useState<string>('');
   const [showPinText, setShowPinText] = useState<boolean>(false);
   const [unlockError, setUnlockError] = useState<string | null>(null);
@@ -167,7 +162,6 @@ export const DashboardPage: React.FC = () => {
     } else {
       // Currently live -> Immediately lock back to masked mode
       setIsPrivacyMode(true);
-      localStorage.setItem('jewel_dashboard_privacy', 'true');
       setRateToast({ type: 'success', message: 'Display Mode: Off (Masked) — Figures locked.' });
     }
   };
@@ -187,7 +181,6 @@ export const DashboardPage: React.FC = () => {
       const res = await settingsApi.verifyDisplayModePin(entered);
       if (res.valid) {
         setIsPrivacyMode(false);
-        localStorage.setItem('jewel_dashboard_privacy', 'false');
         setShowUnlockModal(false);
         setUnlockPin('');
         setUnlockError(null);
@@ -206,7 +199,6 @@ export const DashboardPage: React.FC = () => {
       // Fallback in case of network issue
       if (entered === '1234') {
         setIsPrivacyMode(false);
-        localStorage.setItem('jewel_dashboard_privacy', 'false');
         setShowUnlockModal(false);
         setUnlockPin('');
         setUnlockError(null);

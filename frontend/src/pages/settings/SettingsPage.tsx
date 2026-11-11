@@ -84,10 +84,8 @@ export const SettingsPage: React.FC = () => {
     return urlTab && validTabs.includes(urlTab) ? urlTab : 'shop';
   });
 
-  // Store Configuration Lock Protection
-  const [isConfigUnlocked, setIsConfigUnlocked] = useState<boolean>(() => {
-    return sessionStorage.getItem('store_config_unlocked') === 'true';
-  });
+  // Store Configuration Lock Protection (Prompts for password on every visit)
+  const [isConfigUnlocked, setIsConfigUnlocked] = useState<boolean>(false);
   const [configUnlockPassword, setConfigUnlockPassword] = useState<string>('');
   const [configUnlockError, setConfigUnlockError] = useState<string | null>(null);
   const [isConfigShaking, setIsConfigShaking] = useState<boolean>(false);
@@ -862,7 +860,6 @@ export const SettingsPage: React.FC = () => {
     try {
       const res = await settingsApi.verifyConfigPassword(entered);
       if (res.valid) {
-        sessionStorage.setItem('store_config_unlocked', 'true');
         setIsConfigUnlocked(true);
         setConfigUnlockError(null);
         setConfigUnlockPassword('');
@@ -874,7 +871,6 @@ export const SettingsPage: React.FC = () => {
       }
     } catch {
       if (entered === '1234') {
-        sessionStorage.setItem('store_config_unlocked', 'true');
         setIsConfigUnlocked(true);
         setConfigUnlockError(null);
         setConfigUnlockPassword('');
@@ -890,7 +886,6 @@ export const SettingsPage: React.FC = () => {
   };
 
   const handleLockStoreConfig = () => {
-    sessionStorage.removeItem('store_config_unlocked');
     setIsConfigUnlocked(false);
     setConfigUnlockPassword('');
     showNotification('success', 'Store Configuration locked.');
