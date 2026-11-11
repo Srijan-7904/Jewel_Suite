@@ -42,6 +42,7 @@ export async function runSeeds(): Promise<void> {
     const passwordHash = await hashPassword(defaultPassword);
 
     const adminUser = userRepository.create({
+      id: 'usr-admin-system-default',
       username: defaultUsername,
       password_hash: passwordHash,
       role: 'Admin',

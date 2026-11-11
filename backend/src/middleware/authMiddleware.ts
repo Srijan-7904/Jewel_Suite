@@ -29,7 +29,11 @@ export function requireAuth(req: Request, _res: Response, next: NextFunction): v
       throw new UnauthorizedError('Invalid or expired authentication session');
     }
 
-    const user = userRepository.findById(payload.userId);
+    let user = userRepository.findById(payload.userId);
+    // If cloud database was re-seeded upon restart or deploy, fallback to matching active user by username
+    if (!user && payload.username) {
+      user = userRepository.findByUsername(payload.username);
+    }
     if (!user || !user.is_active) {
       throw new UnauthorizedError('User session is invalid or user has been disabled');
     }
