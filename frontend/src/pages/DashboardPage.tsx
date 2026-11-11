@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { rateApi } from '../services/masters';
@@ -26,6 +26,9 @@ import {
   SlidersHorizontal,
   Eye,
   EyeOff,
+  Lock,
+  Unlock,
+  KeyRound,
   ChevronDown,
   ChevronUp,
 } from 'lucide-react';
@@ -44,8 +47,19 @@ export const DashboardPage: React.FC = () => {
 
   // Privacy / Counter Display Mode Toggle (Hand-drawn: "Dashboard [On/Off] [********]")
   const [isPrivacyMode, setIsPrivacyMode] = useState<boolean>(() => {
-    return localStorage.getItem('jewel_dashboard_privacy') === 'true';
+    // For counter security, default to true (masked) unless explicitly unlocked
+    const stored = localStorage.getItem('jewel_dashboard_privacy');
+    if (stored === 'false') return false;
+    return true;
   });
+
+  // Password / PIN modal state for unlocking Live Figures (Password: 1234)
+  const [showUnlockModal, setShowUnlockModal] = useState<boolean>(false);
+  const [unlockPin, setUnlockPin] = useState<string>('');
+  const [showPinText, setShowPinText] = useState<boolean>(false);
+  const [unlockError, setUnlockError] = useState<string | null>(null);
+  const [isShaking, setIsShaking] = useState<boolean>(false);
+  const pinInputRef = useRef<HTMLInputElement>(null);
 
   // Collapsible view for advanced full rate cards and foundation health
   const [showExtendedPanels, setShowExtendedPanels] = useState<boolean>(false);
@@ -118,13 +132,65 @@ export const DashboardPage: React.FC = () => {
     }
   }, [gold24, silver999, inlineGoldGram, inlineSilverGram]);
 
-  // Privacy Mode Toggle Handler
+  // Auto-focus input when unlock modal opens and handle Escape key
+  useEffect(() => {
+    if (showUnlockModal) {
+      const timer = setTimeout(() => {
+        pinInputRef.current?.focus();
+        pinInputRef.current?.select();
+      }, 50);
+
+      const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') {
+          setShowUnlockModal(false);
+          setUnlockPin('');
+          setUnlockError(null);
+        }
+      };
+      window.addEventListener('keydown', handleKeyDown);
+      return () => {
+        clearTimeout(timer);
+        window.removeEventListener('keydown', handleKeyDown);
+      };
+    }
+  }, [showUnlockModal]);
+
+  // Privacy Mode Toggle Handler - Password Protected for Live Mode
   const togglePrivacyMode = () => {
-    setIsPrivacyMode((prev) => {
-      const next = !prev;
-      localStorage.setItem('jewel_dashboard_privacy', String(next));
-      return next;
-    });
+    if (isPrivacyMode) {
+      // Currently masked -> Require password to reveal live figures
+      setShowUnlockModal(true);
+      setUnlockPin('');
+      setUnlockError(null);
+      setShowPinText(false);
+    } else {
+      // Currently live -> Immediately lock back to masked mode
+      setIsPrivacyMode(true);
+      localStorage.setItem('jewel_dashboard_privacy', 'true');
+      setRateToast({ type: 'success', message: 'Display Mode: Off (Masked) — Figures locked.' });
+    }
+  };
+
+  const handleUnlockSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const entered = unlockPin.trim();
+    if (entered === '1234') {
+      setIsPrivacyMode(false);
+      localStorage.setItem('jewel_dashboard_privacy', 'false');
+      setShowUnlockModal(false);
+      setUnlockPin('');
+      setUnlockError(null);
+      setRateToast({
+        type: 'success',
+        message: 'Display Mode: On (Live) — Live financial figures unlocked.',
+      });
+    } else {
+      setUnlockError('Incorrect password! Enter 1234 to unlock.');
+      setIsShaking(true);
+      setTimeout(() => setIsShaking(false), 500);
+      pinInputRef.current?.focus();
+      pinInputRef.current?.select();
+    }
   };
 
   // Helper to format currency numbers respecting Privacy / Confidential Counter Mode
@@ -482,27 +548,42 @@ export const DashboardPage: React.FC = () => {
 
           {/* Hand-drawn Toggle: [switch] On / Off [********] */}
           <div className="counter-privacy-cluster" title="Toggle Privacy Mode: hides or masks sales and cash from walk-in customers">
-            <span className="privacy-label">Display Mode:</span>
+            <span className="privacy-label" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+              <Lock size={12} style={{ color: isPrivacyMode ? '#d97706' : '#059669' }} />
+              Display Mode:
+            </span>
             <button
               type="button"
               className={`toggle-on-off-btn ${isPrivacyMode ? 'mode-privacy-active' : 'mode-live-active'}`}
               onClick={togglePrivacyMode}
-              title={isPrivacyMode ? 'Counter Privacy ON (Amounts masked with ********). Click to reveal.' : 'Live Mode ON (Real amounts visible). Click to mask.'}
+              title={isPrivacyMode ? 'Counter Privacy ON (Amounts masked with ********). Click to enter password (1234) and reveal.' : 'Live Mode ON (Real amounts visible). Click to lock.'}
             >
               <div className="toggle-switch-slider" />
               <span className="toggle-text-opt">{isPrivacyMode ? 'Off (Masked)' : 'On (Live)'}</span>
             </button>
 
             {/* Hand-drawn Asterisks / Mask Box: [ * * * * * * * * ] */}
-            <div className={`masked-indicator-box ${isPrivacyMode ? 'is-masked' : 'is-visible'}`}>
+            <div
+              className={`masked-indicator-box ${isPrivacyMode ? 'is-masked' : 'is-visible'}`}
+              onClick={togglePrivacyMode}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  togglePrivacyMode();
+                }
+              }}
+              title={isPrivacyMode ? 'Click to enter password (1234) and reveal live figures' : 'Click to lock and hide live figures'}
+            >
               {isPrivacyMode ? (
                 <>
-                  <EyeOff size={14} className="mask-icon" />
+                  <Lock size={13} className="mask-icon text-amber-600" />
                   <span className="asterisks-display font-mono">* * * * * * * *</span>
                 </>
               ) : (
                 <>
-                  <Eye size={14} className="mask-icon" />
+                  <Unlock size={13} className="mask-icon text-emerald-600" />
                   <span className="asterisks-display font-mono text-emerald-600">₹ LIVE FIGURES</span>
                 </>
               )}
@@ -1310,6 +1391,182 @@ export const DashboardPage: React.FC = () => {
                       <span>Save & Apply Today's Rate</span>
                     </>
                   )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Password / PIN Modal for Display Mode: On (Live) */}
+      {showUnlockModal && (
+        <div className="rate-modal-backdrop" onClick={() => setShowUnlockModal(false)}>
+          <div
+            className={`rate-modal-container unlock-pin-modal ${isShaking ? 'shake-animation' : ''}`}
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: '420px', width: '92%' }}
+          >
+            <div className="rate-modal-header" style={{ borderBottomColor: '#f59e0b', background: '#FFFBEB' }}>
+              <div className="header-info">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div style={{
+                    width: '36px',
+                    height: '36px',
+                    borderRadius: '8px',
+                    background: '#FEF3C7',
+                    border: '1px solid #FCD34D',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#B45309'
+                  }}>
+                    <Lock size={19} />
+                  </div>
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: '#111827' }}>
+                      Unlock Live Figures
+                    </h3>
+                    <span style={{ fontSize: '0.74rem', color: '#6B7280' }}>
+                      Display Mode: On (Live) • Password Protected
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="btn-modal-close"
+                onClick={() => setShowUnlockModal(false)}
+                title="Close (Esc)"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleUnlockSubmit} className="rate-modal-body">
+              <div style={{ padding: '0.4rem 0' }}>
+                <p style={{ fontSize: '0.82rem', color: '#4B5563', margin: '0 0 1rem 0', lineHeight: 1.45 }}>
+                  Enter counter password to reveal real-time sales, net revenue, cash-in-hand, and metal balances.
+                </p>
+
+                <div className="form-group">
+                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#374151', marginBottom: '6px' }}>
+                    Password / PIN <span style={{ color: '#EF4444' }}>*</span>
+                  </label>
+                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                    <input
+                      ref={pinInputRef}
+                      type={showPinText ? 'text' : 'password'}
+                      value={unlockPin}
+                      onChange={(e) => {
+                        setUnlockPin(e.target.value);
+                        if (unlockError) setUnlockError(null);
+                      }}
+                      placeholder="Enter PIN (1234)"
+                      className="input-rate font-mono"
+                      autoFocus
+                      style={{
+                        paddingRight: '2.5rem',
+                        fontSize: '1.15rem',
+                        letterSpacing: showPinText ? 'normal' : '0.22em',
+                        textAlign: 'center',
+                        borderColor: unlockError ? '#EF4444' : undefined,
+                        boxShadow: unlockError ? '0 0 0 2px rgba(239, 68, 68, 0.2)' : undefined,
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPinText(!showPinText)}
+                      style={{
+                        position: 'absolute',
+                        right: '10px',
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        color: '#6B7280',
+                        display: 'flex',
+                        alignItems: 'center',
+                        padding: '4px',
+                      }}
+                      title={showPinText ? 'Hide password' : 'Show password'}
+                    >
+                      {showPinText ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+
+                  {unlockError && (
+                    <div style={{
+                      marginTop: '8px',
+                      padding: '6px 10px',
+                      background: '#FEF2F2',
+                      border: '1px solid #FECACA',
+                      borderRadius: '6px',
+                      color: '#B91C1C',
+                      fontSize: '0.78rem',
+                      fontWeight: 600,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}>
+                      <X size={14} />
+                      <span>{unlockError}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Quick Hint / Fill for Testing */}
+                <div style={{
+                  marginTop: '12px',
+                  padding: '8px 12px',
+                  background: '#F8FAFC',
+                  border: '1px solid #E2E8F0',
+                  borderRadius: '6px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  fontSize: '0.75rem',
+                  color: '#64748B'
+                }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <KeyRound size={13} style={{ color: '#D97706' }} />
+                    <span>PIN: <strong>1234</strong></span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setUnlockPin('1234');
+                      if (unlockError) setUnlockError(null);
+                    }}
+                    style={{
+                      background: '#EEF2FF',
+                      color: '#4338CA',
+                      border: '1px solid #C7D2FE',
+                      borderRadius: '4px',
+                      padding: '2px 8px',
+                      fontSize: '0.72rem',
+                      fontWeight: 600,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Auto Fill (1234)
+                  </button>
+                </div>
+              </div>
+
+              <div className="modal-actions" style={{ marginTop: '1.25rem' }}>
+                <button
+                  type="button"
+                  className="btn-cancel"
+                  onClick={() => setShowUnlockModal(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn-save-rate font-mono"
+                  style={{ background: '#059669', borderColor: '#047857' }}
+                >
+                  <Unlock size={15} />
+                  <span>Unlock Live Figures</span>
                 </button>
               </div>
             </form>

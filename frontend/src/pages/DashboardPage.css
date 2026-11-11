@@ -1321,6 +1321,28 @@
   font-weight: 700;
   border: 1px dashed #D1D5DB;
   background: #F9FAFB;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.15s ease-in-out;
+}
+
+.masked-indicator-box:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.06);
+}
+
+.masked-indicator-box:active {
+  transform: translateY(0);
+}
+
+@keyframes shakeModal {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-6px); }
+  40%, 80% { transform: translateX(6px); }
+}
+
+.shake-animation {
+  animation: shakeModal 0.4s ease-in-out;
 }
 
 .masked-indicator-box.is-masked {
