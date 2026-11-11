@@ -356,10 +356,18 @@ export const CreateInvoicePage: React.FC = () => {
       rateApi.getAllPurities().catch(() => []),
       settingsApi.getShopProfile().catch(() => null),
       settingsApi.getInvoiceColumns().catch(() => DEFAULT_INVOICE_COLUMN_SETTINGS),
+      settingsApi.getGST().catch(() => null),
     ])
-      .then(([custRes, supRes, recvRes, ratesRes, metalsRes, puritiesRes, profileRes, invoiceColsRes]) => {
+      .then(([custRes, supRes, recvRes, ratesRes, metalsRes, puritiesRes, profileRes, invoiceColsRes, gstRes]) => {
         if (invoiceColsRes) {
           setInvoiceColumns(invoiceColsRes);
+        }
+        if (gstRes && !editDraftId) {
+          if (!gstRes.gst_enabled || gstRes.tax_mode === 'NO_TAX') {
+            setGstRate(0.0);
+          } else if (typeof gstRes.default_gst_rate === 'number') {
+            setGstRate(gstRes.default_gst_rate);
+          }
         }
         const custList = (custRes as any)?.items || [];
         setCustomers(custList);
@@ -1951,12 +1959,24 @@ export const CreateInvoicePage: React.FC = () => {
       exAcc.itemCount += 1;
     });
 
+    const shopState = (shopProfile?.state || '').trim().toLowerCase();
+    const shopGstinCode = (shopProfile?.gstin || '').slice(0, 2);
+    const activeCustomer = customers.find((c) => c.id === customerId);
+    const customerState = (activeCustomer?.state || '').trim().toLowerCase();
+    const customerGstinCode = (activeCustomer?.gstin || '').slice(0, 2);
+
+    const isInterState = Boolean(
+      (customerGstinCode && shopGstinCode && customerGstinCode !== shopGstinCode) ||
+      (customerState && shopState && customerState !== shopState)
+    );
+
     const discount = toDecimal(discountAmount || 0);
     const netTaxable = Decimal.max(0, totalSaleAmount.minus(discount));
     const gstRateDec = toDecimal(gstRate);
     const gstAmount = netTaxable.times(gstRateDec).dividedBy(100);
-    const cgst = gstAmount.dividedBy(2);
-    const sgst = gstAmount.dividedBy(2);
+    const cgst = isInterState ? new Decimal(0) : gstAmount.dividedBy(2);
+    const sgst = isInterState ? new Decimal(0) : gstAmount.dividedBy(2);
+    const igst = isInterState ? gstAmount : new Decimal(0);
     const rawGrandTotal = netTaxable.plus(gstAmount);
     const grandTotal = rawGrandTotal.toDecimalPlaces(0, Decimal.ROUND_HALF_UP);
     const roundOff = grandTotal.minus(rawGrandTotal);
@@ -2108,6 +2128,8 @@ export const CreateInvoicePage: React.FC = () => {
       gstAmount: gstAmount.toNumber(),
       cgst: cgst.toNumber(),
       sgst: sgst.toNumber(),
+      igst: igst.toNumber(),
+      isInterState,
       roundOff: roundOff.toNumber(),
       grandTotal: grandTotal.toNumber(),
       netPayable: netPayable.toNumber(),
@@ -2129,7 +2151,7 @@ export const CreateInvoicePage: React.FC = () => {
       silverWholesaleBal,
       wholesaleIsSettled,
     };
-  }, [saleItems, exchangeItems, discountAmount, gstRate, payments]);
+  }, [saleItems, exchangeItems, discountAmount, gstRate, payments, customerId, customers, shopProfile]);
 
   // Quick Settle Full Payment / Payout
   const handleQuickSettle = (mode: 'CASH' | 'UPI' | 'BANK') => {
@@ -5169,8 +5191,15 @@ export const CreateInvoicePage: React.FC = () => {
                     value={gstRate}
                     onChange={(e) => setGstRate(parseFloat(e.target.value) || 0)}
                   >
-                    <option value={3.0}>3.0% (Jewellery Tax)</option>
-                    <option value={0.0}>0% (Exempted / Export)</option>
+                    {gstRate !== 3.0 && gstRate !== 0.0 && gstRate !== 5.0 && gstRate !== 18.0 && gstRate !== 12.0 && gstRate !== 28.0 && (
+                      <option value={gstRate}>{gstRate.toFixed(1)}% (Configured)</option>
+                    )}
+                    <option value={3.0}>3.0% (Gold / Silver Jewellery)</option>
+                    <option value={5.0}>5.0% (Making / Precious Stones)</option>
+                    <option value={12.0}>12.0% (Articles / Bullion)</option>
+                    <option value={18.0}>18.0% (Job Work / Standard Goods)</option>
+                    <option value={28.0}>28.0% (High Tax / Luxury)</option>
+                    <option value={0.0}>0% (Exempted / Non-GST)</option>
                   </select>
                 </div>
                 <span className="summary-value font-mono text-amber-300">
@@ -5180,10 +5209,21 @@ export const CreateInvoicePage: React.FC = () => {
 
               {gstRate > 0 && (
                 <div className="summary-line sub-gst text-xs text-muted">
-                  <span>CGST (1.5%) + SGST (1.5%)</span>
-                  <span className="font-mono">
-                    {formatCurrency(calculations.cgst)} + {formatCurrency(calculations.sgst)}
-                  </span>
+                  {calculations.isInterState ? (
+                    <>
+                      <span>IGST ({gstRate.toFixed(1)}%) • Inter-State</span>
+                      <span className="font-mono text-amber-300">
+                        {formatCurrency(calculations.igst)}
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <span>CGST ({(gstRate / 2).toFixed(1)}%) + SGST ({(gstRate / 2).toFixed(1)}%)</span>
+                      <span className="font-mono">
+                        {formatCurrency(calculations.cgst)} + {formatCurrency(calculations.sgst)}
+                      </span>
+                    </>
+                  )}
                 </div>
               )}
 
@@ -6458,18 +6498,29 @@ export const CreateInvoicePage: React.FC = () => {
 
                   {Number(createdInvoice.gst_amount || 0) > 0 && (
                     <>
-                      <div className="ledger-row text-xs text-muted">
-                        <span>CGST ({((createdInvoice.gst_rate || 3) / 2).toFixed(1)}%):</span>
-                        <span className="font-mono">
-                          {formatCurrency(Number(createdInvoice.gst_amount || 0) / 2)}
-                        </span>
-                      </div>
-                      <div className="ledger-row text-xs text-muted">
-                        <span>SGST ({((createdInvoice.gst_rate || 3) / 2).toFixed(1)}%):</span>
-                        <span className="font-mono">
-                          {formatCurrency(Number(createdInvoice.gst_amount || 0) / 2)}
-                        </span>
-                      </div>
+                      {calculations.isInterState ? (
+                        <div className="ledger-row text-xs text-muted">
+                          <span>IGST ({Number(createdInvoice.gst_rate || 3).toFixed(1)}%):</span>
+                          <span className="font-mono text-amber-300">
+                            {formatCurrency(Number(createdInvoice.gst_amount || 0))}
+                          </span>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="ledger-row text-xs text-muted">
+                            <span>CGST ({((createdInvoice.gst_rate || 3) / 2).toFixed(1)}%):</span>
+                            <span className="font-mono">
+                              {formatCurrency(Number(createdInvoice.gst_amount || 0) / 2)}
+                            </span>
+                          </div>
+                          <div className="ledger-row text-xs text-muted">
+                            <span>SGST ({((createdInvoice.gst_rate || 3) / 2).toFixed(1)}%):</span>
+                            <span className="font-mono">
+                              {formatCurrency(Number(createdInvoice.gst_amount || 0) / 2)}
+                            </span>
+                          </div>
+                        </>
+                      )}
                     </>
                   )}
 

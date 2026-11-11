@@ -1910,7 +1910,7 @@ export const SettingsPage: React.FC = () => {
                       onChange={(e) => setGst({ ...gst, tax_mode: e.target.value as any })}
                     >
                       <option value="EXCLUSIVE">EXCLUSIVE (Tax added to base metal & making)</option>
-                      <option value="INCLUSIVE">INCLUSIVE (Rate inclusive of 3% GST)</option>
+                      <option value="INCLUSIVE">INCLUSIVE (Rate inclusive of {Number(gst.default_gst_rate || 0).toFixed(2)}% GST)</option>
                       <option value="NO_TAX">NO TAX (Exempt Invoicing)</option>
                     </select>
                   </div>
@@ -1921,11 +1921,19 @@ export const SettingsPage: React.FC = () => {
                   <div className="grid grid-cols-2 gap-4 text-xs">
                     <div>
                       <span className="text-muted block">Intra-State Transactions (Same State):</span>
-                      <strong className="text-main font-mono">1.50% CGST + 1.50% SGST (Total 3%)</strong>
+                      <strong className="text-main font-mono">
+                        {gst.gst_enabled && gst.tax_mode !== 'NO_TAX'
+                          ? `${(Number(gst.default_gst_rate || 0) / 2).toFixed(2)}% CGST + ${(Number(gst.default_gst_rate || 0) / 2).toFixed(2)}% SGST (Total ${Number(gst.default_gst_rate || 0).toFixed(2)}%)`
+                          : '0.00% (GST Disabled / Exempt Invoicing)'}
+                      </strong>
                     </div>
                     <div>
                       <span className="text-muted block">Inter-State Transactions (Outside State):</span>
-                      <strong className="text-main font-mono">3.00% IGST</strong>
+                      <strong className="text-main font-mono">
+                        {gst.gst_enabled && gst.tax_mode !== 'NO_TAX'
+                          ? `${Number(gst.default_gst_rate || 0).toFixed(2)}% IGST`
+                          : '0.00% (GST Disabled / Exempt Invoicing)'}
+                      </strong>
                     </div>
                   </div>
                 </div>

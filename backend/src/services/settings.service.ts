@@ -237,7 +237,10 @@ export class SettingsService {
     sequences?: { doc_type: DocumentType; prefix?: string; starting_number?: number; padding?: number; financial_year_reset?: boolean }[];
   }, userId?: string): BillingSettings {
     if (data.default_customer_type !== undefined) settingRepository.set('billing.default_customer_type', data.default_customer_type);
-    if (data.default_gst_rate !== undefined) settingRepository.set('billing.default_gst_rate', data.default_gst_rate.toString());
+    if (data.default_gst_rate !== undefined) {
+      settingRepository.set('billing.default_gst_rate', data.default_gst_rate.toString());
+      settingRepository.set('gst.default_rate', data.default_gst_rate.toString());
+    }
     if (data.default_payment_mode !== undefined) settingRepository.set('billing.default_payment_mode', data.default_payment_mode);
     if (data.default_invoice_notes !== undefined) settingRepository.set('billing.default_invoice_notes', data.default_invoice_notes);
 
@@ -311,6 +314,7 @@ export class SettingsService {
         throw new BadRequestError('GST Rate must be between 0% and 28%', 'VALIDATION_ERROR');
       }
       settingRepository.set('gst.default_rate', data.default_gst_rate.toString());
+      settingRepository.set('billing.default_gst_rate', data.default_gst_rate.toString());
     }
 
     if (data.tax_mode !== undefined) {

@@ -4527,7 +4527,7 @@ export const PurchaseBillsPage: React.FC = () => {
 
                   {gstRate > 0 && (
                     <div className="summary-line sub-gst text-xs text-muted">
-                      <span>CGST (1.5%) + SGST (1.5%)</span>
+                      <span>CGST ({((gstRate || 0) / 2).toFixed(1)}%) + SGST ({((gstRate || 0) / 2).toFixed(1)}%)</span>
                       <span className="font-mono">
                         {formatCurrency(calculations.cgst)} + {formatCurrency(calculations.sgst)}
                       </span>
