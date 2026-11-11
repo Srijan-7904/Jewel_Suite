@@ -4428,54 +4428,52 @@ export const PurchaseBillsPage: React.FC = () => {
                     </div>
 
                     {/* ⚪ SILVER TALLY */}
-                    {(calculations.silverFineWeight > 0 || calculations.silverExchangeFineWeight > 0 || calculations.silverBalFine > 0) && (
-                      <div className="tally-metal-block silver-tally mt-2">
-                        <div className="tally-header-row flex items-center justify-between">
-                          <span className="tally-metal-title font-bold text-xs text-slate-200">
-                            ⚪ Silver Balance
+                    <div className="tally-metal-block silver-tally mt-2">
+                      <div className="tally-header-row flex items-center justify-between">
+                        <span className="tally-metal-title font-bold text-xs text-slate-200">
+                          ⚪ Silver Balance
+                        </span>
+                        <button
+                          type="button"
+                          className={`tally-auto-btn silver-auto-btn ${
+                            payments.some((p) => p.payment_mode === 'SILVER' && p.is_auto) ? 'is-active' : ''
+                          }`}
+                          onClick={() => handleApplyAutoFromSummary('SILVER')}
+                          title="Click to toggle Auto mode for Silver payment (auto-binds Bal Fine & Bal Amt)"
+                        >
+                          <span className="dot">🔴</span>
+                          <span>
+                            {payments.some((p) => p.payment_mode === 'SILVER' && p.is_auto)
+                              ? 'Auto Selected'
+                              : 'Auto'}
                           </span>
-                          <button
-                            type="button"
-                            className={`tally-auto-btn silver-auto-btn ${
-                              payments.some((p) => p.payment_mode === 'SILVER' && p.is_auto) ? 'is-active' : ''
-                            }`}
-                            onClick={() => handleApplyAutoFromSummary('SILVER')}
-                            title="Click to toggle Auto mode for Silver payment (auto-binds Bal Fine & Bal Amt)"
-                          >
-                            <span className="dot">🔴</span>
-                            <span>
-                              {payments.some((p) => p.payment_mode === 'SILVER' && p.is_auto)
-                                ? 'Auto Selected'
-                                : 'Auto'}
-                            </span>
-                            <span className="val-preview font-mono">{formatFineWeight(calculations.silverBalFine, 3)}g</span>
-                          </button>
-                        </div>
+                          <span className="val-preview font-mono">{formatFineWeight(calculations.silverBalFine, 3)}g</span>
+                        </button>
+                      </div>
 
-                        <div className="tally-equation-grid font-mono text-xs">
-                          <div className="equation-line">
-                            <span className="eq-label text-muted">Fine Wt:</span>
-                            <span className="eq-formula">
-                              <span className="val-sold" title="Fine Silver Inward">{formatFineWeight(calculations.silverFineWeight, 4)}g</span>
-                              <span className="op">−</span>
-                              <span className="val-ret text-rose-300" title="Return Exchange Fine Silver">{formatFineWeight(calculations.silverExchangeFineWeight, 4)}g</span>
-                              <span className="op">=</span>
-                              <strong className="val-bal text-slate-200" title="Balance Silver Fine">{formatFineWeight(calculations.silverBalFine, 4)}g</strong>
-                            </span>
-                          </div>
-                          <div className="equation-line">
-                            <span className="eq-label text-muted">Amount:</span>
-                            <span className="eq-formula">
-                              <span className="val-sold" title="Purchase Silver Amount">{formatCurrency(calculations.silverPurchaseAmount)}</span>
-                              <span className="op">−</span>
-                              <span className="val-ret text-rose-300" title="Return Exchange Silver Amount">{formatCurrency(calculations.silverExchangeAmount)}</span>
-                              <span className="op">=</span>
-                              <strong className="val-bal text-emerald-400" title="Balance Silver Amount">{formatCurrency(calculations.silverBalAmount)}</strong>
-                            </span>
-                          </div>
+                      <div className="tally-equation-grid font-mono text-xs">
+                        <div className="equation-line">
+                          <span className="eq-label text-muted">Fine Wt:</span>
+                          <span className="eq-formula">
+                            <span className="val-sold" title="Fine Silver Inward">{formatFineWeight(calculations.silverFineWeight, 4)}g</span>
+                            <span className="op">−</span>
+                            <span className="val-ret text-rose-300" title="Return Exchange Fine Silver">{formatFineWeight(calculations.silverExchangeFineWeight, 4)}g</span>
+                            <span className="op">=</span>
+                            <strong className="val-bal text-slate-200" title="Balance Silver Fine">{formatFineWeight(calculations.silverBalFine, 4)}g</strong>
+                          </span>
+                        </div>
+                        <div className="equation-line">
+                          <span className="eq-label text-muted">Amount:</span>
+                          <span className="eq-formula">
+                            <span className="val-sold" title="Purchase Silver Amount">{formatCurrency(calculations.silverPurchaseAmount)}</span>
+                            <span className="op">−</span>
+                            <span className="val-ret text-rose-300" title="Return Exchange Silver Amount">{formatCurrency(calculations.silverExchangeAmount)}</span>
+                            <span className="op">=</span>
+                            <strong className="val-bal text-emerald-400" title="Balance Silver Amount">{formatCurrency(calculations.silverBalAmount)}</strong>
+                          </span>
                         </div>
                       </div>
-                    )}
+                    </div>
                   </div>
                 </div>
 

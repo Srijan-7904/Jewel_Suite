@@ -168,6 +168,7 @@ export const CreateInvoicePage: React.FC = () => {
 
   // Bill Header Meta
   const [billType, setBillType] = useState<'RETAIL' | 'WHOLESALE'>('RETAIL');
+  const isWholesale = billType === 'WHOLESALE';
   const [customerId, setCustomerId] = useState('');
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split('T')[0]);
   const [invoiceNumber] = useState(() => `INV-${new Date().getFullYear()}-${Math.floor(100000 + Math.random() * 900000)}`);
@@ -2159,25 +2160,84 @@ export const CreateInvoicePage: React.FC = () => {
     ]);
   };
 
-  const handleToggleAutoMode = (paymentId: string, metalType: 'GOLD' | 'SILVER') => {
+  // Helper to calculate exact Auto Mode weights and amounts for Gold and Silver
+  const getAutoMetalTarget = (
+    metalType: 'GOLD' | 'SILVER',
+    currentPurityId?: string,
+    currentRate?: number | string,
+    currentTunch?: number | string
+  ) => {
     const isGold = metalType === 'GOLD';
+    const info = findMetalAndPurity(metalType, currentPurityId);
+    const rate = Number(currentRate || info.applicableRate || 0);
+    const tunch = Number(currentTunch || info.tunchPercent || (isGold ? 91.6 : 99.9));
+
+    // Wholesale Fine-to-Fine balance check
+    if (isWholesale) {
+      const wholesaleBal = isGold ? calculations.goldWholesaleBal : calculations.silverWholesaleBal;
+      const targetWeight = wholesaleBal > 0 ? wholesaleBal : 0;
+      return {
+        metalWeight: targetWeight > 0 ? targetWeight : '',
+        fineWeight: targetWeight > 0 ? targetWeight : '',
+        amount: '',
+      };
+    }
+
+    // Retail Mode:
+    // 1. If this specific metal has a direct net fine balance from sale - exchange
     const balFine = isGold ? calculations.goldBalFine : calculations.silverBalFine;
     const balAmt = isGold ? calculations.goldBalAmount : calculations.silverBalAmount;
 
+    if (balFine > 0) {
+      const calcWeight = tunch > 0
+        ? new Decimal(balFine).times(100).dividedBy(tunch).toDecimalPlaces(3, Decimal.ROUND_HALF_UP).toNumber()
+        : balFine;
+      const calcAmt = balAmt > 0
+        ? balAmt
+        : (rate > 0 ? Decimal.max(0, new Decimal(calcWeight).times(rate)).toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber() : 0);
+
+      return {
+        metalWeight: calcWeight > 0 ? calcWeight : '',
+        fineWeight: balFine > 0 ? balFine : '',
+        amount: calcAmt > 0 ? calcAmt : '',
+      };
+    }
+
+    // 2. If specific metal fine is 0, but invoice has an outstanding currency balance due (e.g. paying Gold bill in Silver)
+    if (calculations.balanceDue > 0 && rate > 0) {
+      const dueAmt = calculations.balanceDue;
+      const calcWeight = new Decimal(dueAmt).dividedBy(rate).toDecimalPlaces(3, Decimal.ROUND_HALF_UP).toNumber();
+      const calcFine = tunch > 0
+        ? new Decimal(calcWeight).times(tunch).dividedBy(100).toDecimalPlaces(3, Decimal.ROUND_HALF_UP).toNumber()
+        : calcWeight;
+
+      return {
+        metalWeight: calcWeight > 0 ? calcWeight : '',
+        fineWeight: calcFine > 0 ? calcFine : '',
+        amount: dueAmt,
+      };
+    }
+
+    return {
+      metalWeight: '',
+      fineWeight: '',
+      amount: '',
+    };
+  };
+
+  const handleToggleAutoMode = (paymentId: string, metalType: 'GOLD' | 'SILVER') => {
     setPayments((prev) =>
       prev.map((p) => {
         if (p.id !== paymentId) return p;
         const willBeAuto = !p.is_auto;
-        const info = findMetalAndPurity(metalType, p.purity_id);
-        const rate = Number(p.metal_rate || info.applicableRate || 0);
-        const amt = balAmt > 0 ? balAmt : (rate > 0 ? Decimal.max(0, new Decimal(balFine).times(rate)).toNumber() : 0);
+        const autoTarget = getAutoMetalTarget(metalType, p.purity_id, p.metal_rate, p.tunch_percent);
 
         return {
           ...p,
           is_auto: willBeAuto,
-          metal_weight: willBeAuto ? (balFine > 0 ? balFine : '') : p.metal_weight,
-          fine_weight: willBeAuto ? (balFine > 0 ? balFine : '') : p.fine_weight,
-          amount: willBeAuto ? (amt > 0 ? amt : '') : p.amount,
+          metal_weight: willBeAuto ? autoTarget.metalWeight : p.metal_weight,
+          fine_weight: willBeAuto ? autoTarget.fineWeight : p.fine_weight,
+          amount: willBeAuto ? autoTarget.amount : p.amount,
           last_edited: 'weight',
         };
       })
@@ -2186,26 +2246,22 @@ export const CreateInvoicePage: React.FC = () => {
 
   const handleApplyAutoFromSummary = (metalType: 'GOLD' | 'SILVER') => {
     const isGold = metalType === 'GOLD';
-    const balFine = isGold ? calculations.goldBalFine : calculations.silverBalFine;
-    const balAmt = isGold ? calculations.goldBalAmount : calculations.silverBalAmount;
-
     const existingIndex = payments.findIndex((p) => p.payment_mode === metalType);
 
     if (existingIndex >= 0) {
       const existing = payments[existingIndex];
+      const willBeAuto = !existing.is_auto;
+      const autoTarget = getAutoMetalTarget(metalType, existing.purity_id, existing.metal_rate, existing.tunch_percent);
+
       setPayments((prev) =>
         prev.map((p, idx) => {
           if (idx !== existingIndex) return p;
-          const willBeAuto = !p.is_auto;
-          const info = findMetalAndPurity(metalType, p.purity_id);
-          const rate = Number(p.metal_rate || info.applicableRate || 0);
-          const amt = balAmt > 0 ? balAmt : (rate > 0 ? Decimal.max(0, new Decimal(balFine).times(rate)).toNumber() : 0);
           return {
             ...p,
             is_auto: willBeAuto,
-            metal_weight: willBeAuto ? (balFine > 0 ? balFine : '') : p.metal_weight,
-            fine_weight: willBeAuto ? (balFine > 0 ? balFine : '') : p.fine_weight,
-            amount: willBeAuto ? (amt > 0 ? amt : '') : p.amount,
+            metal_weight: willBeAuto ? autoTarget.metalWeight : p.metal_weight,
+            fine_weight: willBeAuto ? autoTarget.fineWeight : p.fine_weight,
+            amount: willBeAuto ? autoTarget.amount : p.amount,
             last_edited: 'weight',
           };
         })
@@ -2214,13 +2270,12 @@ export const CreateInvoicePage: React.FC = () => {
     } else {
       const info = findMetalAndPurity(metalType);
       const currentCust = customers.find((c) => c.id === customerId);
-      const rate = info.applicableRate;
-      const amt = balAmt > 0 ? balAmt : (rate > 0 ? Decimal.max(0, new Decimal(balFine).times(rate)).toNumber() : 0);
+      const autoTarget = getAutoMetalTarget(metalType, info.purityId, info.applicableRate, info.tunchPercent);
 
       const newPay: PaymentRow = {
         id: `pay-${Date.now()}-${payments.length + 1}`,
         payment_mode: metalType,
-        amount: amt > 0 ? amt : '',
+        amount: autoTarget.amount,
         reference_number: '',
         payer_type: 'CUSTOMER',
         payer_name: currentCust ? currentCust.name : 'CASH CUSTOMER',
@@ -2231,15 +2286,15 @@ export const CreateInvoicePage: React.FC = () => {
         purity_id: info.purityId,
         purity_name: info.purityName,
         tunch_percent: info.tunchPercent,
-        metal_weight: balFine > 0 ? balFine : '',
-        fine_weight: balFine > 0 ? balFine : '',
+        metal_weight: autoTarget.metalWeight,
+        fine_weight: autoTarget.fineWeight,
         metal_rate: info.applicableRate > 0 ? info.applicableRate : '',
         rate_error: info.applicableRate <= 0 ? "Today's benchmark rate not set in dashboard" : undefined,
         last_edited: 'weight',
         is_auto: true,
       };
       setPayments((prev) => [...prev, newPay]);
-      showToast('success', `${isGold ? 'Gold' : 'Silver'} Auto mode payment row added (${balFine}g)`);
+      showToast('success', `${isGold ? 'Gold' : 'Silver'} Auto mode payment row added`);
     }
   };
 
@@ -2253,18 +2308,19 @@ export const CreateInvoicePage: React.FC = () => {
         const isSilver = p.payment_mode === 'SILVER';
         if (!isGold && !isSilver) return p;
 
-        const balFine = isGold ? calculations.goldBalFine : calculations.silverBalFine;
-        const balAmt = isGold ? calculations.goldBalAmount : calculations.silverBalAmount;
-        const rate = Number(p.metal_rate || 0);
-        const targetAmt = balAmt > 0 ? balAmt : (rate > 0 ? Decimal.max(0, new Decimal(balFine).times(rate)).toNumber() : 0);
+        const autoTarget = getAutoMetalTarget(isGold ? 'GOLD' : 'SILVER', p.purity_id, p.metal_rate, p.tunch_percent);
 
-        if (p.metal_weight !== (balFine > 0 ? balFine : '') || p.amount !== (targetAmt > 0 ? targetAmt : '')) {
+        if (
+          p.metal_weight !== autoTarget.metalWeight ||
+          p.fine_weight !== autoTarget.fineWeight ||
+          p.amount !== autoTarget.amount
+        ) {
           hasChanges = true;
           return {
             ...p,
-            metal_weight: balFine > 0 ? balFine : '',
-            fine_weight: balFine > 0 ? balFine : '',
-            amount: targetAmt > 0 ? targetAmt : '',
+            metal_weight: autoTarget.metalWeight,
+            fine_weight: autoTarget.fineWeight,
+            amount: autoTarget.amount,
           };
         }
         return p;
@@ -2276,6 +2332,10 @@ export const CreateInvoicePage: React.FC = () => {
     calculations.goldBalAmount,
     calculations.silverBalFine,
     calculations.silverBalAmount,
+    calculations.goldWholesaleBal,
+    calculations.silverWholesaleBal,
+    calculations.balanceDue,
+    isWholesale,
   ]);
 
   // Submit / Create Invoice
@@ -2608,8 +2668,6 @@ export const CreateInvoicePage: React.FC = () => {
       phone === 'COUNTER'
     );
   }, [selectedCustomer]);
-
-  const isWholesale = billType === 'WHOLESALE';
 
   // Dynamic Column Count & Spans based on Store Invoice Configuration
   const saleLeadColSpan = 1 + (invoiceColumns.show_tag_no ? 1 : 0) + 1 + 1 + (invoiceColumns.show_tunch ? 1 : 0);
@@ -4928,56 +4986,54 @@ export const CreateInvoicePage: React.FC = () => {
                 </div>
 
                 {/* ⚪ SILVER TALLY */}
-                {(calculations.silverFineWeight > 0 || calculations.silverExchangeFineWeight > 0 || calculations.silverBalFine > 0) && (
-                  <div className="tally-metal-block silver-tally mt-2">
-                    <div className="tally-header-row flex items-center justify-between">
-                      <span className="tally-metal-title font-bold text-xs text-slate-200">
-                        ⚪ Silver Balance
+                <div className="tally-metal-block silver-tally mt-2">
+                  <div className="tally-header-row flex items-center justify-between">
+                    <span className="tally-metal-title font-bold text-xs text-slate-200">
+                      ⚪ Silver Balance
+                    </span>
+                    <button
+                      type="button"
+                      className={`tally-auto-btn silver-auto-btn ${
+                        payments.some((p) => p.payment_mode === 'SILVER' && p.is_auto) ? 'is-active' : ''
+                      }`}
+                      onClick={() => handleApplyAutoFromSummary('SILVER')}
+                      title="Click to toggle Auto mode for Silver payment (auto-binds Bal Fine & Bal Amt)"
+                    >
+                      <span className="dot">🔴</span>
+                      <span>
+                        {payments.some((p) => p.payment_mode === 'SILVER' && p.is_auto)
+                          ? 'Auto Selected'
+                          : 'Auto'}
                       </span>
-                      <button
-                        type="button"
-                        className={`tally-auto-btn silver-auto-btn ${
-                          payments.some((p) => p.payment_mode === 'SILVER' && p.is_auto) ? 'is-active' : ''
-                        }`}
-                        onClick={() => handleApplyAutoFromSummary('SILVER')}
-                        title="Click to toggle Auto mode for Silver payment (auto-binds Bal Fine & Bal Amt)"
-                      >
-                        <span className="dot">🔴</span>
-                        <span>
-                          {payments.some((p) => p.payment_mode === 'SILVER' && p.is_auto)
-                            ? 'Auto Selected'
-                            : 'Auto'}
-                        </span>
-                        <span className="val-preview font-mono">{formatFineWeight(calculations.silverBalFine, 3)}g</span>
-                      </button>
-                    </div>
+                      <span className="val-preview font-mono">{formatFineWeight(calculations.silverBalFine, 3)}g</span>
+                    </button>
+                  </div>
 
-                    <div className="tally-equation-grid font-mono text-xs">
+                  <div className="tally-equation-grid font-mono text-xs">
+                    <div className="equation-line">
+                      <span className="eq-label text-muted">Fine Wt:</span>
+                      <span className="eq-formula">
+                        <span className="val-sold" title="Fine Silver Sold">{formatFineWeight(calculations.silverFineWeight, 4)}g</span>
+                        <span className="op">−</span>
+                        <span className="val-ret text-rose-300" title="Return Exchange Fine Silver">{formatFineWeight(calculations.silverExchangeFineWeight, 4)}g</span>
+                        <span className="op">=</span>
+                        <strong className="val-bal text-slate-200" title="Balance Silver Fine">{formatFineWeight(calculations.silverBalFine, 4)}g</strong>
+                      </span>
+                    </div>
+                    {!isWholesale && (
                       <div className="equation-line">
-                        <span className="eq-label text-muted">Fine Wt:</span>
+                        <span className="eq-label text-muted">Amount:</span>
                         <span className="eq-formula">
-                          <span className="val-sold" title="Fine Silver Sold">{formatFineWeight(calculations.silverFineWeight, 4)}g</span>
+                          <span className="val-sold" title="Sale Silver Amount">{formatCurrency(calculations.silverSaleAmount)}</span>
                           <span className="op">−</span>
-                          <span className="val-ret text-rose-300" title="Return Exchange Fine Silver">{formatFineWeight(calculations.silverExchangeFineWeight, 4)}g</span>
+                          <span className="val-ret text-rose-300" title="Return Exchange Silver Amount">{formatCurrency(calculations.silverExchangeAmount)}</span>
                           <span className="op">=</span>
-                          <strong className="val-bal text-slate-200" title="Balance Silver Fine">{formatFineWeight(calculations.silverBalFine, 4)}g</strong>
+                          <strong className="val-bal text-emerald-400" title="Balance Silver Amount">{formatCurrency(calculations.silverBalAmount)}</strong>
                         </span>
                       </div>
-                      {!isWholesale && (
-                        <div className="equation-line">
-                          <span className="eq-label text-muted">Amount:</span>
-                          <span className="eq-formula">
-                            <span className="val-sold" title="Sale Silver Amount">{formatCurrency(calculations.silverSaleAmount)}</span>
-                            <span className="op">−</span>
-                            <span className="val-ret text-rose-300" title="Return Exchange Silver Amount">{formatCurrency(calculations.silverExchangeAmount)}</span>
-                            <span className="op">=</span>
-                            <strong className="val-bal text-emerald-400" title="Balance Silver Amount">{formatCurrency(calculations.silverBalAmount)}</strong>
-                          </span>
-                        </div>
-                      )}
-                    </div>
+                    )}
                   </div>
-                )}
+                </div>
               </div>
             </div>
 
@@ -5025,39 +5081,37 @@ export const CreateInvoicePage: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Pure Silver Balance Section (if any silver) */}
-                {(calculations.silverAdjustedFineWeight > 0 || calculations.silverExchangeFineWeight > 0 || calculations.silverPaymentFineGrams > 0) && (
-                  <div className="wholesale-metal-balance-card silver-card mb-3 p-2.5 rounded bg-surface/80 border border-slate-400/30">
-                    <div className="flex justify-between items-center mb-1.5 pb-1 border-b border-border/40">
-                      <span className="font-bold text-xs text-slate-300">⚪ Pure Fine Silver</span>
-                      <span className={`font-mono font-bold text-xs ${calculations.silverWholesaleBal <= 0.0005 ? 'text-emerald-400' : 'text-slate-200'}`}>
-                        {calculations.silverWholesaleBal <= 0.0005 ? 'SETTLED ✓' : `${formatFineWeight(calculations.silverWholesaleBal, 4)}g BAAKI`}
-                      </span>
-                    </div>
-                    <div className="flex justify-between text-xs py-0.5 text-muted">
-                      <span>Sale Billable Fine:</span>
-                      <span className="font-mono font-bold text-slate-200">+{formatFineWeight(calculations.silverAdjustedFineWeight, 4)} g</span>
-                    </div>
-                    {calculations.silverExchangeFineWeight > 0 && (
-                      <div className="flex justify-between text-xs py-0.5 text-rose-400">
-                        <span>Inward Return Fine:</span>
-                        <span className="font-mono">−{formatFineWeight(calculations.silverExchangeFineWeight, 4)} g</span>
-                      </div>
-                    )}
-                    {calculations.silverPaymentFineGrams > 0 && (
-                      <div className="flex justify-between text-xs py-0.5 text-emerald-400">
-                        <span>Silver Tender Received:</span>
-                        <span className="font-mono">−{formatFineWeight(calculations.silverPaymentFineGrams, 4)} g</span>
-                      </div>
-                    )}
-                    <div className="flex justify-between items-center pt-1.5 mt-1 border-t border-dashed border-border/50">
-                      <span className="font-bold text-xs">Remaining Silver Fine:</span>
-                      <span className={`font-mono font-bold text-sm ${calculations.silverWholesaleBal <= 0.0005 ? 'text-emerald-400' : 'text-slate-200'}`}>
-                        {calculations.silverWholesaleBal <= 0.0005 ? '0.0000 g' : `${formatFineWeight(calculations.silverWholesaleBal, 4)} g`}
-                      </span>
-                    </div>
+                {/* Pure Silver Balance Section */}
+                <div className="wholesale-metal-balance-card silver-card mb-3 p-2.5 rounded bg-surface/80 border border-slate-400/30">
+                  <div className="flex justify-between items-center mb-1.5 pb-1 border-b border-border/40">
+                    <span className="font-bold text-xs text-slate-300">⚪ Pure Fine Silver</span>
+                    <span className={`font-mono font-bold text-xs ${calculations.silverWholesaleBal <= 0.0005 ? 'text-emerald-400' : 'text-slate-200'}`}>
+                      {calculations.silverWholesaleBal <= 0.0005 ? 'SETTLED ✓' : `${formatFineWeight(calculations.silverWholesaleBal, 4)}g BAAKI`}
+                    </span>
                   </div>
-                )}
+                  <div className="flex justify-between text-xs py-0.5 text-muted">
+                    <span>Sale Billable Fine:</span>
+                    <span className="font-mono font-bold text-slate-200">+{formatFineWeight(calculations.silverAdjustedFineWeight, 4)} g</span>
+                  </div>
+                  {calculations.silverExchangeFineWeight > 0 && (
+                    <div className="flex justify-between text-xs py-0.5 text-rose-400">
+                      <span>Inward Return Fine:</span>
+                      <span className="font-mono">−{formatFineWeight(calculations.silverExchangeFineWeight, 4)} g</span>
+                    </div>
+                  )}
+                  {calculations.silverPaymentFineGrams > 0 && (
+                    <div className="flex justify-between text-xs py-0.5 text-emerald-400">
+                      <span>Silver Tender Received:</span>
+                      <span className="font-mono">−{formatFineWeight(calculations.silverPaymentFineGrams, 4)} g</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between items-center pt-1.5 mt-1 border-t border-dashed border-border/50">
+                    <span className="font-bold text-xs">Remaining Silver Fine:</span>
+                    <span className={`font-mono font-bold text-sm ${calculations.silverWholesaleBal <= 0.0005 ? 'text-emerald-400' : 'text-slate-200'}`}>
+                      {calculations.silverWholesaleBal <= 0.0005 ? '0.0000 g' : `${formatFineWeight(calculations.silverWholesaleBal, 4)} g`}
+                    </span>
+                  </div>
+                </div>
 
                 <div className="balance-status-badge mt-2">
                   {calculations.wholesaleIsSettled ? (
