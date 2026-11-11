@@ -1400,41 +1400,40 @@ export const DashboardPage: React.FC = () => {
 
       {/* Password / PIN Modal for Display Mode: On (Live) */}
       {showUnlockModal && (
-        <div className="rate-modal-backdrop" onClick={() => setShowUnlockModal(false)}>
+        <div className="modal-backdrop unlock-modal-backdrop" onClick={() => setShowUnlockModal(false)}>
           <div
-            className={`rate-modal-container unlock-pin-modal ${isShaking ? 'shake-animation' : ''}`}
+            className={`dashboard-rate-modal unlock-pin-modal ${isShaking ? 'shake-animation' : ''}`}
             onClick={(e) => e.stopPropagation()}
-            style={{ maxWidth: '420px', width: '92%' }}
+            style={{ maxWidth: '440px', width: '100%', margin: 'auto' }}
           >
-            <div className="rate-modal-header" style={{ borderBottomColor: '#f59e0b', background: '#FFFBEB' }}>
-              <div className="header-info">
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <div style={{
-                    width: '36px',
-                    height: '36px',
-                    borderRadius: '8px',
-                    background: '#FEF3C7',
-                    border: '1px solid #FCD34D',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: '#B45309'
-                  }}>
-                    <Lock size={19} />
-                  </div>
-                  <div>
-                    <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: '#111827' }}>
-                      Unlock Live Figures
-                    </h3>
-                    <span style={{ fontSize: '0.74rem', color: '#6B7280' }}>
-                      Display Mode: On (Live) • Password Protected
-                    </span>
-                  </div>
+            <div className="modal-header" style={{ borderBottomColor: '#FCD34D', background: '#FFFBEB' }}>
+              <div className="modal-title-group" style={{ alignItems: 'center' }}>
+                <div style={{
+                  width: '38px',
+                  height: '38px',
+                  borderRadius: '8px',
+                  background: '#FEF3C7',
+                  border: '1px solid #FCD34D',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#B45309',
+                  flexShrink: 0
+                }}>
+                  <Lock size={19} />
+                </div>
+                <div>
+                  <h3 className="modal-title" style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: '#111827' }}>
+                    Unlock Live Figures
+                  </h3>
+                  <p className="modal-subtitle" style={{ fontSize: '0.74rem', color: '#6B7280' }}>
+                    Display Mode: On (Live) • Password Protected
+                  </p>
                 </div>
               </div>
               <button
                 type="button"
-                className="btn-modal-close"
+                className="modal-close-btn"
                 onClick={() => setShowUnlockModal(false)}
                 title="Close (Esc)"
               >
@@ -1442,14 +1441,14 @@ export const DashboardPage: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleUnlockSubmit} className="rate-modal-body">
-              <div style={{ padding: '0.4rem 0' }}>
+            <form onSubmit={handleUnlockSubmit} className="rate-modal-form unlock-modal-body" style={{ padding: '1.25rem 1.5rem' }}>
+              <div>
                 <p style={{ fontSize: '0.82rem', color: '#4B5563', margin: '0 0 1rem 0', lineHeight: 1.45 }}>
                   Enter counter password to reveal real-time sales, net revenue, cash-in-hand, and metal balances.
                 </p>
 
                 <div className="form-group">
-                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#374151', marginBottom: '6px' }}>
+                  <label className="form-label" style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#374151', marginBottom: '6px' }}>
                     Password / PIN <span style={{ color: '#EF4444' }}>*</span>
                   </label>
                   <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
@@ -1462,15 +1461,21 @@ export const DashboardPage: React.FC = () => {
                         if (unlockError) setUnlockError(null);
                       }}
                       placeholder="Enter PIN (1234)"
-                      className="input-rate font-mono"
+                      className="form-control font-mono"
                       autoFocus
                       style={{
-                        paddingRight: '2.5rem',
+                        width: '100%',
+                        padding: '0.65rem 2.5rem 0.65rem 1rem',
                         fontSize: '1.15rem',
                         letterSpacing: showPinText ? 'normal' : '0.22em',
                         textAlign: 'center',
-                        borderColor: unlockError ? '#EF4444' : undefined,
-                        boxShadow: unlockError ? '0 0 0 2px rgba(239, 68, 68, 0.2)' : undefined,
+                        border: '1.5px solid',
+                        borderColor: unlockError ? '#EF4444' : '#D1D5DB',
+                        borderRadius: '8px',
+                        outline: 'none',
+                        boxShadow: unlockError ? '0 0 0 2px rgba(239, 68, 68, 0.2)' : '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
+                        background: '#FFFFFF',
+                        color: '#111827'
                       }}
                     />
                     <button
@@ -1552,7 +1557,7 @@ export const DashboardPage: React.FC = () => {
                 </div>
               </div>
 
-              <div className="modal-actions" style={{ marginTop: '1.25rem' }}>
+              <div className="modal-actions" style={{ marginTop: '0.5rem', paddingTop: '1rem', borderTop: '1px solid #E5E7EB' }}>
                 <button
                   type="button"
                   className="btn-cancel"
@@ -1563,7 +1568,14 @@ export const DashboardPage: React.FC = () => {
                 <button
                   type="submit"
                   className="btn-save-rate font-mono"
-                  style={{ background: '#059669', borderColor: '#047857' }}
+                  style={{
+                    background: 'linear-gradient(135deg, #059669 0%, #10B981 100%)',
+                    borderColor: '#047857',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    boxShadow: '0 2px 4px rgba(16, 185, 129, 0.2)'
+                  }}
                 >
                   <Unlock size={15} />
                   <span>Unlock Live Figures</span>

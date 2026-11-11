@@ -1345,6 +1345,31 @@
   animation: shakeModal 0.4s ease-in-out;
 }
 
+.unlock-modal-backdrop {
+  position: fixed !important;
+  inset: 0 !important;
+  background: rgba(15, 23, 42, 0.72) !important;
+  backdrop-filter: blur(5px) !important;
+  -webkit-backdrop-filter: blur(5px) !important;
+  z-index: 99999 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 1rem !important;
+}
+
+.unlock-pin-modal {
+  background: #FFFFFF !important;
+  border: 1px solid #FCD34D !important;
+  border-radius: 12px !important;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.45) !important;
+  overflow: hidden !important;
+  animation: modalPop 0.22s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  max-width: 440px !important;
+  width: 100% !important;
+  margin: auto !important;
+}
+
 .masked-indicator-box.is-masked {
   background: #FFFBEB;
   border-color: #F59E0B;
