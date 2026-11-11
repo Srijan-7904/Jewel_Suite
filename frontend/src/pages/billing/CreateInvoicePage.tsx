@@ -1717,14 +1717,15 @@ export const CreateInvoicePage: React.FC = () => {
       // fineWeight = netWeight * (tunchPercent / 100)
       const pureFine = net.times(tunch).dividedBy(100).toDecimalPlaces(4, Decimal.ROUND_HALF_UP);
 
-      // Separate Badla and Wastage calculations based on pure fine weight (gold after purity):
+      // Badla is calculated on pure fine weight (gold after purity):
       const badlaWeight = pureFine.times(badla).dividedBy(100).toDecimalPlaces(4, Decimal.ROUND_HALF_UP);
       const badlaAmount = badlaWeight.times(rate).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
 
-      const wasteOnlyWeight = pureFine.times(wastage).dividedBy(100).toDecimalPlaces(4, Decimal.ROUND_HALF_UP);
+      // Wastage is calculated on Net Weight (Tunch + Wastage % on net weight):
+      const wasteOnlyWeight = net.times(wastage).dividedBy(100).toDecimalPlaces(4, Decimal.ROUND_HALF_UP);
       const wasteOnlyAmount = wasteOnlyWeight.times(rate).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
 
-      // Total addition weight (Waste + Badla calculated from pure fine):
+      // Total addition weight (Waste + Badla):
       const additionWeight = badlaWeight.plus(wasteOnlyWeight);
       const wastageWeight = additionWeight;
       const wastageAmount = wastageWeight.times(rate).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
@@ -1863,7 +1864,7 @@ export const CreateInvoicePage: React.FC = () => {
 
       const pureFine = net.times(tunch).dividedBy(100).toDecimalPlaces(4, Decimal.ROUND_HALF_UP);
       const badlaWeight = pureFine.times(badla).dividedBy(100).toDecimalPlaces(4, Decimal.ROUND_HALF_UP);
-      const wasteWeight = pureFine.times(wastage).dividedBy(100).toDecimalPlaces(4, Decimal.ROUND_HALF_UP);
+      const wasteWeight = net.times(wastage).dividedBy(100).toDecimalPlaces(4, Decimal.ROUND_HALF_UP);
       const additionWeight = badlaWeight.plus(wasteWeight);
 
       const billableFine = !additionWeight.isZero()
@@ -2533,9 +2534,10 @@ export const CreateInvoicePage: React.FC = () => {
           const fine = net.times(tunch).dividedBy(100);
           const wastage = toDecimal(item.wastage_percent);
           const badla = toDecimal(item.badla_percent || 0);
-          const totalAdditionPercent = wastage.plus(badla);
-          const additionWeight = fine.times(totalAdditionPercent).dividedBy(100);
-          const billableFine = !totalAdditionPercent.isZero() ? Decimal.max(0, fine.plus(additionWeight)) : fine;
+          const badlaWeight = fine.times(badla).dividedBy(100);
+          const wasteWeight = net.times(wastage).dividedBy(100);
+          const additionWeight = badlaWeight.plus(wasteWeight);
+          const billableFine = !additionWeight.isZero() ? Decimal.max(0, fine.plus(additionWeight)) : fine;
           const rate = toDecimal(item.rate_per_gram);
           const metalVal = billableFine.times(rate);
 
@@ -3053,7 +3055,7 @@ export const CreateInvoicePage: React.FC = () => {
                     ? net.times(tunch).dividedBy(100).toDecimalPlaces(4, Decimal.ROUND_HALF_UP)
                     : new Decimal(0);
                   const badlaWeight = pureFine.times(badla).dividedBy(100).toDecimalPlaces(4, Decimal.ROUND_HALF_UP);
-                  const wasteWeight = pureFine.times(wastage).dividedBy(100).toDecimalPlaces(4, Decimal.ROUND_HALF_UP);
+                  const wasteWeight = net.gt(0) ? net.times(wastage).dividedBy(100).toDecimalPlaces(4, Decimal.ROUND_HALF_UP) : new Decimal(0);
                   const additionWeight = badlaWeight.plus(wasteWeight);
                   const totalAdditionPercent = badla.plus(wastage);
 
@@ -3838,7 +3840,7 @@ export const CreateInvoicePage: React.FC = () => {
 
                   const pureFine = net.times(tunch).dividedBy(100).toDecimalPlaces(4, Decimal.ROUND_HALF_UP);
                   const badlaWeight = pureFine.times(badla).dividedBy(100).toDecimalPlaces(4, Decimal.ROUND_HALF_UP);
-                  const wasteWeight = pureFine.times(wastage).dividedBy(100).toDecimalPlaces(4, Decimal.ROUND_HALF_UP);
+                  const wasteWeight = net.gt(0) ? net.times(wastage).dividedBy(100).toDecimalPlaces(4, Decimal.ROUND_HALF_UP) : new Decimal(0);
                   const additionWeight = badlaWeight.plus(wasteWeight);
                   const totalAdditionPercent = badla.plus(wastage);
 
@@ -6121,9 +6123,12 @@ export const CreateInvoicePage: React.FC = () => {
                           const metalRate = Number(it.rate_per_gram ?? it.metal_rate ?? 0);
                           const wastagePercent = Number(it.wastage_percent ?? 0);
                           const badlaPercent = Number(it.badla_percent ?? 0);
+                          const badlaWeight = (pureFine * badlaPercent) / 100;
+                          const wasteWeight = (net * wastagePercent) / 100;
+                          const calculatedAddition = badlaWeight + wasteWeight;
                           const totalAdditionPercent = wastagePercent + badlaPercent;
-                          const wastageWeight = Number(it.wastage_weight ?? (totalAdditionPercent !== 0 ? (pureFine * totalAdditionPercent) / 100 : 0));
-                          const billableFine = Number(it.billable_weight ?? (totalAdditionPercent !== 0 ? Math.max(0, pureFine + wastageWeight) : pureFine));
+                          const wastageWeight = Number(it.wastage_weight ?? (calculatedAddition !== 0 ? calculatedAddition : 0));
+                          const billableFine = Number(it.billable_weight ?? (calculatedAddition !== 0 ? Math.max(0, pureFine + wastageWeight) : pureFine));
                           const makingCharge = Number(it.making_charge ?? it.making_charges ?? 0);
                           const metalValue = Number(it.metal_value ?? (billableFine * metalRate));
                           const itemTotal = Number(it.item_amount ?? it.item_total ?? (metalValue + makingCharge));
@@ -6240,9 +6245,8 @@ export const CreateInvoicePage: React.FC = () => {
                                     const pureFine = Number(it.fine_weight || (net * tunch) / 100);
                                     const badlaPercent = Number(it.badla_percent ?? 0);
                                     const wastagePercent = Number(it.wastage_percent ?? 0);
-                                    const totalAdditionPercent = badlaPercent + wastagePercent;
-                                    const additionWeight = Number(it.wastage_weight ?? ((pureFine * totalAdditionPercent) / 100));
-                                    return acc + Number(it.billable_weight ?? (totalAdditionPercent !== 0 ? Math.max(0, pureFine + additionWeight) : pureFine));
+                                    const additionWeight = Number(it.wastage_weight ?? (((pureFine * badlaPercent) / 100) + ((net * wastagePercent) / 100)));
+                                    return acc + Number(it.billable_weight ?? (additionWeight !== 0 ? Math.max(0, pureFine + additionWeight) : pureFine));
                                   }, 0),
                                   4
                                 )}

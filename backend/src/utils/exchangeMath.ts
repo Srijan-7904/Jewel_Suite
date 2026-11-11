@@ -66,12 +66,12 @@ export function calculateExchangeItem(
     throw new BadRequestError('Wastage percentage cannot be negative');
   }
 
-  // Calculate Badla and Wastage weights from pure fine weight
+  // Calculate Badla (on pure fine) and Wastage (on net weight)
   const badla_weight = roundFineWeight(
     toDecimal(pure_fine).times(toDecimal(badla_percent)).dividedBy(100)
   );
   const wastage_weight = roundFineWeight(
-    toDecimal(pure_fine).times(toDecimal(wastage_percent)).dividedBy(100)
+    toDecimal(net_weight).times(toDecimal(wastage_percent)).dividedBy(100)
   );
   const total_addition_weight = toDecimal(badla_weight).plus(toDecimal(wastage_weight)).toNumber();
 

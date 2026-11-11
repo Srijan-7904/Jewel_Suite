@@ -599,9 +599,12 @@ export const InvoicesPage: React.FC = () => {
                             const metalRate = Number(it.rate_per_gram ?? it.metal_rate ?? 0);
                             const wastagePercent = Number(it.wastage_percent ?? 0);
                             const badlaPercent = Number(it.badla_percent ?? 0);
+                            const badlaWeight = (pureFine * badlaPercent) / 100;
+                            const wasteWeight = (net * wastagePercent) / 100;
+                            const calculatedAddition = badlaWeight + wasteWeight;
                             const totalAdditionPercent = wastagePercent + badlaPercent;
-                            const wastageWeight = Number(it.wastage_weight ?? (totalAdditionPercent !== 0 ? (pureFine * totalAdditionPercent) / 100 : 0));
-                            const billableFine = Number(it.billable_weight ?? (totalAdditionPercent !== 0 ? Math.max(0, pureFine + wastageWeight) : pureFine));
+                            const wastageWeight = Number(it.wastage_weight ?? (calculatedAddition !== 0 ? calculatedAddition : 0));
+                            const billableFine = Number(it.billable_weight ?? (calculatedAddition !== 0 ? Math.max(0, pureFine + wastageWeight) : pureFine));
                             const makingCharge = Number(it.making_charge ?? it.making_charges ?? 0);
                             const metalValue = Number(it.metal_value ?? (billableFine * metalRate));
                             const itemTotal = Number(it.item_amount ?? it.item_total ?? (metalValue + makingCharge));
@@ -714,9 +717,8 @@ export const InvoicesPage: React.FC = () => {
                                       const pureFine = Number(it.fine_weight || (net * tunch) / 100);
                                       const badlaPercent = Number(it.badla_percent ?? 0);
                                       const wastagePercent = Number(it.wastage_percent ?? 0);
-                                      const totalAdditionPercent = badlaPercent + wastagePercent;
-                                      const additionWeight = Number(it.wastage_weight ?? ((pureFine * totalAdditionPercent) / 100));
-                                      return acc + Number(it.billable_weight ?? (totalAdditionPercent !== 0 ? Math.max(0, pureFine + additionWeight) : pureFine));
+                                      const additionWeight = Number(it.wastage_weight ?? (((pureFine * badlaPercent) / 100) + ((net * wastagePercent) / 100)));
+                                      return acc + Number(it.billable_weight ?? (additionWeight !== 0 ? Math.max(0, pureFine + additionWeight) : pureFine));
                                     }, 0),
                                     4
                                   )}
@@ -936,9 +938,8 @@ export const InvoicesPage: React.FC = () => {
                               const pureFine = Number(it.fine_weight || (net * tunch) / 100);
                               const badlaPercent = Number(it.badla_percent ?? 0);
                               const wastagePercent = Number(it.wastage_percent ?? 0);
-                              const totalAdditionPercent = badlaPercent + wastagePercent;
-                              const additionWeight = Number(it.wastage_weight ?? ((pureFine * totalAdditionPercent) / 100));
-                              return acc + Number(it.billable_weight ?? (totalAdditionPercent !== 0 ? Math.max(0, pureFine + additionWeight) : pureFine));
+                              const additionWeight = Number(it.wastage_weight ?? (((pureFine * badlaPercent) / 100) + ((net * wastagePercent) / 100)));
+                              return acc + Number(it.billable_weight ?? (additionWeight !== 0 ? Math.max(0, pureFine + additionWeight) : pureFine));
                             }, 0),
                             4
                           )}g
@@ -978,9 +979,8 @@ export const InvoicesPage: React.FC = () => {
                           const pureFine = Number(it.fine_weight || (net * tunch) / 100);
                           const badlaPercent = Number(it.badla_percent ?? 0);
                           const wastagePercent = Number(it.wastage_percent ?? 0);
-                          const totalAdditionPercent = badlaPercent + wastagePercent;
-                          const additionWeight = Number(it.wastage_weight ?? ((pureFine * totalAdditionPercent) / 100));
-                          return acc + Number(it.billable_weight ?? (totalAdditionPercent !== 0 ? Math.max(0, pureFine + additionWeight) : pureFine));
+                          const additionWeight = Number(it.wastage_weight ?? (((pureFine * badlaPercent) / 100) + ((net * wastagePercent) / 100)));
+                          return acc + Number(it.billable_weight ?? (additionWeight !== 0 ? Math.max(0, pureFine + additionWeight) : pureFine));
                         }, 0);
                         const exchFine = Number(selectedInvoice.exchange?.total_fine_weight || 0);
                         const paidFine = (selectedInvoice.payments || [])

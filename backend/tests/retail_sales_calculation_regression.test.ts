@@ -290,15 +290,15 @@ describe('Jewel Suite: Retail Sale Fine Weight, Wastage, Metal Value & GST Regre
 
       expect(res.net_weight).toBe(50.0);
       expect(res.fine_weight).toBe(49.95);
-      // Wastage weight based on fine weight: 49.95 * 2% = 0.9990g
-      expect(res.wastage_weight).toBe(0.999);
-      expect(res.wastage_amount).toBe(94.41);
-      // Under wastage addition rule: billable fine = 49.95 + 0.999 = 50.9490g
-      expect(res.adjusted_fine_weight).toBe(50.949);
-      expect(res.billable_weight).toBe(50.949);
-      // Metal value = 50.949 * 94.50 = 4814.68
-      expect(res.metal_value).toBe(4814.68);
-      expect(res.item_amount).toBe(5314.68);
+      // Wastage weight based on net weight: 50.0 * 2% = 1.0000g
+      expect(res.wastage_weight).toBe(1.0);
+      expect(res.wastage_amount).toBe(94.5);
+      // Under wastage addition rule: billable fine = 49.95 + 1.0 = 50.9500g
+      expect(res.adjusted_fine_weight).toBe(50.95);
+      expect(res.billable_weight).toBe(50.95);
+      // Metal value = 50.95 * 94.50 = 4814.78
+      expect(res.metal_value).toBe(4814.78);
+      expect(res.item_amount).toBe(5314.78);
     });
 
     it('verifies diamond purity is carat/clarity based without tunch', () => {
@@ -468,8 +468,8 @@ describe('Jewel Suite: Retail Sale Fine Weight, Wastage, Metal Value & GST Regre
       });
 
       expect(res22k.fine_weight).toBe(4.9502); // Physical fine gold sold
-      expect(res22k.wastage_weight).toBe(0.4950); // Wastage addition: 4.9502 * 10%
-      expect(res22k.effective_fine_weight).toBe(5.4452); // Billable fine eq.
+      expect(res22k.wastage_weight).toBe(0.5400); // Wastage addition: 5.400 * 10%
+      expect(res22k.effective_fine_weight).toBe(5.4902); // Billable fine eq.
 
       // In 100% benchmark: pure gold is 5.4000g, wastage addition is 0.5400g, billable equivalent is 5.9400g
       const res100 = calculateSalesItem({
@@ -502,21 +502,21 @@ describe('Jewel Suite: Retail Sale Fine Weight, Wastage, Metal Value & GST Regre
       // 2. Pure fine weight = 5.400 * 91.67% = 4.95018g -> 4.9502g
       expect(res.fine_weight).toBe(4.9502);
 
-      // 3. Wastage weight (basis: pure Fine weight) = 4.9502 * 20% = 0.9900g
-      expect(res.wastage_weight).toBe(0.9900);
+      // 3. Wastage weight (basis: Net weight) = 5.400 * 20% = 1.0800g
+      expect(res.wastage_weight).toBe(1.0800);
 
-      // 4. Wastage addition rule: billableWeight = fineWeight + wastageWeight = 4.9502 + 0.9900 = 5.9402g
-      expect(res.adjusted_fine_weight).toBe(5.9402);
-      expect(res.billable_weight).toBe(5.9402);
+      // 4. Wastage addition rule: billableWeight = fineWeight + wastageWeight = 4.9502 + 1.0800 = 6.0302g
+      expect(res.adjusted_fine_weight).toBe(6.0302);
+      expect(res.billable_weight).toBe(6.0302);
 
-      // 5. Billable metal value = 5.9402 * 7,190 = ₹42,710.04
-      expect(res.metal_value).toBe(42710.04);
+      // 5. Billable metal value = 6.0302 * 7,190 = ₹43,357.14
+      expect(res.metal_value).toBe(43357.14);
 
-      // 6. Wastage monetary amount = 0.9900 * 7,190 = ₹7,118.10
-      expect(res.wastage_amount).toBe(7118.10);
+      // 6. Wastage monetary amount = 1.0800 * 7,190 = ₹7,765.20
+      expect(res.wastage_amount).toBe(7765.20);
 
-      // 7. Item Amount = 42,710.04 + 2,430.00 = ₹45,140.04
-      expect(res.item_amount).toBe(45140.04);
+      // 7. Item Amount = 43,357.14 + 2,430.00 = ₹45,787.14
+      expect(res.item_amount).toBe(45787.14);
     });
   });
 
@@ -546,33 +546,33 @@ describe('Jewel Suite: Retail Sale Fine Weight, Wastage, Metal Value & GST Regre
       expect(res15.fine_weight).toBe(4.9502);
       expect(res20.fine_weight).toBe(4.9502);
 
-      // Increasing Waste% increases wastage weight (basis: pure Fine weight 4.9502g)
+      // Increasing Waste% increases wastage weight (basis: Net weight 5.400g)
       expect(res0.wastage_weight).toBe(0);
-      expect(res5.wastage_weight).toBe(0.2475);
-      expect(res10.wastage_weight).toBe(0.4950);
-      expect(res15.wastage_weight).toBe(0.7425);
-      expect(res20.wastage_weight).toBe(0.9900);
+      expect(res5.wastage_weight).toBe(0.2700);
+      expect(res10.wastage_weight).toBe(0.5400);
+      expect(res15.wastage_weight).toBe(0.8100);
+      expect(res20.wastage_weight).toBe(1.0800);
 
       // Increasing Waste% increases billable fine weight
       expect(res0.billable_weight).toBe(4.9502);
-      expect(res5.billable_weight).toBe(5.1977);
-      expect(res10.billable_weight).toBe(5.4452);
-      expect(res15.billable_weight).toBe(5.6927);
-      expect(res20.billable_weight).toBe(5.9402);
+      expect(res5.billable_weight).toBe(5.2202);
+      expect(res10.billable_weight).toBe(5.4902);
+      expect(res15.billable_weight).toBe(5.7602);
+      expect(res20.billable_weight).toBe(6.0302);
 
       // Increasing Waste% strictly increases metal value
       expect(res0.metal_value).toBe(35591.94);
-      expect(res5.metal_value).toBe(37371.46);
-      expect(res10.metal_value).toBe(39150.99);
-      expect(res15.metal_value).toBe(40930.51);
-      expect(res20.metal_value).toBe(42710.04);
+      expect(res5.metal_value).toBe(37533.24);
+      expect(res10.metal_value).toBe(39474.54);
+      expect(res15.metal_value).toBe(41415.84);
+      expect(res20.metal_value).toBe(43357.14);
 
       // Increasing Waste% strictly increases item amount:
       expect(res0.item_amount).toBe(38021.94);
-      expect(res5.item_amount).toBe(39801.46);
-      expect(res10.item_amount).toBe(41580.99);
-      expect(res15.item_amount).toBe(43360.51);
-      expect(res20.item_amount).toBe(45140.04);
+      expect(res5.item_amount).toBe(39963.24);
+      expect(res10.item_amount).toBe(41904.54);
+      expect(res15.item_amount).toBe(43845.84);
+      expect(res20.item_amount).toBe(45787.14);
 
       expect(res0.item_amount).toBeLessThan(res5.item_amount);
       expect(res5.item_amount).toBeLessThan(res10.item_amount);
@@ -615,17 +615,17 @@ describe('Jewel Suite: Retail Sale Fine Weight, Wastage, Metal Value & GST Regre
 
       // Physical fine weight remains pure fine gold
       expect(item.fine_weight).toBe(4.9502);
-      expect(item.wastage_weight).toBe(0.9900);
-      expect(item.adjusted_fine_weight).toBe(5.9402);
-      expect(item.billable_weight).toBe(5.9402);
-      expect(item.metal_value).toBe(42710.04);
+      expect(item.wastage_weight).toBe(1.0800);
+      expect(item.adjusted_fine_weight).toBe(6.0302);
+      expect(item.billable_weight).toBe(6.0302);
+      expect(item.metal_value).toBe(43357.14);
       expect(item.making_charge).toBe(2430.00);
-      expect(item.item_amount).toBe(45140.04);
+      expect(item.item_amount).toBe(45787.14);
 
       // Taxable amount and GST
-      expect(reloaded.taxable_amount).toBe(45140.04);
-      expect(reloaded.gst_amount).toBe(1354.20); // 45,140.04 * 3% = 1354.2012 -> 1354.20
-      expect(reloaded.grand_total).toBe(46494.00); // 45,140.04 + 1354.20 = 46,494.24 -> 46,494.00
+      expect(reloaded.taxable_amount).toBe(45787.14);
+      expect(reloaded.gst_amount).toBe(1373.61);
+      expect(reloaded.grand_total).toBe(47161.00);
     });
 
     it('verifies Fine Gold Inward Exchange deduction and Net Gold Weight reconciliation', () => {
@@ -699,8 +699,8 @@ describe('Jewel Suite: Retail Sale Fine Weight, Wastage, Metal Value & GST Regre
     });
 
     it('Requirement 6: increasing wastage increases billable weight and item amount without corrupting actual fine weight', () => {
-      // With Badla -0.5% and Wastage 5.0% calculated from pure fine weight 375.0g:
-      // Badla weight = 375 * -0.5% = -1.875g, Wastage weight = 375 * 5% = +18.750g => net addition = +16.8750g
+      // With Badla -0.5% (on fine weight 375g = -1.875g) and Wastage 5.0% (on net weight 500g = +25.000g):
+      // Net commercial adjustment weight = -1.8750 + 25.0000 = +23.1250g
       const res = calculateSalesItem({
         gross_weight: 500.0,
         less_weight: 0.0,
@@ -713,14 +713,13 @@ describe('Jewel Suite: Retail Sale Fine Weight, Wastage, Metal Value & GST Regre
 
       // Actual physical fine weight is STILL 375.0000g
       expect(res.fine_weight).toBe(375.0);
-      // Net commercial adjustment weight = -1.8750 + 18.7500 = +16.8750g
-      expect(res.wastage_weight).toBe(16.875);
-      // Billable weight = 375.0000 + 16.8750 = 391.8750g
-      expect(res.billable_weight).toBe(391.875);
-      // Metal value = 391.8750 * 7190 = ₹28,17,581.25
-      expect(res.metal_value).toBe(2817581.25);
-      // Item total = 28,17,581.25 + 2,25,000.00 = ₹30,42,581.25
-      expect(res.item_amount).toBe(3042581.25);
+      expect(res.wastage_weight).toBe(23.125);
+      // Billable weight = 375.0000 + 23.1250 = 398.1250g
+      expect(res.billable_weight).toBe(398.125);
+      // Metal value = 398.1250 * 7190 = ₹28,62,518.75
+      expect(res.metal_value).toBe(2862518.75);
+      // Item total = 28,62,518.75 + 2,25,000.00 = ₹30,87,518.75
+      expect(res.item_amount).toBe(3087518.75);
     });
 
     it('Requirement 7: validates negative Badla values and rejects invalid combinations', () => {

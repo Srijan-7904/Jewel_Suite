@@ -43,7 +43,7 @@ export interface SalesItemCalculationResult {
  * - net_weight = gross_weight - less_weight
  * - fine_weight = net_weight * (tunch_percent / 100) (physical pure gold weight after purity)
  * - badla_weight = fine_weight * (badla_percent / 100) (calculated from gold after purity)
- * - wastage_weight = fine_weight * (wastage_percent / 100) (calculated from gold after purity)
+ * - wastage_weight = net_weight * (wastage_percent / 100) (calculated from net weight: Tunch + Wastage %)
  * - total_addition_weight = badla_weight + wastage_weight
  * - billable_weight = fine_weight + total_addition_weight (clamped >= 0)
  * - metal_value = billable_weight * rate_per_gram
@@ -80,7 +80,7 @@ export function calculateSalesItem(
 
   const total_addition_percent = toDecimal(wastage_percent).plus(toDecimal(badla_percent)).toNumber();
 
-  // Badla and Wastage calculation based on fine weight (gold after purity)
+  // Badla remains based strictly on fine weight (gold after purity)
   const badla_weight = roundFineWeight(
     toDecimal(fine_weight).times(toDecimal(badla_percent)).dividedBy(100)
   );
@@ -88,8 +88,10 @@ export function calculateSalesItem(
     toDecimal(badla_weight).times(toDecimal(input.rate_per_gram))
   );
 
+  // Wastage is calculated on Net Weight (Sarafa trade standard: Tunch + Wastage % on net weight)
+  // e.g. Tunch 75%, Wastage 2.5%, Net 10.490g => Fine 7.8675g + Waste (10.490 * 2.5%) 0.2623g = 8.1298g
   const pure_wastage_weight = roundFineWeight(
-    toDecimal(fine_weight).times(toDecimal(wastage_percent)).dividedBy(100)
+    toDecimal(net_weight).times(toDecimal(wastage_percent)).dividedBy(100)
   );
   const pure_wastage_amount = roundCurrency(
     toDecimal(pure_wastage_weight).times(toDecimal(input.rate_per_gram))

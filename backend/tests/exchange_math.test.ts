@@ -139,10 +139,10 @@ describe('Jewel Suite Part 6: Exchange Math Calculations', () => {
   describe('Exchange Sales Parity: Badla%, Waste%, and Making Charge Modes', () => {
     it('calculates Badla% and Waste% based on pure fine weight', () => {
       // Net = 10g, Tunch = 91.67% => pure fine = 9.1670g
-      // Badla = -2% => badla weight = 9.167 * -2% = -0.1833g
-      // Waste = +1% => waste weight = 9.167 * 1% = +0.0917g
-      // Net addition = -0.0916g => billable fine = 9.0754g
-      // Rate = ₹7,000/g => metal value = 9.0754 * 7000 = ₹63,527.80
+      // Badla = -2% (on fine) => badla weight = 9.167 * -2% = -0.1833g
+      // Waste = +1% (on net) => waste weight = 10.0 * 1% = +0.1000g
+      // Net addition = -0.0833g => billable fine = 9.0837g
+      // Rate = ₹7,000/g => metal value = 9.0837 * 7000 = ₹63,585.90
       const result = calculateExchangeItem({
         gross_weight: 10.0,
         less_weight: 0.0,
@@ -155,10 +155,10 @@ describe('Jewel Suite Part 6: Exchange Math Calculations', () => {
       expect(result.net_weight).toBe(10.0);
       expect(result.fine_weight).toBe(9.167);
       expect(result.badla_weight).toBe(-0.1833);
-      expect(result.wastage_weight).toBe(0.0917);
-      expect(result.billable_weight).toBe(9.0754);
-      expect(result.metal_value).toBe(63527.8);
-      expect(result.exchange_value).toBe(63527.8);
+      expect(result.wastage_weight).toBe(0.1);
+      expect(result.billable_weight).toBe(9.0837);
+      expect(result.metal_value).toBe(63585.9);
+      expect(result.exchange_value).toBe(63585.9);
     });
 
     it('calculates PERCENTAGE making charge deduction', () => {
