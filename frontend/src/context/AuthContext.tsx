@@ -34,6 +34,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       refreshHealth().catch(() => {});
       const token = getStoredToken();
       if (!token) {
+        if (typeof window !== 'undefined') {
+          sessionStorage.removeItem('jewel_suite_user_data');
+        }
+        setUser(null);
         setIsLoading(false);
         return;
       }
