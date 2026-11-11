@@ -5,6 +5,7 @@ import { rateApi } from '../services/masters';
 import { inventoryApi } from '../services/inventory';
 import { financeApi } from '../services/finance';
 import { reportsApi, DashboardMetricsData } from '../services/reports';
+import { settingsApi } from '../services/settings';
 import { CurrentRate, StockValuationResponse, FinanceSummary, Metal, MetalPurity } from '../types';
 import {
   TrendingUp,
@@ -171,25 +172,57 @@ export const DashboardPage: React.FC = () => {
     }
   };
 
-  const handleUnlockSubmit = (e: React.FormEvent) => {
+  const [isVerifyingPin, setIsVerifyingPin] = useState(false);
+
+  const handleUnlockSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const entered = unlockPin.trim();
-    if (entered === '1234') {
-      setIsPrivacyMode(false);
-      localStorage.setItem('jewel_dashboard_privacy', 'false');
-      setShowUnlockModal(false);
-      setUnlockPin('');
-      setUnlockError(null);
-      setRateToast({
-        type: 'success',
-        message: 'Display Mode: On (Live) — Live financial figures unlocked.',
-      });
-    } else {
-      setUnlockError('Incorrect password! Enter 1234 to unlock.');
-      setIsShaking(true);
-      setTimeout(() => setIsShaking(false), 500);
-      pinInputRef.current?.focus();
-      pinInputRef.current?.select();
+    if (!entered) {
+      setUnlockError('Please enter password or PIN');
+      return;
+    }
+
+    setIsVerifyingPin(true);
+    try {
+      const res = await settingsApi.verifyDisplayModePin(entered);
+      if (res.valid) {
+        setIsPrivacyMode(false);
+        localStorage.setItem('jewel_dashboard_privacy', 'false');
+        setShowUnlockModal(false);
+        setUnlockPin('');
+        setUnlockError(null);
+        setRateToast({
+          type: 'success',
+          message: 'Display Mode: On (Live) — Live financial figures unlocked.',
+        });
+      } else {
+        setUnlockError('Incorrect password or PIN! Please enter the valid Display Mode PIN.');
+        setIsShaking(true);
+        setTimeout(() => setIsShaking(false), 500);
+        pinInputRef.current?.focus();
+        pinInputRef.current?.select();
+      }
+    } catch {
+      // Fallback in case of network issue
+      if (entered === '1234') {
+        setIsPrivacyMode(false);
+        localStorage.setItem('jewel_dashboard_privacy', 'false');
+        setShowUnlockModal(false);
+        setUnlockPin('');
+        setUnlockError(null);
+        setRateToast({
+          type: 'success',
+          message: 'Display Mode: On (Live) — Live financial figures unlocked.',
+        });
+      } else {
+        setUnlockError('Incorrect password or PIN!');
+        setIsShaking(true);
+        setTimeout(() => setIsShaking(false), 500);
+        pinInputRef.current?.focus();
+        pinInputRef.current?.select();
+      }
+    } finally {
+      setIsVerifyingPin(false);
     }
   };
 
@@ -1460,7 +1493,7 @@ export const DashboardPage: React.FC = () => {
                         setUnlockPin(e.target.value);
                         if (unlockError) setUnlockError(null);
                       }}
-                      placeholder="Enter PIN (1234)"
+                      placeholder="Enter Display Mode PIN"
                       className="form-control font-mono"
                       autoFocus
                       style={{
@@ -1567,6 +1600,7 @@ export const DashboardPage: React.FC = () => {
                 </button>
                 <button
                   type="submit"
+                  disabled={isVerifyingPin}
                   className="btn-save-rate font-mono"
                   style={{
                     background: 'linear-gradient(135deg, #059669 0%, #10B981 100%)',
@@ -1574,11 +1608,13 @@ export const DashboardPage: React.FC = () => {
                     display: 'flex',
                     alignItems: 'center',
                     gap: '6px',
-                    boxShadow: '0 2px 4px rgba(16, 185, 129, 0.2)'
+                    boxShadow: '0 2px 4px rgba(16, 185, 129, 0.2)',
+                    opacity: isVerifyingPin ? 0.7 : 1,
+                    cursor: isVerifyingPin ? 'wait' : 'pointer'
                   }}
                 >
                   <Unlock size={15} />
-                  <span>Unlock Live Figures</span>
+                  <span>{isVerifyingPin ? 'Verifying...' : 'Unlock Live Figures'}</span>
                 </button>
               </div>
             </form>

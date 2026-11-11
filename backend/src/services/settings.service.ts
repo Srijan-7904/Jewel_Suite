@@ -10,6 +10,8 @@ import { paymentModeRepository } from '../repositories/paymentMode.repository.js
 import { amcRepository } from '../repositories/amc.repository.js';
 import { auditRepository } from '../repositories/audit.repository.js';
 import { metalRepository, MetalRecord } from '../repositories/metal.repository.js';
+import { userRepository } from '../repositories/user.repository.js';
+import { hashPassword, comparePassword } from '../utils/password.js';
 import {
   ShopProfile,
   GeneralSettings,
@@ -25,8 +27,10 @@ import {
   DocumentType,
   InvoiceColumnSettings,
   DEFAULT_INVOICE_COLUMN_SETTINGS,
+  SecuritySettings,
+  UpdateSecuritySettingsInput,
 } from '../domain/settings.js';
-import { BadRequestError } from '../utils/errors.js';
+import { BadRequestError, NotFoundError, UnauthorizedError } from '../utils/errors.js';
 
 // Basic GSTIN Regex: 2 digits state + 5 chars PAN + 4 digits PAN + 1 char entity + 1 char Z + 1 check digit
 const GSTIN_REGEX = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
@@ -637,6 +641,128 @@ export class SettingsService {
       support_phone: '+91 80000 12345',
       support_email: 'support@jewelsuite.local',
     };
+  }
+
+  /**
+   * Security & Access Settings
+   */
+  getSecuritySettings(userId?: string): SecuritySettings {
+    const displayModePin = settingRepository.get('security.display_mode_pin') || '1234';
+    const storeConfigPass = settingRepository.get('security.store_config_password') || '1234';
+    const storeConfigLockEnabled = settingRepository.getBoolean('security.store_config_lock_enabled', true);
+
+    let currentUsername = 'admin';
+    if (userId) {
+      const u = userRepository.findById(userId);
+      if (u) {
+        currentUsername = u.username;
+      }
+    } else {
+      const firstAdmin = userRepository.findByUsername('admin');
+      if (firstAdmin) {
+        currentUsername = firstAdmin.username;
+      }
+    }
+
+    return {
+      display_mode_pin: displayModePin,
+      store_config_password_set: Boolean(settingRepository.get('security.store_config_password')),
+      store_config_lock_enabled: storeConfigLockEnabled,
+      store_config_password: storeConfigPass,
+      current_username: currentUsername,
+    };
+  }
+
+  verifyConfigPassword(password: string): boolean {
+    const lockEnabled = settingRepository.getBoolean('security.store_config_lock_enabled', true);
+    if (!lockEnabled) {
+      return true;
+    }
+    const currentPass = settingRepository.get('security.store_config_password') || '1234';
+    return (password || '').trim() === currentPass.trim();
+  }
+
+  verifyDisplayModePin(pin: string): boolean {
+    const currentPin = settingRepository.get('security.display_mode_pin') || '1234';
+    return (pin || '').trim() === currentPin.trim();
+  }
+
+  async updateSecuritySettings(input: UpdateSecuritySettingsInput, userId?: string): Promise<SecuritySettings> {
+    // 1. Display Mode PIN (Live figures on dashboard)
+    if (input.display_mode_pin !== undefined) {
+      const pin = input.display_mode_pin.trim();
+      if (pin.length < 4) {
+        throw new BadRequestError('Display Mode PIN must be at least 4 digits/characters long', 'VALIDATION_ERROR');
+      }
+      settingRepository.set('security.display_mode_pin', pin);
+    }
+
+    // 2. Store Configuration Password
+    if (input.store_config_password !== undefined) {
+      const pass = input.store_config_password.trim();
+      if (pass.length < 4) {
+        throw new BadRequestError('Store Configuration Password must be at least 4 characters long', 'VALIDATION_ERROR');
+      }
+      settingRepository.set('security.store_config_password', pass);
+    }
+
+    // 3. Store Configuration Lock Enabled toggle
+    if (input.store_config_lock_enabled !== undefined) {
+      settingRepository.set('security.store_config_lock_enabled', input.store_config_lock_enabled ? 'true' : 'false');
+    }
+
+    // 4. Update Current User Login Credentials (Username / Password)
+    const targetUserId = userId || userRepository.findByUsername('admin')?.id;
+    if (targetUserId) {
+      const existingUser = userRepository.findById(targetUserId);
+      if (!existingUser) {
+        throw new NotFoundError('User not found');
+      }
+
+      if (input.username !== undefined) {
+        const newUsername = input.username.trim();
+        if (newUsername.length < 3) {
+          throw new BadRequestError('Username must be at least 3 characters long', 'VALIDATION_ERROR');
+        }
+        if (!/^[a-zA-Z0-9_.-]+$/.test(newUsername)) {
+          throw new BadRequestError('Username can only contain letters, numbers, hyphens, and underscores', 'VALIDATION_ERROR');
+        }
+        const duplicate = userRepository.findByUsername(newUsername);
+        if (duplicate && duplicate.id !== targetUserId) {
+          throw new BadRequestError(`Username '${newUsername}' is already taken`, 'USER_EXISTS');
+        }
+        userRepository.updateUsername(targetUserId, newUsername);
+      }
+
+      if (input.new_password) {
+        const newPass = input.new_password.trim();
+        if (newPass.length < 6) {
+          throw new BadRequestError('New login password must be at least 6 characters long', 'VALIDATION_ERROR');
+        }
+
+        if (input.current_password) {
+          const match = await comparePassword(input.current_password, existingUser.password_hash);
+          if (!match) {
+            throw new UnauthorizedError('Current password is incorrect');
+          }
+        }
+
+        const hashed = await hashPassword(newPass);
+        userRepository.updatePassword(targetUserId, hashed);
+      }
+    }
+
+    auditRepository.log({
+      user_id: userId,
+      action: 'SECURITY_SETTINGS_UPDATED',
+      entity_type: 'SECURITY',
+      entity_id: 'SYSTEM',
+      metadata: {
+        updated_fields: Object.keys(input),
+      },
+    });
+
+    return this.getSecuritySettings(userId);
   }
 }
 

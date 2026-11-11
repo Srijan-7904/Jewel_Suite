@@ -62,3 +62,9 @@ settingsRoutes.get('/database', requireRole('ADMIN'), (req, res, next) => settin
 
 // About Application Info
 settingsRoutes.get('/about', (req, res, next) => settingsController.getAboutInfo(req, res, next));
+
+// Security, Credentials & Store Configuration Lock
+settingsRoutes.get('/security', requireRole('ADMIN'), (req, res, next) => settingsController.getSecuritySettings(req, res, next));
+settingsRoutes.put('/security', requireRole('ADMIN'), (req, res, next) => settingsController.updateSecuritySettings(req, res, next));
+settingsRoutes.post('/security/verify-config', (req, res, next) => settingsController.verifyConfigPassword(req, res, next));
+settingsRoutes.post('/security/verify-display-mode', (req, res, next) => settingsController.verifyDisplayModePin(req, res, next));

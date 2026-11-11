@@ -97,6 +97,12 @@ export class UserRepository {
     db.prepare('UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?').run(password_hash, now, id);
   }
 
+  updateUsername(id: string, username: string): void {
+    const db = getDb();
+    const now = new Date().toISOString();
+    db.prepare('UPDATE users SET username = ?, updated_at = ? WHERE id = ?').run(username.trim(), now, id);
+  }
+
   updateUser(id: string, data: {
     full_name?: string | null;
     phone?: string | null;

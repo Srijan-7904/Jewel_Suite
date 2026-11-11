@@ -29,6 +29,23 @@ export const DEFAULT_INVOICE_COLUMN_SETTINGS: InvoiceColumnSettings = {
   show_fine_weight: true,
 };
 
+export interface SecuritySettings {
+  display_mode_pin: string;
+  store_config_password_set: boolean;
+  store_config_lock_enabled: boolean;
+  store_config_password?: string;
+  current_username?: string;
+}
+
+export interface UpdateSecuritySettingsInput {
+  username?: string;
+  current_password?: string;
+  new_password?: string;
+  display_mode_pin?: string;
+  store_config_password?: string;
+  store_config_lock_enabled?: boolean;
+}
+
 export interface ShopProfile {
   id: string;
   name: string;
@@ -399,6 +416,32 @@ export const settingsApi = {
   deactivateUser(id: string): Promise<UserDetail> {
     return request<UserDetail>(`/api/users/${id}/deactivate`, {
       method: 'POST',
+    });
+  },
+
+  // Security & Passwords
+  getSecurity(): Promise<SecuritySettings> {
+    return request<SecuritySettings>('/api/settings/security');
+  },
+
+  updateSecurity(data: UpdateSecuritySettingsInput): Promise<SecuritySettings> {
+    return request<SecuritySettings>('/api/settings/security', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+
+  verifyConfigPassword(password: string): Promise<{ valid: boolean }> {
+    return request<{ valid: boolean }>('/api/settings/security/verify-config', {
+      method: 'POST',
+      body: JSON.stringify({ password }),
+    });
+  },
+
+  verifyDisplayModePin(pin: string): Promise<{ valid: boolean }> {
+    return request<{ valid: boolean }>('/api/settings/security/verify-display-mode', {
+      method: 'POST',
+      body: JSON.stringify({ pin }),
     });
   },
 };

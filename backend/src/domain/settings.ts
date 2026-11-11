@@ -221,3 +221,21 @@ export const DEFAULT_INVOICE_COLUMN_SETTINGS: InvoiceColumnSettings = {
   show_fine_weight: true,
 };
 
+export interface SecuritySettings {
+  display_mode_pin: string;
+  store_config_password_set: boolean;
+  store_config_lock_enabled: boolean;
+  store_config_password?: string;
+  current_username?: string;
+}
+
+export interface UpdateSecuritySettingsInput {
+  username?: string;
+  current_password?: string;
+  new_password?: string;
+  display_mode_pin?: string;
+  store_config_password?: string;
+  store_config_lock_enabled?: boolean;
+}
+
+

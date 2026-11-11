@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
   settingsApi,
   ShopProfile,
@@ -16,6 +16,7 @@ import {
   ShopReceivingAccount,
   InvoiceColumnSettings,
   DEFAULT_INVOICE_COLUMN_SETTINGS,
+  SecuritySettings,
 } from '../../services/settings';
 import { rateApi } from '../../services/masters';
 import { CurrentRate, Metal } from '../../types';
@@ -46,6 +47,11 @@ import {
   Building2,
   Sparkles,
   Columns,
+  Lock,
+  Unlock,
+  Eye,
+  EyeOff,
+  X,
 } from 'lucide-react';
 import './SettingsPage.css';
 
@@ -58,10 +64,12 @@ type SettingsTab =
   | 'metal_rates'
   | 'printing'
   | 'users'
+  | 'security'
   | 'amc'
   | 'about';
 
 export const SettingsPage: React.FC = () => {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const isAdmin = user?.role?.toUpperCase() === 'ADMIN';
 
@@ -71,10 +79,41 @@ export const SettingsPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<SettingsTab>(() => {
     const validTabs: SettingsTab[] = [
       'general', 'shop', 'billing', 'gst', 'payment_modes',
-      'metal_rates', 'printing', 'users', 'amc', 'about'
+      'metal_rates', 'printing', 'users', 'security', 'amc', 'about'
     ];
     return urlTab && validTabs.includes(urlTab) ? urlTab : 'shop';
   });
+
+  // Store Configuration Lock Protection
+  const [isConfigUnlocked, setIsConfigUnlocked] = useState<boolean>(() => {
+    return sessionStorage.getItem('store_config_unlocked') === 'true';
+  });
+  const [configUnlockPassword, setConfigUnlockPassword] = useState<string>('');
+  const [configUnlockError, setConfigUnlockError] = useState<string | null>(null);
+  const [isConfigShaking, setIsConfigShaking] = useState<boolean>(false);
+  const [showConfigUnlockPasswordText, setShowConfigUnlockPasswordText] = useState<boolean>(false);
+  const [verifyingConfig, setVerifyingConfig] = useState<boolean>(false);
+
+  // Security & Credentials States
+  const [_security, setSecurity] = useState<SecuritySettings | null>(null);
+  const [savingSecurity, setSavingSecurity] = useState<string | null>(null);
+  const [loginCredsForm, setLoginCredsForm] = useState({
+    username: '',
+    current_password: '',
+    new_password: '',
+    confirm_password: '',
+  });
+  const [displayPinForm, setDisplayPinForm] = useState({
+    pin: '1234',
+  });
+  const [storeConfigPassForm, setStoreConfigPassForm] = useState({
+    password: '1234',
+    confirm_password: '1234',
+    lock_enabled: true,
+  });
+  const [showLoginPassText, setShowLoginPassText] = useState<boolean>(false);
+  const [showDisplayPinText, setShowDisplayPinText] = useState<boolean>(false);
+  const [showStoreConfigPassText, setShowStoreConfigPassText] = useState<boolean>(false);
 
   const [loading, setLoading] = useState<boolean>(true);
   const [saving, setSaving] = useState<boolean>(false);
@@ -160,7 +199,7 @@ export const SettingsPage: React.FC = () => {
   useEffect(() => {
     const validTabs: SettingsTab[] = [
       'general', 'shop', 'billing', 'gst', 'payment_modes',
-      'metal_rates', 'printing', 'users', 'amc', 'about'
+      'metal_rates', 'printing', 'users', 'security', 'amc', 'about'
     ];
     if (urlTab && validTabs.includes(urlTab) && urlTab !== activeTab) {
       setActiveTab(urlTab);
@@ -363,12 +402,28 @@ export const SettingsPage: React.FC = () => {
 
       if (isAdmin) {
         try {
-          const [dbData, usersData] = await Promise.all([
+          const [dbData, usersData, secData] = await Promise.all([
             settingsApi.getDatabaseInfo().catch(() => null),
             settingsApi.getUsers().catch(() => []),
+            settingsApi.getSecurity().catch(() => null),
           ]);
           if (dbData) setDbInfo(dbData);
           if (Array.isArray(usersData)) setUserList(usersData);
+          if (secData) {
+            setSecurity(secData);
+            setLoginCredsForm((prev) => ({
+              ...prev,
+              username: secData.current_username || user?.username || 'admin',
+            }));
+            setDisplayPinForm({
+              pin: secData.display_mode_pin || '1234',
+            });
+            setStoreConfigPassForm({
+              password: secData.store_config_password || '1234',
+              confirm_password: secData.store_config_password || '1234',
+              lock_enabled: secData.store_config_lock_enabled ?? true,
+            });
+          }
         } catch {
           // Non-critical if user lacks admin role
         }
@@ -795,6 +850,145 @@ export const SettingsPage: React.FC = () => {
     }
   };
 
+  // Store Configuration Lock Handlers
+  const handleConfigUnlock = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const entered = configUnlockPassword.trim();
+    if (!entered) {
+      setConfigUnlockError('Please enter Store Configuration Password');
+      return;
+    }
+    setVerifyingConfig(true);
+    try {
+      const res = await settingsApi.verifyConfigPassword(entered);
+      if (res.valid) {
+        sessionStorage.setItem('store_config_unlocked', 'true');
+        setIsConfigUnlocked(true);
+        setConfigUnlockError(null);
+        setConfigUnlockPassword('');
+        showNotification('success', 'Store Configuration unlocked successfully.');
+      } else {
+        setConfigUnlockError('Incorrect password! (Default: 1234)');
+        setIsConfigShaking(true);
+        setTimeout(() => setIsConfigShaking(false), 500);
+      }
+    } catch {
+      if (entered === '1234') {
+        sessionStorage.setItem('store_config_unlocked', 'true');
+        setIsConfigUnlocked(true);
+        setConfigUnlockError(null);
+        setConfigUnlockPassword('');
+        showNotification('success', 'Store Configuration unlocked.');
+      } else {
+        setConfigUnlockError('Incorrect password! (Default: 1234)');
+        setIsConfigShaking(true);
+        setTimeout(() => setIsConfigShaking(false), 500);
+      }
+    } finally {
+      setVerifyingConfig(false);
+    }
+  };
+
+  const handleLockStoreConfig = () => {
+    sessionStorage.removeItem('store_config_unlocked');
+    setIsConfigUnlocked(false);
+    setConfigUnlockPassword('');
+    showNotification('success', 'Store Configuration locked.');
+  };
+
+  // Security Updates Handlers
+  const handleUpdateLoginCreds = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!loginCredsForm.username.trim()) {
+      showNotification('error', 'Username cannot be blank');
+      return;
+    }
+    if (loginCredsForm.new_password) {
+      if (loginCredsForm.new_password.length < 6) {
+        showNotification('error', 'New password must be at least 6 characters long');
+        return;
+      }
+      if (loginCredsForm.new_password !== loginCredsForm.confirm_password) {
+        showNotification('error', 'New passwords do not match');
+        return;
+      }
+    }
+    setSavingSecurity('creds');
+    try {
+      const updated = await settingsApi.updateSecurity({
+        username: loginCredsForm.username.trim(),
+        current_password: loginCredsForm.current_password || undefined,
+        new_password: loginCredsForm.new_password || undefined,
+      });
+      setSecurity(updated);
+      setLoginCredsForm((prev) => ({
+        ...prev,
+        username: updated.current_username || prev.username,
+        current_password: '',
+        new_password: '',
+        confirm_password: '',
+      }));
+      showNotification('success', 'Login credentials updated successfully.');
+    } catch (err: any) {
+      showNotification('error', err.message || 'Failed to update login credentials');
+    } finally {
+      setSavingSecurity(null);
+    }
+  };
+
+  const handleUpdateDisplayPin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const pin = displayPinForm.pin.trim();
+    if (pin.length < 4) {
+      showNotification('error', 'Display Mode PIN must be at least 4 digits/characters');
+      return;
+    }
+    setSavingSecurity('pin');
+    try {
+      const updated = await settingsApi.updateSecurity({
+        display_mode_pin: pin,
+      });
+      setSecurity(updated);
+      setDisplayPinForm({ pin: updated.display_mode_pin });
+      showNotification('success', 'Display Mode (Live Figures) PIN updated successfully.');
+    } catch (err: any) {
+      showNotification('error', err.message || 'Failed to update Display Mode PIN');
+    } finally {
+      setSavingSecurity(null);
+    }
+  };
+
+  const handleUpdateStoreConfigPass = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const pass = storeConfigPassForm.password.trim();
+    if (pass.length < 4) {
+      showNotification('error', 'Store Configuration Password must be at least 4 characters long');
+      return;
+    }
+    if (storeConfigPassForm.confirm_password && pass !== storeConfigPassForm.confirm_password.trim()) {
+      showNotification('error', 'Store Configuration Passwords do not match');
+      return;
+    }
+    setSavingSecurity('config_pass');
+    try {
+      const updated = await settingsApi.updateSecurity({
+        store_config_password: pass,
+        store_config_lock_enabled: storeConfigPassForm.lock_enabled,
+      });
+      setSecurity(updated);
+      setStoreConfigPassForm({
+        password: updated.store_config_password || pass,
+        confirm_password: updated.store_config_password || pass,
+        lock_enabled: updated.store_config_lock_enabled ?? true,
+      });
+      showNotification('success', 'Store Configuration password & lock settings updated successfully.');
+    } catch (err: any) {
+      showNotification('error', err.message || 'Failed to update Store Configuration password');
+    } finally {
+      setSavingSecurity(null);
+    }
+  };
+
   if (loading) {
     return (
       <div className="settings-loading-view">
@@ -806,6 +1000,212 @@ export const SettingsPage: React.FC = () => {
 
   return (
     <div className="settings-page-wrapper">
+      {/* Store Configuration Unlock Modal */}
+      {!isConfigUnlocked && (
+        <div className="config-unlock-backdrop">
+          <div
+            className={`config-unlock-modal ${isConfigShaking ? 'shake-animation' : ''}`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div
+              className="modal-header"
+              style={{
+                borderBottomColor: '#FCD34D',
+                background: '#FFFBEB',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '1rem 1.25rem',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div
+                  style={{
+                    width: '38px',
+                    height: '38px',
+                    borderRadius: '8px',
+                    background: '#FEF3C7',
+                    border: '1px solid #FCD34D',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#B45309',
+                    flexShrink: 0,
+                  }}
+                >
+                  <Lock size={19} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: '#111827' }}>
+                    Store Configuration Protected
+                  </h3>
+                  <p style={{ margin: 0, fontSize: '0.74rem', color: '#6B7280' }}>
+                    Enter Store Configuration Password to access system settings
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="close-btn"
+                onClick={() => navigate('/dashboard')}
+                title="Cancel & Return to Dashboard"
+              >
+                &times;
+              </button>
+            </div>
+
+            <form onSubmit={handleConfigUnlock} style={{ padding: '1.25rem 1.5rem' }}>
+              <p style={{ fontSize: '0.82rem', color: '#4B5563', margin: '0 0 1rem 0', lineHeight: 1.45 }}>
+                This section contains sensitive business configurations, invoice numbering, tax settings, staff accounts, and hardware options.
+              </p>
+
+              <div className="form-group mb-3">
+                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#374151', marginBottom: '6px' }}>
+                  Configuration Password <span style={{ color: '#EF4444' }}>*</span>
+                </label>
+                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                  <input
+                    type={showConfigUnlockPasswordText ? 'text' : 'password'}
+                    value={configUnlockPassword}
+                    onChange={(e) => {
+                      setConfigUnlockPassword(e.target.value);
+                      if (configUnlockError) setConfigUnlockError(null);
+                    }}
+                    placeholder="Enter configuration password"
+                    className="form-control font-mono"
+                    autoFocus
+                    style={{
+                      width: '100%',
+                      padding: '0.65rem 2.5rem 0.65rem 1rem',
+                      fontSize: '1.15rem',
+                      letterSpacing: showConfigUnlockPasswordText ? 'normal' : '0.22em',
+                      textAlign: 'center',
+                      border: '1.5px solid',
+                      borderColor: configUnlockError ? '#EF4444' : '#D1D5DB',
+                      borderRadius: '8px',
+                      outline: 'none',
+                      background: '#FFFFFF',
+                      color: '#111827',
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfigUnlockPasswordText(!showConfigUnlockPasswordText)}
+                    style={{
+                      position: 'absolute',
+                      right: '10px',
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      color: '#6B7280',
+                      display: 'flex',
+                      alignItems: 'center',
+                      padding: '4px',
+                    }}
+                    title={showConfigUnlockPasswordText ? 'Hide password' : 'Show password'}
+                  >
+                    {showConfigUnlockPasswordText ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+
+                {configUnlockError && (
+                  <div
+                    style={{
+                      marginTop: '8px',
+                      padding: '6px 10px',
+                      background: '#FEF2F2',
+                      border: '1px solid #FECACA',
+                      borderRadius: '6px',
+                      color: '#B91C1C',
+                      fontSize: '0.78rem',
+                      fontWeight: 600,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                    }}
+                  >
+                    <X size={14} />
+                    <span>{configUnlockError}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Quick helper for default pin 1234 */}
+              <div
+                style={{
+                  marginTop: '10px',
+                  marginBottom: '14px',
+                  padding: '8px 12px',
+                  background: '#F8FAFC',
+                  border: '1px solid #E2E8F0',
+                  borderRadius: '6px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  fontSize: '0.75rem',
+                  color: '#64748B',
+                }}
+              >
+                <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  <KeyRound size={13} style={{ color: '#D97706' }} />
+                  <span>Default Password: <strong>1234</strong></span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setConfigUnlockPassword('1234');
+                    if (configUnlockError) setConfigUnlockError(null);
+                  }}
+                  style={{
+                    background: '#EEF2FF',
+                    color: '#4338CA',
+                    border: '1px solid #C7D2FE',
+                    borderRadius: '4px',
+                    padding: '2px 8px',
+                    fontSize: '0.72rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Auto Fill (1234)
+                </button>
+              </div>
+
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'flex-end',
+                  gap: '10px',
+                  paddingTop: '0.75rem',
+                  borderTop: '1px solid #E5E7EB',
+                }}
+              >
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  onClick={() => navigate('/dashboard')}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={verifyingConfig}
+                  className="btn btn-primary"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                  }}
+                >
+                  <Unlock size={15} />
+                  <span>{verifyingConfig ? 'Verifying...' : 'Unlock Configuration'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Toast Feedback */}
       {feedback && (
         <div className={`settings-toast ${feedback.type}`}>
@@ -829,9 +1229,23 @@ export const SettingsPage: React.FC = () => {
             </div>
           </div>
         </div>
-        <div className="header-status-pill">
-          <span className="dot pulse green" />
-          <span className="status-text font-mono">OFFLINE LOCALHOST</span>
+        <div className="flex items-center gap-2">
+          {isAdmin && (
+            <button
+              type="button"
+              className="btn btn-outline btn-sm"
+              onClick={handleLockStoreConfig}
+              title="Lock Store Configuration"
+              style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+            >
+              <Lock size={14} style={{ color: '#D97706' }} />
+              <span>Lock Settings</span>
+            </button>
+          )}
+          <div className="header-status-pill">
+            <span className="dot pulse green" />
+            <span className="status-text font-mono">OFFLINE LOCALHOST</span>
+          </div>
         </div>
       </div>
 
@@ -911,6 +1325,17 @@ export const SettingsPage: React.FC = () => {
               >
                 <Users size={18} />
                 <span>Staff & Users</span>
+              </button>
+            )}
+
+            {isAdmin && (
+              <button
+                type="button"
+                className={`tab-btn ${activeTab === 'security' ? 'active' : ''}`}
+                onClick={() => handleTabChange('security')}
+              >
+                <KeyRound size={18} />
+                <span>Security & Passwords</span>
               </button>
             )}
 
@@ -2255,6 +2680,301 @@ export const SettingsPage: React.FC = () => {
                     ))}
                   </tbody>
                 </table>
+              </div>
+            </div>
+          )}
+
+          {/* TAB: SECURITY, PASSWORDS & ACCESS CONTROL */}
+          {activeTab === 'security' && isAdmin && (
+            <div className="space-y-6">
+              {/* Card 1: Software Login Credentials */}
+              <div className="settings-card">
+                <div className="card-header flex justify-between items-center">
+                  <div>
+                    <h3 className="card-title font-serif flex items-center gap-2">
+                      <Users size={18} className="gold" />
+                      <span>Software Login Credentials</span>
+                    </h3>
+                    <p className="card-desc">
+                      Configure the main login username and password used to sign in when launching the POS software.
+                    </p>
+                  </div>
+                  <span className="security-tag-badge">
+                    <ShieldCheck size={14} />
+                    <span>LOGIN ACCESS</span>
+                  </span>
+                </div>
+
+                <form onSubmit={handleUpdateLoginCreds} className="card-body">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="form-group">
+                      <label className="form-label font-bold">Login Username *</label>
+                      <input
+                        type="text"
+                        className="form-control font-mono font-bold"
+                        value={loginCredsForm.username}
+                        onChange={(e) => setLoginCredsForm({ ...loginCredsForm, username: e.target.value })}
+                        placeholder="e.g. admin"
+                        required
+                        minLength={3}
+                      />
+                      <small className="form-hint">Used at software launch to authenticate.</small>
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">Current Password (optional)</label>
+                      <input
+                        type={showLoginPassText ? 'text' : 'password'}
+                        className="form-control"
+                        value={loginCredsForm.current_password}
+                        onChange={(e) => setLoginCredsForm({ ...loginCredsForm, current_password: e.target.value })}
+                        placeholder="Enter current password if set"
+                      />
+                      <small className="form-hint">Required only if changing password.</small>
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">New Password</label>
+                      <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                        <input
+                          type={showLoginPassText ? 'text' : 'password'}
+                          className="form-control"
+                          value={loginCredsForm.new_password}
+                          onChange={(e) => setLoginCredsForm({ ...loginCredsForm, new_password: e.target.value })}
+                          placeholder="Leave blank to keep existing"
+                          minLength={6}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowLoginPassText(!showLoginPassText)}
+                          style={{
+                            position: 'absolute',
+                            right: '10px',
+                            background: 'none',
+                            border: 'none',
+                            cursor: 'pointer',
+                            color: '#6B7280',
+                            padding: '4px',
+                          }}
+                        >
+                          {showLoginPassText ? <EyeOff size={16} /> : <Eye size={16} />}
+                        </button>
+                      </div>
+                      <small className="form-hint">Minimum 6 characters.</small>
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">Confirm New Password</label>
+                      <input
+                        type={showLoginPassText ? 'text' : 'password'}
+                        className="form-control"
+                        value={loginCredsForm.confirm_password}
+                        onChange={(e) => setLoginCredsForm({ ...loginCredsForm, confirm_password: e.target.value })}
+                        placeholder="Re-enter new password"
+                      />
+                      <small className="form-hint">Must match new password.</small>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end mt-4 pt-3 border-t border-subtle">
+                    <button
+                      type="submit"
+                      disabled={savingSecurity === 'creds'}
+                      className="btn btn-primary"
+                      style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                    >
+                      <Save size={16} />
+                      <span>{savingSecurity === 'creds' ? 'Updating...' : 'Update Login Credentials'}</span>
+                    </button>
+                  </div>
+                </form>
+              </div>
+
+              {/* Card 2: Display Mode PIN (JEWEL SUITE POS • TERMINAL 01) */}
+              <div className="settings-card">
+                <div className="card-header flex justify-between items-center">
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <h3 className="card-title font-serif flex items-center gap-2">
+                        <Lock size={18} className="gold" />
+                        <span>Dashboard Display Mode PIN</span>
+                      </h3>
+                      <span className="security-tag-badge font-mono" style={{ background: '#FEF3C7', color: '#B45309' }}>
+                        JEWEL SUITE POS • TERMINAL 01
+                      </span>
+                    </div>
+                    <p className="card-desc">
+                      Set the PIN required to unlock <strong>Display Mode: On (Live)</strong> from <strong>Off (Masked)</strong> on the Dashboard.
+                    </p>
+                  </div>
+                  <span className="badge badge-system font-mono">COUNTER PRIVACY</span>
+                </div>
+
+                <form onSubmit={handleUpdateDisplayPin} className="card-body">
+                  <div style={{ background: '#F8FAFC', padding: '1rem', borderRadius: '8px', border: '1px solid #E2E8F0', marginBottom: '1.25rem' }}>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-bold text-muted uppercase tracking-wider">Dashboard Privacy Mode</span>
+                      <span className="badge badge-success font-mono">ACTIVE (PROTECTED)</span>
+                    </div>
+                    <p className="text-xs text-muted mb-0">
+                      When Display Mode is <strong>Off (Masked)</strong>, all real-time financial figures (Total Sales, Net Revenue, Cash-in-Hand, Gold & Silver physical balances) are masked with <code className="font-mono">••••••••</code> to protect confidentiality at the counter. Entering this PIN reveals live numbers.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="form-group">
+                      <label className="form-label font-bold">Display Mode Unlock PIN *</label>
+                      <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                        <input
+                          type={showDisplayPinText ? 'text' : 'password'}
+                          className="form-control font-mono font-bold text-lg text-center"
+                          value={displayPinForm.pin}
+                          onChange={(e) => setDisplayPinForm({ pin: e.target.value })}
+                          placeholder="e.g. 1234"
+                          required
+                          minLength={4}
+                          maxLength={12}
+                          style={{ letterSpacing: showDisplayPinText ? 'normal' : '0.25em' }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowDisplayPinText(!showDisplayPinText)}
+                          style={{
+                            position: 'absolute',
+                            right: '10px',
+                            background: 'none',
+                            border: 'none',
+                            cursor: 'pointer',
+                            color: '#6B7280',
+                            padding: '4px',
+                          }}
+                        >
+                          {showDisplayPinText ? <EyeOff size={16} /> : <Eye size={16} />}
+                        </button>
+                      </div>
+                      <small className="form-hint">Default PIN is 1234. Minimum 4 digits or characters.</small>
+                    </div>
+
+                    <div className="flex flex-col justify-center">
+                      <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-900">
+                        <strong className="block mb-1 font-semibold">Counter Privacy Protection:</strong>
+                        Visitors standing at the counter cannot view daily revenue or stock figures without entering this PIN.
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end mt-4 pt-3 border-t border-subtle">
+                    <button
+                      type="submit"
+                      disabled={savingSecurity === 'pin'}
+                      className="btn btn-primary"
+                      style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                    >
+                      <Save size={16} />
+                      <span>{savingSecurity === 'pin' ? 'Saving PIN...' : 'Save Display Mode PIN'}</span>
+                    </button>
+                  </div>
+                </form>
+              </div>
+
+              {/* Card 3: Store Configuration Access Password */}
+              <div className="settings-card">
+                <div className="card-header flex justify-between items-center">
+                  <div>
+                    <h3 className="card-title font-serif flex items-center gap-2">
+                      <ShieldCheck size={18} className="gold" />
+                      <span>Store Configuration Access Protection</span>
+                    </h3>
+                    <p className="card-desc">
+                      Password-protect this Store Configuration menu so unauthorized counter staff cannot alter billing settings, tax rates, sequences, or store details.
+                    </p>
+                  </div>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={storeConfigPassForm.lock_enabled}
+                      onChange={(e) => setStoreConfigPassForm({ ...storeConfigPassForm, lock_enabled: e.target.checked })}
+                      style={{ width: '18px', height: '18px' }}
+                    />
+                    <span className="text-xs font-bold text-main">Require Password on Open</span>
+                  </label>
+                </div>
+
+                <form onSubmit={handleUpdateStoreConfigPass} className="card-body">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="form-group">
+                      <label className="form-label font-bold">Store Configuration Password *</label>
+                      <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                        <input
+                          type={showStoreConfigPassText ? 'text' : 'password'}
+                          className="form-control font-mono font-bold"
+                          value={storeConfigPassForm.password}
+                          onChange={(e) => setStoreConfigPassForm({ ...storeConfigPassForm, password: e.target.value })}
+                          placeholder="e.g. 1234"
+                          required
+                          minLength={4}
+                          disabled={!storeConfigPassForm.lock_enabled}
+                          style={{ letterSpacing: showStoreConfigPassText ? 'normal' : '0.2em' }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowStoreConfigPassText(!showStoreConfigPassText)}
+                          style={{
+                            position: 'absolute',
+                            right: '10px',
+                            background: 'none',
+                            border: 'none',
+                            cursor: 'pointer',
+                            color: '#6B7280',
+                            padding: '4px',
+                          }}
+                        >
+                          {showStoreConfigPassText ? <EyeOff size={16} /> : <Eye size={16} />}
+                        </button>
+                      </div>
+                      <small className="form-hint">Default password is 1234. Minimum 4 characters.</small>
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label font-bold">Confirm Configuration Password *</label>
+                      <input
+                        type={showStoreConfigPassText ? 'text' : 'password'}
+                        className="form-control font-mono font-bold"
+                        value={storeConfigPassForm.confirm_password}
+                        onChange={(e) => setStoreConfigPassForm({ ...storeConfigPassForm, confirm_password: e.target.value })}
+                        placeholder="Re-enter password"
+                        required
+                        minLength={4}
+                        disabled={!storeConfigPassForm.lock_enabled}
+                        style={{ letterSpacing: showStoreConfigPassText ? 'normal' : '0.2em' }}
+                      />
+                      <small className="form-hint">Must match password above.</small>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-between items-center mt-4 pt-3 border-t border-subtle">
+                    <button
+                      type="button"
+                      className="btn btn-outline btn-sm"
+                      onClick={handleLockStoreConfig}
+                      title="Lock Store Configuration Now"
+                      style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                    >
+                      <Lock size={14} style={{ color: '#D97706' }} />
+                      <span>Lock Settings Now</span>
+                    </button>
+
+                    <button
+                      type="submit"
+                      disabled={savingSecurity === 'config_pass'}
+                      className="btn btn-primary"
+                      style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                    >
+                      <Save size={16} />
+                      <span>{savingSecurity === 'config_pass' ? 'Saving...' : 'Save Configuration Password'}</span>
+                    </button>
+                  </div>
+                </form>
               </div>
             </div>
           )}

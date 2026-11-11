@@ -286,6 +286,47 @@ export class SettingsController {
       next(err);
     }
   }
+
+  // Security & Passwords Settings
+  async getSecuritySettings(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userId = req.user?.id;
+      const sec = settingsService.getSecuritySettings(userId);
+      sendSuccess(res, sec, 'Security settings retrieved');
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  async updateSecuritySettings(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userId = req.user?.id;
+      const updated = await settingsService.updateSecuritySettings(req.body, userId);
+      sendSuccess(res, updated, 'Security settings updated successfully');
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  async verifyConfigPassword(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { password } = req.body;
+      const isValid = settingsService.verifyConfigPassword(password || '');
+      sendSuccess(res, { valid: isValid }, isValid ? 'Password verified successfully' : 'Incorrect store configuration password');
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  async verifyDisplayModePin(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { pin } = req.body;
+      const isValid = settingsService.verifyDisplayModePin(pin || '');
+      sendSuccess(res, { valid: isValid }, isValid ? 'Display mode PIN verified successfully' : 'Incorrect display mode PIN');
+    } catch (err) {
+      next(err);
+    }
+  }
 }
 
 export const settingsController = new SettingsController();
