@@ -1439,27 +1439,33 @@ export const CreateInvoicePage: React.FC = () => {
     const rate = info.applicableRate > 0 ? info.applicableRate : 0;
     const tunch = toDecimal(info.tunchPercent || (isGold ? 91.6 : 99.9));
 
-    const dueAmt = isGold
-      ? (calculations.goldBalAmount > 0 ? calculations.goldBalAmount : calculations.balanceDue)
-      : (calculations.silverBalAmount > 0 ? calculations.silverBalAmount : calculations.balanceDue);
-    const balFine = isGold ? calculations.goldBalFine : calculations.silverBalFine;
+    // Calculate total net metal fine balance from sale - exchange
+    const totalMetalFineDue = isGold
+      ? calculations.goldBalFine
+      : calculations.silverBalFine;
+
+    const otherPaymentFineGrams = payments
+      .filter((p) => p.payment_mode === metalType)
+      .reduce((sum, p) => sum.plus(toDecimal(p.fine_weight || p.metal_weight || 0)), new Decimal(0));
+
+    const remBalFine = Decimal.max(0, new Decimal(totalMetalFineDue).minus(otherPaymentFineGrams)).toNumber();
 
     let initWeight: number | string = '';
     let initFine: number | string = '';
     let initAmount: number | string = '';
 
-    if (balFine > 0) {
-      const w = tunch.gt(0)
-        ? new Decimal(balFine).times(100).dividedBy(tunch).toDecimalPlaces(3, Decimal.ROUND_HALF_UP)
-        : new Decimal(balFine);
+    if (remBalFine > 0) {
+      const w = tunch.gte(99.9) || tunch.isZero()
+        ? new Decimal(remBalFine)
+        : new Decimal(remBalFine).times(100).dividedBy(tunch).toDecimalPlaces(3, Decimal.ROUND_HALF_UP);
       initWeight = w.toNumber();
-      initFine = balFine;
+      initFine = remBalFine;
       initAmount = rate > 0 ? w.times(rate).toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber() : '';
-    } else if (dueAmt > 0 && rate > 0) {
-      const w = new Decimal(dueAmt).dividedBy(rate).toDecimalPlaces(3, Decimal.ROUND_HALF_UP);
+    } else if (calculations.balanceDue > 0 && rate > 0) {
+      const w = new Decimal(calculations.balanceDue).dividedBy(rate).toDecimalPlaces(3, Decimal.ROUND_HALF_UP);
       initWeight = w.toNumber();
       initFine = w.times(tunch).dividedBy(100).toDecimalPlaces(3, Decimal.ROUND_HALF_UP).toNumber();
-      initAmount = dueAmt;
+      initAmount = calculations.balanceDue;
     }
 
     const newPay: PaymentRow = {
@@ -1481,6 +1487,7 @@ export const CreateInvoicePage: React.FC = () => {
       metal_rate: rate > 0 ? rate : '',
       rate_error: rate <= 0 ? 'Today\'s benchmark rate not set in dashboard' : undefined,
       last_edited: 'weight',
+      is_auto: true,
     };
     setPayments((prev) => [...prev, newPay]);
   };
@@ -1541,25 +1548,30 @@ export const CreateInvoicePage: React.FC = () => {
             weight = w.toNumber();
             fine = w.times(tunch).dividedBy(100).toDecimalPlaces(3, Decimal.ROUND_HALF_UP).toNumber();
           } else {
-            const dueAmt = isGold
-              ? (calculations.goldBalAmount > 0 ? calculations.goldBalAmount : calculations.balanceDue)
-              : (calculations.silverBalAmount > 0 ? calculations.silverBalAmount : calculations.balanceDue);
-            const balFine = isGold ? calculations.goldBalFine : calculations.silverBalFine;
+            const otherPaymentFineGrams = payments
+              .filter((item) => item.payment_mode === mode && item.id !== id)
+              .reduce((sum, item) => sum.plus(toDecimal(item.fine_weight || item.metal_weight || 0)), new Decimal(0));
 
-            if (balFine > 0) {
-              const w = tunch.gt(0)
-                ? new Decimal(balFine).times(100).dividedBy(tunch).toDecimalPlaces(3, Decimal.ROUND_HALF_UP)
-                : new Decimal(balFine);
+            const totalMetalFineDue = isGold
+              ? calculations.goldBalFine
+              : calculations.silverBalFine;
+
+            const remBalFine = Decimal.max(0, new Decimal(totalMetalFineDue).minus(otherPaymentFineGrams)).toNumber();
+
+            if (remBalFine > 0) {
+              const w = tunch.gte(99.9) || tunch.isZero()
+                ? new Decimal(remBalFine)
+                : new Decimal(remBalFine).times(100).dividedBy(tunch).toDecimalPlaces(3, Decimal.ROUND_HALF_UP);
               weight = w.toNumber();
-              fine = balFine;
+              fine = remBalFine;
               if (rate > 0) {
                 calculatedAmount = w.times(rate).toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber();
               }
-            } else if (dueAmt > 0 && rate > 0) {
-              const w = new Decimal(dueAmt).dividedBy(rate).toDecimalPlaces(3, Decimal.ROUND_HALF_UP);
+            } else if (calculations.balanceDue > 0 && rate > 0) {
+              const w = new Decimal(calculations.balanceDue).dividedBy(rate).toDecimalPlaces(3, Decimal.ROUND_HALF_UP);
               weight = w.toNumber();
               fine = w.times(tunch).dividedBy(100).toDecimalPlaces(3, Decimal.ROUND_HALF_UP).toNumber();
-              calculatedAmount = dueAmt;
+              calculatedAmount = calculations.balanceDue;
             }
           }
 
@@ -2309,9 +2321,9 @@ export const CreateInvoicePage: React.FC = () => {
       itemCount: m.itemCount,
     }));
 
-    const goldBalFine = Decimal.max(0, goldFineWeight.minus(goldExchangeFineWeight));
+    const goldBalFine = Decimal.max(0, goldAdjustedFineWeight.minus(goldExchangeFineWeight));
     const goldBalAmount = Decimal.max(0, goldSaleAmount.minus(goldExchangeAmount));
-    const silverBalFine = Decimal.max(0, silverFineWeight.minus(silverExchangeFineWeight));
+    const silverBalFine = Decimal.max(0, silverAdjustedFineWeight.minus(silverExchangeFineWeight));
     const silverBalAmount = Decimal.max(0, silverSaleAmount.minus(silverExchangeAmount));
 
     return {
@@ -2422,38 +2434,50 @@ export const CreateInvoicePage: React.FC = () => {
     metalType: 'GOLD' | 'SILVER',
     currentPurityId?: string,
     currentRate?: number | string,
-    currentTunch?: number | string
+    currentTunch?: number | string,
+    targetPaymentId?: string
   ) => {
     const isGold = metalType === 'GOLD';
     const info = findMetalAndPurity(metalType, currentPurityId);
     const rate = Number(currentRate || info.applicableRate || 0);
     const tunch = Number(currentTunch || info.tunchPercent || (isGold ? 91.6 : 99.9));
 
-    // 1. If this specific metal has a direct net fine balance from sale - exchange
-    const balFine = isGold
-      ? (isWholesale ? (calculations.goldWholesaleBal > 0 ? calculations.goldWholesaleBal : calculations.goldBalFine) : calculations.goldBalFine)
-      : (isWholesale ? (calculations.silverWholesaleBal > 0 ? calculations.silverWholesaleBal : calculations.silverBalFine) : calculations.silverBalFine);
-    const balAmt = isGold ? calculations.goldBalAmount : calculations.silverBalAmount;
+    // 1. Calculate total net metal fine balance from sale - exchange
+    const totalMetalFineDue = isGold
+      ? calculations.goldBalFine
+      : calculations.silverBalFine;
+
+    // Sum of OTHER payment rows of this same metal (excluding this target payment row)
+    const otherPaymentFineGrams = payments
+      .filter((p) => p.payment_mode === metalType && (!targetPaymentId || p.id !== targetPaymentId))
+      .reduce((sum, p) => sum.plus(toDecimal(p.fine_weight || p.metal_weight || 0)), new Decimal(0));
+
+    const balFine = Decimal.max(0, new Decimal(totalMetalFineDue).minus(otherPaymentFineGrams)).toNumber();
 
     if (balFine > 0) {
-      const calcWeight = tunch > 0
-        ? new Decimal(balFine).times(100).dividedBy(tunch).toDecimalPlaces(3, Decimal.ROUND_HALF_UP).toNumber()
-        : balFine;
-      const calcAmt = balAmt > 0
-        ? balAmt
-        : (rate > 0 ? Decimal.max(0, new Decimal(calcWeight).times(rate)).toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber() : 0);
+      const calcWeight = (tunch >= 99.9 || tunch === 0)
+        ? new Decimal(balFine).toDecimalPlaces(3, Decimal.ROUND_HALF_UP).toNumber()
+        : new Decimal(balFine).times(100).dividedBy(tunch).toDecimalPlaces(3, Decimal.ROUND_HALF_UP).toNumber();
+      const calcAmt = rate > 0
+        ? Decimal.max(0, new Decimal(calcWeight).times(rate)).toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber()
+        : '';
 
       return {
         metalWeight: calcWeight > 0 ? calcWeight : '',
         fineWeight: balFine > 0 ? balFine : '',
-        amount: calcAmt > 0 ? calcAmt : '',
+        amount: calcAmt !== '' && Number(calcAmt) > 0 ? calcAmt : '',
       };
     }
 
     // 2. If specific metal fine is 0, but invoice has an outstanding currency balance due (e.g. paying Gold bill in Silver or paying remaining balance)
-    if (calculations.balanceDue > 0 && rate > 0) {
-      const dueAmt = calculations.balanceDue;
-      const calcWeight = new Decimal(dueAmt).dividedBy(rate).toDecimalPlaces(3, Decimal.ROUND_HALF_UP).toNumber();
+    const otherPaymentsTotal = payments
+      .filter((p) => !targetPaymentId || p.id !== targetPaymentId)
+      .reduce((sum, p) => sum.plus(toDecimal(p.amount || 0)), new Decimal(0));
+
+    const remDueAmt = Decimal.max(0, new Decimal(calculations.netPayable).minus(otherPaymentsTotal)).toNumber();
+
+    if (remDueAmt > 0 && rate > 0) {
+      const calcWeight = new Decimal(remDueAmt).dividedBy(rate).toDecimalPlaces(3, Decimal.ROUND_HALF_UP).toNumber();
       const calcFine = tunch > 0
         ? new Decimal(calcWeight).times(tunch).dividedBy(100).toDecimalPlaces(3, Decimal.ROUND_HALF_UP).toNumber()
         : calcWeight;
@@ -2461,7 +2485,7 @@ export const CreateInvoicePage: React.FC = () => {
       return {
         metalWeight: calcWeight > 0 ? calcWeight : '',
         fineWeight: calcFine > 0 ? calcFine : '',
-        amount: dueAmt,
+        amount: remDueAmt,
       };
     }
 
@@ -2477,7 +2501,7 @@ export const CreateInvoicePage: React.FC = () => {
       prev.map((p) => {
         if (p.id !== paymentId) return p;
         const willBeAuto = !p.is_auto;
-        const autoTarget = getAutoMetalTarget(metalType, p.purity_id, p.metal_rate, p.tunch_percent);
+        const autoTarget = getAutoMetalTarget(metalType, p.purity_id, p.metal_rate, p.tunch_percent, p.id);
 
         return {
           ...p,
@@ -2498,7 +2522,7 @@ export const CreateInvoicePage: React.FC = () => {
     if (existingIndex >= 0) {
       const existing = payments[existingIndex];
       const willBeAuto = !existing.is_auto;
-      const autoTarget = getAutoMetalTarget(metalType, existing.purity_id, existing.metal_rate, existing.tunch_percent);
+      const autoTarget = getAutoMetalTarget(metalType, existing.purity_id, existing.metal_rate, existing.tunch_percent, existing.id);
 
       setPayments((prev) =>
         prev.map((p, idx) => {
@@ -2555,7 +2579,7 @@ export const CreateInvoicePage: React.FC = () => {
         const isSilver = p.payment_mode === 'SILVER';
         if (!isGold && !isSilver) return p;
 
-        const autoTarget = getAutoMetalTarget(isGold ? 'GOLD' : 'SILVER', p.purity_id, p.metal_rate, p.tunch_percent);
+        const autoTarget = getAutoMetalTarget(isGold ? 'GOLD' : 'SILVER', p.purity_id, p.metal_rate, p.tunch_percent, p.id);
 
         if (
           p.metal_weight !== autoTarget.metalWeight ||
@@ -5287,7 +5311,7 @@ export const CreateInvoicePage: React.FC = () => {
                     <div className="equation-line">
                       <span className="eq-label text-muted">Fine Wt:</span>
                       <span className="eq-formula">
-                        <span className="val-sold" title="Fine Gold Sold">{formatFineWeight(calculations.goldFineWeight, 4)}g</span>
+                        <span className="val-sold" title="Fine Gold Sold">{formatFineWeight(calculations.goldAdjustedFineWeight, 4)}g</span>
                         <span className="op">−</span>
                         <span className="val-ret text-rose-300" title="Return Exchange Fine Gold">{formatFineWeight(calculations.goldExchangeFineWeight, 4)}g</span>
                         <span className="op">=</span>
@@ -5335,7 +5359,7 @@ export const CreateInvoicePage: React.FC = () => {
                     <div className="equation-line">
                       <span className="eq-label text-muted">Fine Wt:</span>
                       <span className="eq-formula">
-                        <span className="val-sold" title="Fine Silver Sold">{formatFineWeight(calculations.silverFineWeight, 4)}g</span>
+                        <span className="val-sold" title="Fine Silver Sold">{formatFineWeight(calculations.silverAdjustedFineWeight, 4)}g</span>
                         <span className="op">−</span>
                         <span className="val-ret text-rose-300" title="Return Exchange Fine Silver">{formatFineWeight(calculations.silverExchangeFineWeight, 4)}g</span>
                         <span className="op">=</span>
