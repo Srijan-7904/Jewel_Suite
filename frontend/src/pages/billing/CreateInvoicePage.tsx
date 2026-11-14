@@ -2102,16 +2102,18 @@ export const CreateInvoicePage: React.FC = () => {
 
     payments.forEach((p) => {
       const amt = toDecimal(p.amount || 0);
-      if (amt.gt(0)) {
+      const wt = toDecimal(p.metal_weight || 0);
+      const fine = toDecimal(p.fine_weight || p.metal_weight || 0);
+      if (amt.gt(0) || wt.gt(0)) {
         totalReceived = totalReceived.plus(amt);
         if (p.payment_mode === 'GOLD') {
           goldPaymentValue = goldPaymentValue.plus(amt);
-          goldPaymentGrams = goldPaymentGrams.plus(toDecimal(p.metal_weight || 0));
-          goldPaymentFineGrams = goldPaymentFineGrams.plus(toDecimal(p.fine_weight || p.metal_weight || 0));
+          goldPaymentGrams = goldPaymentGrams.plus(wt);
+          goldPaymentFineGrams = goldPaymentFineGrams.plus(fine);
         } else if (p.payment_mode === 'SILVER') {
           silverPaymentValue = silverPaymentValue.plus(amt);
-          silverPaymentGrams = silverPaymentGrams.plus(toDecimal(p.metal_weight || 0));
-          silverPaymentFineGrams = silverPaymentFineGrams.plus(toDecimal(p.fine_weight || p.metal_weight || 0));
+          silverPaymentGrams = silverPaymentGrams.plus(wt);
+          silverPaymentFineGrams = silverPaymentFineGrams.plus(fine);
         } else {
           cashAndOtherPayments = cashAndOtherPayments.plus(amt);
         }
@@ -2300,20 +2302,10 @@ export const CreateInvoicePage: React.FC = () => {
     const rate = Number(currentRate || info.applicableRate || 0);
     const tunch = Number(currentTunch || info.tunchPercent || (isGold ? 91.6 : 99.9));
 
-    // Wholesale Fine-to-Fine balance check
-    if (isWholesale) {
-      const wholesaleBal = isGold ? calculations.goldWholesaleBal : calculations.silverWholesaleBal;
-      const targetWeight = wholesaleBal > 0 ? wholesaleBal : 0;
-      return {
-        metalWeight: targetWeight > 0 ? targetWeight : '',
-        fineWeight: targetWeight > 0 ? targetWeight : '',
-        amount: '',
-      };
-    }
-
-    // Retail Mode:
     // 1. If this specific metal has a direct net fine balance from sale - exchange
-    const balFine = isGold ? calculations.goldBalFine : calculations.silverBalFine;
+    const balFine = isGold
+      ? (isWholesale ? (calculations.goldWholesaleBal > 0 ? calculations.goldWholesaleBal : calculations.goldBalFine) : calculations.goldBalFine)
+      : (isWholesale ? (calculations.silverWholesaleBal > 0 ? calculations.silverWholesaleBal : calculations.silverBalFine) : calculations.silverBalFine);
     const balAmt = isGold ? calculations.goldBalAmount : calculations.silverBalAmount;
 
     if (balFine > 0) {
@@ -2331,7 +2323,7 @@ export const CreateInvoicePage: React.FC = () => {
       };
     }
 
-    // 2. If specific metal fine is 0, but invoice has an outstanding currency balance due (e.g. paying Gold bill in Silver)
+    // 2. If specific metal fine is 0, but invoice has an outstanding currency balance due (e.g. paying Gold bill in Silver or paying remaining balance)
     if (calculations.balanceDue > 0 && rate > 0) {
       const dueAmt = calculations.balanceDue;
       const calcWeight = new Decimal(dueAmt).dividedBy(rate).toDecimalPlaces(3, Decimal.ROUND_HALF_UP).toNumber();
@@ -4857,7 +4849,7 @@ export const CreateInvoicePage: React.FC = () => {
                     )}
 
                     {/* Input Fields Row */}
-                    <div className={`payment-fields-row ${isMetal ? (isWholesale ? 'is-metal-fields is-wholesale-metal' : 'is-metal-fields') : ''}`}>
+                    <div className={`payment-fields-row ${isMetal ? 'is-metal-fields' : ''}`}>
                       {isMetal ? (
                         <>
                           {/* 1. Metal: Gold / Silver */}
@@ -4881,47 +4873,26 @@ export const CreateInvoicePage: React.FC = () => {
                             </div>
                           </div>
 
-                          {/* 2. Purity: Dropdown (Placed next to Metal in Wholesale) */}
-                          {isWholesale && (
-                            <div className="field-block purity-block">
-                              <label className="field-title">Purity *</label>
-                              <select
-                                className="styled-input font-mono text-xs"
-                                value={p.purity_id || ''}
-                                onChange={(e) => handlePaymentPurityChange(p.id, e.target.value)}
-                                title="Select Purity for Metal Rate"
-                              >
-                                {availablePurities.map((pur) => (
-                                  <option key={pur.id} value={pur.id}>
-                                    {pur.name}
-                                  </option>
-                                ))}
-                              </select>
+                          {/* 2. Rate (₹/g) */}
+                          <div className="field-block rate-block">
+                            <label className="field-title">Rate (₹/g)</label>
+                            <div className="input-group-styled">
+                              <span className="unit-label-prefix">₹</span>
+                              <input
+                                type="text"
+                                inputMode="decimal"
+                                className="styled-input font-mono font-bold"
+                                value={p.metal_rate !== undefined ? p.metal_rate : ''}
+                                onChange={(e) => handleMetalRateChange(p.id, e.target.value)}
+                                placeholder="Rate/g"
+                              />
                             </div>
-                          )}
-
-                          {/* Rate (₹/g) - Only for Retail */}
-                          {!isWholesale && (
-                            <div className="field-block rate-block">
-                              <label className="field-title">Rate (₹/g)</label>
-                              <div className="input-group-styled">
-                                <span className="unit-label-prefix">₹</span>
-                                <input
-                                  type="text"
-                                  inputMode="decimal"
-                                  className="styled-input font-mono font-bold"
-                                  value={p.metal_rate !== undefined ? p.metal_rate : ''}
-                                  onChange={(e) => handleMetalRateChange(p.id, e.target.value)}
-                                  placeholder="Rate/g"
-                                />
-                              </div>
-                            </div>
-                          )}
+                          </div>
 
                           {/* 3. Weight: Weight (g) with Auto mode toggle underneath */}
                           <div className="field-block weight-block">
                             <div className="field-header">
-                              <label className="field-title">{isWholesale ? 'Tender Wt (g) *' : 'Weight (g) *'}</label>
+                              <label className="field-title">Weight (g) *</label>
                               {p.fine_weight && Number(p.fine_weight) > 0 && (
                                 <span className="weight-fine-badge font-mono" title="Calculated Fine Weight">
                                   Fine: {formatFineWeight(p.fine_weight, 4)}g
@@ -4959,45 +4930,41 @@ export const CreateInvoicePage: React.FC = () => {
                             </div>
                           </div>
 
-                          {/* Amount (₹) - Only for Retail */}
-                          {!isWholesale && (
-                            <div className="field-block amount-block">
-                              <label className="field-title">Amount (₹)</label>
-                              <div className="input-group-styled">
-                                <span className="unit-label-prefix">₹</span>
-                                <input
-                                  type="text"
-                                  inputMode="decimal"
-                                  className="styled-input font-mono font-bold text-emerald-400"
-                                  value={p.amount !== undefined ? p.amount : ''}
-                                  onChange={(e) => {
-                                    handleUpdatePaymentRow(p.id, { is_auto: false });
-                                    handlePaymentAmountChange(p.id, e.target.value);
-                                  }}
-                                  placeholder="0.00"
-                                />
-                              </div>
+                          {/* 4. Amount (₹) */}
+                          <div className="field-block amount-block">
+                            <label className="field-title">Amount (₹)</label>
+                            <div className="input-group-styled">
+                              <span className="unit-label-prefix">₹</span>
+                              <input
+                                type="text"
+                                inputMode="decimal"
+                                className="styled-input font-mono font-bold text-emerald-400"
+                                value={p.amount !== undefined ? p.amount : ''}
+                                onChange={(e) => {
+                                  handleUpdatePaymentRow(p.id, { is_auto: false });
+                                  handlePaymentAmountChange(p.id, e.target.value);
+                                }}
+                                placeholder="0.00"
+                              />
                             </div>
-                          )}
+                          </div>
 
-                          {/* Purity: Dropdown - For Retail at the end */}
-                          {!isWholesale && (
-                            <div className="field-block purity-block">
-                              <label className="field-title">Purity *</label>
-                              <select
-                                className="styled-input font-mono text-xs"
-                                value={p.purity_id || ''}
-                                onChange={(e) => handlePaymentPurityChange(p.id, e.target.value)}
-                                title="Select Purity for Metal Rate"
-                              >
-                                {availablePurities.map((pur) => (
-                                  <option key={pur.id} value={pur.id}>
-                                    {pur.name}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-                          )}
+                          {/* 5. Purity: Dropdown */}
+                          <div className="field-block purity-block">
+                            <label className="field-title">Purity *</label>
+                            <select
+                              className="styled-input font-mono text-xs"
+                              value={p.purity_id || ''}
+                              onChange={(e) => handlePaymentPurityChange(p.id, e.target.value)}
+                              title="Select Purity for Metal Rate"
+                            >
+                              {availablePurities.map((pur) => (
+                                <option key={pur.id} value={pur.id}>
+                                  {pur.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
                         </>
                       ) : (
                         <>
@@ -5192,18 +5159,16 @@ export const CreateInvoicePage: React.FC = () => {
                         <strong className="val-bal text-amber-300" title="Balance Gold Fine">{formatFineWeight(calculations.goldBalFine, 4)}g</strong>
                       </span>
                     </div>
-                    {!isWholesale && (
-                      <div className="equation-line">
-                        <span className="eq-label text-muted">Amount:</span>
-                        <span className="eq-formula">
-                          <span className="val-sold" title="Sale Gold Amount">{formatCurrency(calculations.goldSaleAmount)}</span>
-                          <span className="op">−</span>
-                          <span className="val-ret text-rose-300" title="Return Exchange Gold Amount">{formatCurrency(calculations.goldExchangeAmount)}</span>
-                          <span className="op">=</span>
-                          <strong className="val-bal text-emerald-400" title="Balance Gold Amount">{formatCurrency(calculations.goldBalAmount)}</strong>
-                        </span>
-                      </div>
-                    )}
+                    <div className="equation-line">
+                      <span className="eq-label text-muted">Amount:</span>
+                      <span className="eq-formula">
+                        <span className="val-sold" title="Sale Gold Amount">{formatCurrency(calculations.goldSaleAmount)}</span>
+                        <span className="op">−</span>
+                        <span className="val-ret text-rose-300" title="Return Exchange Gold Amount">{formatCurrency(calculations.goldExchangeAmount)}</span>
+                        <span className="op">=</span>
+                        <strong className="val-bal text-emerald-400" title="Balance Gold Amount">{formatCurrency(calculations.goldBalAmount)}</strong>
+                      </span>
+                    </div>
                   </div>
                 </div>
 
@@ -5242,18 +5207,16 @@ export const CreateInvoicePage: React.FC = () => {
                         <strong className="val-bal text-slate-200" title="Balance Silver Fine">{formatFineWeight(calculations.silverBalFine, 4)}g</strong>
                       </span>
                     </div>
-                    {!isWholesale && (
-                      <div className="equation-line">
-                        <span className="eq-label text-muted">Amount:</span>
-                        <span className="eq-formula">
-                          <span className="val-sold" title="Sale Silver Amount">{formatCurrency(calculations.silverSaleAmount)}</span>
-                          <span className="op">−</span>
-                          <span className="val-ret text-rose-300" title="Return Exchange Silver Amount">{formatCurrency(calculations.silverExchangeAmount)}</span>
-                          <span className="op">=</span>
-                          <strong className="val-bal text-emerald-400" title="Balance Silver Amount">{formatCurrency(calculations.silverBalAmount)}</strong>
-                        </span>
-                      </div>
-                    )}
+                    <div className="equation-line">
+                      <span className="eq-label text-muted">Amount:</span>
+                      <span className="eq-formula">
+                        <span className="val-sold" title="Sale Silver Amount">{formatCurrency(calculations.silverSaleAmount)}</span>
+                        <span className="op">−</span>
+                        <span className="val-ret text-rose-300" title="Return Exchange Silver Amount">{formatCurrency(calculations.silverExchangeAmount)}</span>
+                        <span className="op">=</span>
+                        <strong className="val-bal text-emerald-400" title="Balance Silver Amount">{formatCurrency(calculations.silverBalAmount)}</strong>
+                      </span>
+                    </div>
                   </div>
                 </div>
               </div>
