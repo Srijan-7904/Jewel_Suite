@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard,
@@ -13,6 +13,7 @@ import {
   ChevronRight,
   Gem,
 } from 'lucide-react';
+import { settingsApi, ModuleSettings, DEFAULT_MODULE_SETTINGS } from '../services/settings';
 import './Sidebar.css';
 
 interface NavSection {
@@ -22,6 +23,12 @@ interface NavSection {
 }
 
 export const Sidebar: React.FC = () => {
+  const [modules, setModules] = useState<ModuleSettings>(DEFAULT_MODULE_SETTINGS);
+
+  useEffect(() => {
+    settingsApi.getModules().then(setModules).catch(() => {});
+  }, []);
+
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
     Overview: true,
     Billing: true,
@@ -80,8 +87,8 @@ export const Sidebar: React.FC = () => {
         { label: 'Karigar Ledger', path: '/finance/ledger/karigar' },
         { label: 'Payments', path: '/finance/payments' },
         { label: 'Cash Book', path: '/finance/cash-book' },
-        { label: 'Girvi Loans', path: '/finance/girvi' },
-        { label: 'Saving Schemes', path: '/finance/saving-schemes' },
+        ...(modules.girvi_enabled ? [{ label: 'Girvi Loans', path: '/finance/girvi' }] : []),
+        ...(modules.schemes_enabled ? [{ label: 'Saving Schemes', path: '/finance/saving-schemes' }] : []),
       ],
     },
     {

@@ -85,6 +85,31 @@ describe('Jewel Suite Store Configuration — All 11 Tabs API Integrity Verifica
       expect(toggleRes.status).toBe(200);
       expect(toggleRes.body.data.code).toBe('SILVER');
     });
+
+    it('GET, PUT & TOGGLE /api/settings/modules - manages Retail, Wholesale, Girvi, Schemes active states', async () => {
+      const getRes = await request(app)
+        .get('/api/settings/modules')
+        .set('Authorization', `Bearer ${authToken}`);
+      expect(getRes.status).toBe(200);
+      expect(getRes.body.data.retail_enabled).toBeDefined();
+      expect(getRes.body.data.wholesale_enabled).toBeDefined();
+      expect(getRes.body.data.girvi_enabled).toBeDefined();
+      expect(getRes.body.data.schemes_enabled).toBeDefined();
+
+      const toggleRes = await request(app)
+        .put('/api/settings/modules/girvi/toggle')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ is_active: false });
+      expect(toggleRes.status).toBe(200);
+      expect(toggleRes.body.data.girvi_enabled).toBe(false);
+
+      const restoreRes = await request(app)
+        .put('/api/settings/modules/girvi/toggle')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ is_active: true });
+      expect(restoreRes.status).toBe(200);
+      expect(restoreRes.body.data.girvi_enabled).toBe(true);
+    });
   });
 
   // TAB 2: General Parameters & Financial Year

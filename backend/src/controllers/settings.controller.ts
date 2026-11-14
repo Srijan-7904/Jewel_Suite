@@ -327,6 +327,38 @@ export class SettingsController {
       next(err);
     }
   }
+
+  // Business Operations & Modules Configuration (Retail, Wholesale, Girvi, Saving Schemes)
+  async getModuleSettings(_req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const modules = settingsService.getModuleSettings();
+      sendSuccess(res, modules, 'Module settings retrieved');
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  async updateModuleSettings(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userId = req.user?.id;
+      const updated = settingsService.updateModuleSettings(req.body, userId);
+      sendSuccess(res, updated, 'Module settings updated successfully');
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  async toggleModule(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { module } = req.params;
+      const { is_active } = req.body;
+      const userId = req.user?.id;
+      const updated = settingsService.toggleModule(module, is_active, userId);
+      sendSuccess(res, updated, `Module ${module} status updated successfully`);
+    } catch (err) {
+      next(err);
+    }
+  }
 }
 
 export const settingsController = new SettingsController();

@@ -15,6 +15,8 @@ import {
   InvoiceColumnSettings,
   DEFAULT_INVOICE_COLUMN_SETTINGS,
   SecuritySettings,
+  ModuleSettings,
+  DEFAULT_MODULE_SETTINGS,
 } from '../../services/settings';
 import { rateApi } from '../../services/masters';
 import { CurrentRate, Metal } from '../../types';
@@ -50,6 +52,7 @@ import {
   Eye,
   EyeOff,
   X,
+  LayoutGrid,
 } from 'lucide-react';
 import './SettingsPage.css';
 
@@ -129,6 +132,8 @@ export const SettingsPage: React.FC = () => {
   const [receivingAccounts, setReceivingAccounts] = useState<ShopReceivingAccount[]>([]);
   const [storeMetals, setStoreMetals] = useState<Metal[]>([]);
   const [togglingMetal, setTogglingMetal] = useState<string | null>(null);
+  const [modules, setModules] = useState<ModuleSettings>(DEFAULT_MODULE_SETTINGS);
+  const [togglingModule, setTogglingModule] = useState<string | null>(null);
   const [invoiceColumns, setInvoiceColumns] = useState<InvoiceColumnSettings>(DEFAULT_INVOICE_COLUMN_SETTINGS);
   const [togglingColumn, setTogglingColumn] = useState<string | null>(null);
   const [showAccountModal, setShowAccountModal] = useState<boolean>(false);
@@ -213,6 +218,7 @@ export const SettingsPage: React.FC = () => {
         receivingAccountsData,
         metalsData,
         invoiceColumnsData,
+        modulesData,
       ] = await Promise.all([
         settingsApi.getShopProfile().catch((e) => {
           console.warn('Failed to load shop profile:', e);
@@ -254,10 +260,15 @@ export const SettingsPage: React.FC = () => {
           console.warn('Failed to load invoice column configuration:', e);
           return DEFAULT_INVOICE_COLUMN_SETTINGS;
         }),
+        settingsApi.getModules().catch((e) => {
+          console.warn('Failed to load module configuration:', e);
+          return DEFAULT_MODULE_SETTINGS;
+        }),
       ]);
 
       setStoreMetals(metalsData || []);
       setInvoiceColumns(invoiceColumnsData || DEFAULT_INVOICE_COLUMN_SETTINGS);
+      setModules(modulesData || DEFAULT_MODULE_SETTINGS);
 
       setShop(
         shopData || {
@@ -545,6 +556,47 @@ export const SettingsPage: React.FC = () => {
       showNotification('error', err.message || `Failed to update ${metal.name} status`);
     } finally {
       setTogglingMetal(null);
+    }
+  };
+
+  // Toggle Business Module (Retail, Wholesale, Girvi, Saving Schemes)
+  const handleToggleModule = async (moduleName: 'retail' | 'wholesale' | 'girvi' | 'schemes', currentActive: boolean) => {
+    const newActiveState = !currentActive;
+
+    // Safety: don't allow disabling both Retail and Wholesale at the same time
+    if (!newActiveState) {
+      if (moduleName === 'retail' && !modules.wholesale_enabled) {
+        showNotification('error', 'Either Retail Billing or Wholesale Billing must remain active.');
+        return;
+      }
+      if (moduleName === 'wholesale' && !modules.retail_enabled) {
+        showNotification('error', 'Either Retail Billing or Wholesale Billing must remain active.');
+        return;
+      }
+    }
+
+    setTogglingModule(moduleName);
+    try {
+      const updated = await settingsApi.toggleModule(moduleName, newActiveState);
+      setModules(updated);
+
+      const moduleTitles: Record<string, string> = {
+        retail: 'Retail Billing (रिटेल बिक्री)',
+        wholesale: 'Wholesale Billing (थोक व्यापार)',
+        girvi: 'Girvi & Loans (गिरवी खाता)',
+        schemes: 'Saving Schemes (स्वर्ण बचत योजना)',
+      };
+
+      showNotification(
+        'success',
+        newActiveState
+          ? `🟢 ${moduleTitles[moduleName]} is now ACTIVE and visible across the store.`
+          : `⚪ ${moduleTitles[moduleName]} is now DEACTIVATED and hidden from navigation.`
+      );
+    } catch (err: any) {
+      showNotification('error', err.message || `Failed to update ${moduleName} module status`);
+    } finally {
+      setTogglingModule(null);
     }
   };
 
@@ -1516,6 +1568,134 @@ export const SettingsPage: React.FC = () => {
                   </button>
                 </div>
               </form>
+
+              {/* BUSINESS OPERATIONS & MODULES CONFIGURATION */}
+              <div className="settings-card mt-6">
+                <div className="card-header flex justify-between items-center">
+                  <div>
+                    <h3 className="card-title font-serif flex items-center gap-2">
+                      <LayoutGrid size={18} className="text-gold" />
+                      <span>Business Operations & Modules (व्यापार प्रणालियाँ एवं मॉड्यूल)</span>
+                    </h3>
+                    <p className="card-desc">
+                      Configure which commercial modules operate in your jewelry store (Retail POS, Wholesale, Girvi, Saving Schemes). Deactivated modules are automatically hidden from sidebars and transaction screens without affecting past data.
+                    </p>
+                  </div>
+                  <div className="active-metals-counter badge-gold font-mono text-xs px-2.5 py-1 rounded">
+                    {[modules.retail_enabled, modules.wholesale_enabled, modules.girvi_enabled, modules.schemes_enabled].filter(Boolean).length} / 4 Active
+                  </div>
+                </div>
+
+                <div className="store-metals-grid">
+                  {/* 1. Retail Billing */}
+                  <div className={`store-metal-card metal-gold ${modules.retail_enabled ? 'is-active' : 'is-inactive'}`}>
+                    <div className="metal-card-header">
+                      <div className="flex items-center gap-2">
+                        <span className="text-2xl">🛍️</span>
+                        <div>
+                          <h4 className="font-bold text-sm text-main">Retail Billing</h4>
+                          <span className="font-mono text-xs text-muted uppercase">RETAIL POS</span>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        className={`btn btn-xs ${modules.retail_enabled ? 'btn-danger-outline' : 'btn-primary'}`}
+                        disabled={togglingModule === 'retail'}
+                        onClick={() => handleToggleModule('retail', modules.retail_enabled)}
+                      >
+                        {togglingModule === 'retail' ? 'Updating...' : modules.retail_enabled ? 'Deactivate' : 'Activate'}
+                      </button>
+                    </div>
+                    <p className="metal-card-desc">Customer counter sales, GST compliance, discounts, old gold exchange & receipts.</p>
+                    <div className="metal-card-footer">
+                      <span className={`status-pill ${modules.retail_enabled ? 'active' : 'inactive'}`}>
+                        {modules.retail_enabled ? '✓ Active in Store' : '✕ Hidden / Disabled'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* 2. Wholesale Billing */}
+                  <div className={`store-metal-card metal-silver ${modules.wholesale_enabled ? 'is-active' : 'is-inactive'}`}>
+                    <div className="metal-card-header">
+                      <div className="flex items-center gap-2">
+                        <span className="text-2xl">💼</span>
+                        <div>
+                          <h4 className="font-bold text-sm text-main">Wholesale Billing</h4>
+                          <span className="font-mono text-xs text-muted uppercase">B2B WHOLESALE</span>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        className={`btn btn-xs ${modules.wholesale_enabled ? 'btn-danger-outline' : 'btn-primary'}`}
+                        disabled={togglingModule === 'wholesale'}
+                        onClick={() => handleToggleModule('wholesale', modules.wholesale_enabled)}
+                      >
+                        {togglingModule === 'wholesale' ? 'Updating...' : modules.wholesale_enabled ? 'Deactivate' : 'Activate'}
+                      </button>
+                    </div>
+                    <p className="metal-card-desc">B2B wholesale lot invoicing, fine purity conversion, metal weight balance & ledgers.</p>
+                    <div className="metal-card-footer">
+                      <span className={`status-pill ${modules.wholesale_enabled ? 'active' : 'inactive'}`}>
+                        {modules.wholesale_enabled ? '✓ Active in Store' : '✕ Hidden / Disabled'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* 3. Girvi & Mortgage Loans */}
+                  <div className={`store-metal-card metal-diamond ${modules.girvi_enabled ? 'is-active' : 'is-inactive'}`}>
+                    <div className="metal-card-header">
+                      <div className="flex items-center gap-2">
+                        <span className="text-2xl">🏦</span>
+                        <div>
+                          <h4 className="font-bold text-sm text-main">Girvi & Loans</h4>
+                          <span className="font-mono text-xs text-muted uppercase">GIRVI / MORTGAGE</span>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        className={`btn btn-xs ${modules.girvi_enabled ? 'btn-danger-outline' : 'btn-primary'}`}
+                        disabled={togglingModule === 'girvi'}
+                        onClick={() => handleToggleModule('girvi', modules.girvi_enabled)}
+                      >
+                        {togglingModule === 'girvi' ? 'Updating...' : modules.girvi_enabled ? 'Deactivate' : 'Activate'}
+                      </button>
+                    </div>
+                    <p className="metal-card-desc">Jewellery pawnbroking, daily/monthly interest accrual, pledge ledger & loan release.</p>
+                    <div className="metal-card-footer">
+                      <span className={`status-pill ${modules.girvi_enabled ? 'active' : 'inactive'}`}>
+                        {modules.girvi_enabled ? '✓ Active in Store' : '✕ Hidden / Disabled'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* 4. Saving Schemes */}
+                  <div className={`store-metal-card metal-platinum ${modules.schemes_enabled ? 'is-active' : 'is-inactive'}`}>
+                    <div className="metal-card-header">
+                      <div className="flex items-center gap-2">
+                        <span className="text-2xl">🪙</span>
+                        <div>
+                          <h4 className="font-bold text-sm text-main">Saving Schemes</h4>
+                          <span className="font-mono text-xs text-muted uppercase">GOLD CHITS</span>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        className={`btn btn-xs ${modules.schemes_enabled ? 'btn-danger-outline' : 'btn-primary'}`}
+                        disabled={togglingModule === 'schemes'}
+                        onClick={() => handleToggleModule('schemes', modules.schemes_enabled)}
+                      >
+                        {togglingModule === 'schemes' ? 'Updating...' : modules.schemes_enabled ? 'Deactivate' : 'Activate'}
+                      </button>
+                    </div>
+                    <p className="metal-card-desc">Monthly gold installment chits, maturity bonus, gold accumulation & redemptions.</p>
+                    <div className="metal-card-footer">
+                      <span className={`status-pill ${modules.schemes_enabled ? 'active' : 'inactive'}`}>
+                        {modules.schemes_enabled ? '✓ Active in Store' : '✕ Hidden / Disabled'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
 
               {/* STORE DEALING METALS CONFIGURATION */}
               <div className="settings-card mt-6">

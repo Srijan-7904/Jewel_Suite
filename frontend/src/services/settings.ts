@@ -29,6 +29,20 @@ export const DEFAULT_INVOICE_COLUMN_SETTINGS: InvoiceColumnSettings = {
   show_fine_weight: true,
 };
 
+export interface ModuleSettings {
+  retail_enabled: boolean;
+  wholesale_enabled: boolean;
+  girvi_enabled: boolean;
+  schemes_enabled: boolean;
+}
+
+export const DEFAULT_MODULE_SETTINGS: ModuleSettings = {
+  retail_enabled: true,
+  wholesale_enabled: true,
+  girvi_enabled: true,
+  schemes_enabled: true,
+};
+
 export interface SecuritySettings {
   display_mode_pin: string;
   store_config_password_set: boolean;
@@ -442,6 +456,25 @@ export const settingsApi = {
     return request<{ valid: boolean }>('/api/settings/security/verify-display-mode', {
       method: 'POST',
       body: JSON.stringify({ pin }),
+    });
+  },
+
+  // Business Operations & Modules (Retail, Wholesale, Girvi, Saving Schemes)
+  getModules(): Promise<ModuleSettings> {
+    return request<ModuleSettings>('/api/settings/modules');
+  },
+
+  updateModules(data: Partial<ModuleSettings>): Promise<ModuleSettings> {
+    return request<ModuleSettings>('/api/settings/modules', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+
+  toggleModule(moduleName: string, is_active?: boolean): Promise<ModuleSettings> {
+    return request<ModuleSettings>(`/api/settings/modules/${moduleName}/toggle`, {
+      method: 'PUT',
+      body: JSON.stringify({ is_active }),
     });
   },
 };

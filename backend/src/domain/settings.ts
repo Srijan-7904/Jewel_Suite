@@ -229,6 +229,20 @@ export interface SecuritySettings {
   current_username?: string;
 }
 
+export interface ModuleSettings {
+  retail_enabled: boolean;
+  wholesale_enabled: boolean;
+  girvi_enabled: boolean;
+  schemes_enabled: boolean;
+}
+
+export const DEFAULT_MODULE_SETTINGS: ModuleSettings = {
+  retail_enabled: true,
+  wholesale_enabled: true,
+  girvi_enabled: true,
+  schemes_enabled: true,
+};
+
 export interface UpdateSecuritySettingsInput {
   username?: string;
   current_password?: string;

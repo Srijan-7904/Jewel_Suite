@@ -11,6 +11,8 @@ import {
   ShopReceivingAccount,
   InvoiceColumnSettings,
   DEFAULT_INVOICE_COLUMN_SETTINGS,
+  ModuleSettings,
+  DEFAULT_MODULE_SETTINGS,
 } from '../../services/settings';
 import { Customer, CurrentRate, Metal, MetalPurity, Supplier, StockItem } from '../../types';
 import {
@@ -165,6 +167,7 @@ export const CreateInvoicePage: React.FC = () => {
   const [metals, setMetals] = useState<Metal[]>([]);
   const [purities, setPurities] = useState<MetalPurity[]>([]);
   const [shopProfile, setShopProfile] = useState<ShopProfile | null>(null);
+  const [modules, setModules] = useState<ModuleSettings>(DEFAULT_MODULE_SETTINGS);
 
   // Bill Header Meta
   const [billType, setBillType] = useState<'RETAIL' | 'WHOLESALE'>('RETAIL');
@@ -358,10 +361,19 @@ export const CreateInvoicePage: React.FC = () => {
       settingsApi.getShopProfile().catch(() => null),
       settingsApi.getInvoiceColumns().catch(() => DEFAULT_INVOICE_COLUMN_SETTINGS),
       settingsApi.getGST().catch(() => null),
+      settingsApi.getModules().catch(() => DEFAULT_MODULE_SETTINGS),
     ])
-      .then(([custRes, supRes, recvRes, ratesRes, metalsRes, puritiesRes, profileRes, invoiceColsRes, gstRes]) => {
+      .then(([custRes, supRes, recvRes, ratesRes, metalsRes, puritiesRes, profileRes, invoiceColsRes, gstRes, modulesRes]) => {
         if (invoiceColsRes) {
           setInvoiceColumns(invoiceColsRes);
+        }
+        if (modulesRes) {
+          setModules(modulesRes);
+          if (!modulesRes.retail_enabled && modulesRes.wholesale_enabled) {
+            setBillType('WHOLESALE');
+          } else if (!modulesRes.wholesale_enabled && modulesRes.retail_enabled) {
+            setBillType('RETAIL');
+          }
         }
         if (gstRes && !editDraftId) {
           if (!gstRes.gst_enabled || gstRes.tax_mode === 'NO_TAX') {
@@ -2847,20 +2859,24 @@ export const CreateInvoicePage: React.FC = () => {
       {/* TRANSACTION TYPE NAVIGATION TABS */}
       <div className="pos-nav-tabs-bar">
         <div className="nav-tabs-group">
-          <button
-            type="button"
-            className={`pos-tab-pill ${billType === 'RETAIL' ? 'active' : ''}`}
-            onClick={() => setBillType('RETAIL')}
-          >
-            Retail Sale
-          </button>
-          <button
-            type="button"
-            className={`pos-tab-pill ${billType === 'WHOLESALE' ? 'active' : ''}`}
-            onClick={() => setBillType('WHOLESALE')}
-          >
-            Wholesale
-          </button>
+          {modules.retail_enabled && (
+            <button
+              type="button"
+              className={`pos-tab-pill ${billType === 'RETAIL' ? 'active' : ''}`}
+              onClick={() => setBillType('RETAIL')}
+            >
+              Retail Sale
+            </button>
+          )}
+          {modules.wholesale_enabled && (
+            <button
+              type="button"
+              className={`pos-tab-pill ${billType === 'WHOLESALE' ? 'active' : ''}`}
+              onClick={() => setBillType('WHOLESALE')}
+            >
+              Wholesale
+            </button>
+          )}
           <button
             type="button"
             className="pos-tab-pill link-tab"

@@ -29,6 +29,8 @@ import {
   DEFAULT_INVOICE_COLUMN_SETTINGS,
   SecuritySettings,
   UpdateSecuritySettingsInput,
+  ModuleSettings,
+  DEFAULT_MODULE_SETTINGS,
 } from '../domain/settings.js';
 import { BadRequestError, NotFoundError, UnauthorizedError } from '../utils/errors.js';
 
@@ -767,6 +769,71 @@ export class SettingsService {
     });
 
     return this.getSecuritySettings(userId);
+  }
+
+  // --- Business Operations & Modules Configuration ---
+  getModuleSettings(): ModuleSettings {
+    return {
+      retail_enabled: settingRepository.getBoolean('module.retail_enabled', true),
+      wholesale_enabled: settingRepository.getBoolean('module.wholesale_enabled', true),
+      girvi_enabled: settingRepository.getBoolean('module.girvi_enabled', true),
+      schemes_enabled: settingRepository.getBoolean('module.schemes_enabled', true),
+    };
+  }
+
+  updateModuleSettings(data: Partial<ModuleSettings>, userId?: string): ModuleSettings {
+    if (data.retail_enabled !== undefined) {
+      settingRepository.set('module.retail_enabled', data.retail_enabled ? 'true' : 'false');
+    }
+    if (data.wholesale_enabled !== undefined) {
+      settingRepository.set('module.wholesale_enabled', data.wholesale_enabled ? 'true' : 'false');
+    }
+    if (data.girvi_enabled !== undefined) {
+      settingRepository.set('module.girvi_enabled', data.girvi_enabled ? 'true' : 'false');
+    }
+    if (data.schemes_enabled !== undefined) {
+      settingRepository.set('module.schemes_enabled', data.schemes_enabled ? 'true' : 'false');
+    }
+
+    auditRepository.log({
+      user_id: userId,
+      action: 'MODULE_SETTINGS_UPDATED',
+      entity_type: 'MODULE_SETTINGS',
+      metadata: data,
+    });
+
+    return this.getModuleSettings();
+  }
+
+  toggleModule(moduleName: string, isActive?: boolean, userId?: string): ModuleSettings {
+    const current = this.getModuleSettings();
+    const key = moduleName.toLowerCase().trim();
+    let updatedVal: boolean;
+
+    if (key === 'retail') {
+      updatedVal = isActive !== undefined ? Boolean(isActive) : !current.retail_enabled;
+      settingRepository.set('module.retail_enabled', updatedVal ? 'true' : 'false');
+    } else if (key === 'wholesale') {
+      updatedVal = isActive !== undefined ? Boolean(isActive) : !current.wholesale_enabled;
+      settingRepository.set('module.wholesale_enabled', updatedVal ? 'true' : 'false');
+    } else if (key === 'girvi') {
+      updatedVal = isActive !== undefined ? Boolean(isActive) : !current.girvi_enabled;
+      settingRepository.set('module.girvi_enabled', updatedVal ? 'true' : 'false');
+    } else if (key === 'schemes' || key === 'saving_schemes') {
+      updatedVal = isActive !== undefined ? Boolean(isActive) : !current.schemes_enabled;
+      settingRepository.set('module.schemes_enabled', updatedVal ? 'true' : 'false');
+    } else {
+      throw new BadRequestError(`Unknown module '${moduleName}'. Allowed: retail, wholesale, girvi, schemes`, 'VALIDATION_ERROR');
+    }
+
+    auditRepository.log({
+      user_id: userId,
+      action: 'MODULE_TOGGLED',
+      entity_type: 'MODULE_SETTINGS',
+      metadata: { module: key, is_active: updatedVal },
+    });
+
+    return this.getModuleSettings();
   }
 }
 

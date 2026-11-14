@@ -42,6 +42,11 @@ settingsRoutes.get('/metals', (req, res, next) => settingsController.getMetals(r
 settingsRoutes.put('/metals/:code/toggle', requireRole('ADMIN'), (req, res, next) => settingsController.toggleMetal(req, res, next));
 settingsRoutes.put('/metals', requireRole('ADMIN'), (req, res, next) => settingsController.updateActiveMetals(req, res, next));
 
+// Business Operations & Modules Configuration (Retail, Wholesale, Girvi, Saving Schemes)
+settingsRoutes.get('/modules', (req, res, next) => settingsController.getModuleSettings(req, res, next));
+settingsRoutes.put('/modules', requireRole('ADMIN'), (req, res, next) => settingsController.updateModuleSettings(req, res, next));
+settingsRoutes.put('/modules/:module/toggle', requireRole('ADMIN'), (req, res, next) => settingsController.toggleModule(req, res, next));
+
 // Shop Receiving Accounts
 settingsRoutes.get('/receiving-accounts', (req, res, next) => settingsController.getReceivingAccounts(req, res, next));
 settingsRoutes.put('/receiving-accounts', requireRole('ADMIN'), (req, res, next) => settingsController.updateReceivingAccounts(req, res, next));
