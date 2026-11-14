@@ -3335,31 +3335,15 @@
   min-width: 0 !important;
   height: 32px !important;
   padding: 0 4px !important;
-  font-size: 0.72rem !important;
+  font-size: 0.76rem !important;
   font-weight: 600 !important;
   display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;
-  gap: 3px !important;
+  text-align: center !important;
+  letter-spacing: 0.02em;
   white-space: nowrap !important;
-  overflow: hidden !important;
-  text-overflow: ellipsis !important;
   box-sizing: border-box !important;
-}
-
-.field-block.metal-select-block .segment-btn span {
-  display: inline-block;
-  line-height: 1;
-}
-
-.field-block.metal-select-block .segment-btn .metal-icon {
-  font-size: 0.78rem;
-  flex-shrink: 0;
-}
-
-.field-block.metal-select-block .segment-btn .metal-text {
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .field-block.rate-block {

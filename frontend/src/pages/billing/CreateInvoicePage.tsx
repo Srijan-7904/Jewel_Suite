@@ -4862,8 +4862,7 @@ export const CreateInvoicePage: React.FC = () => {
                                 onClick={() => handleSetPaymentMode(p.id, 'GOLD')}
                                 title="Select Gold Payment"
                               >
-                                <span className="metal-icon">🟡</span>
-                                <span className="metal-text">Gold</span>
+                                Gold
                               </button>
                               <button
                                 type="button"
@@ -4871,8 +4870,7 @@ export const CreateInvoicePage: React.FC = () => {
                                 onClick={() => handleSetPaymentMode(p.id, 'SILVER')}
                                 title="Select Silver Payment"
                               >
-                                <span className="metal-icon">⚪</span>
-                                <span className="metal-text">Silver</span>
+                                Silver
                               </button>
                             </div>
                           </div>
