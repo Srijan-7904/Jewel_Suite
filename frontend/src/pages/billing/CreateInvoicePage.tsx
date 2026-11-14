@@ -240,18 +240,24 @@ export const CreateInvoicePage: React.FC = () => {
   }, [activeItemDropdownRowId]);
 
   useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
+    const handleClickOutside = (e: MouseEvent | TouchEvent) => {
       const target = e.target as HTMLElement;
+      if (!target) return;
       if (
         !target.closest('.item-name-cell') &&
         !target.closest('.tag-input-cell') &&
-        !target.closest('.item-flyout-portal')
+        !target.closest('.item-flyout-portal') &&
+        !target.closest('.tag-suggestions-flyout')
       ) {
         setActiveItemDropdownRowId(null);
       }
     };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener('mousedown', handleClickOutside, true);
+    document.addEventListener('touchstart', handleClickOutside, true);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside, true);
+      document.removeEventListener('touchstart', handleClickOutside, true);
+    };
   }, []);
 
   // Submission State
@@ -330,6 +336,13 @@ export const CreateInvoicePage: React.FC = () => {
       rate_per_gram: '',
     },
   ]);
+
+  const saleItemsRef = useRef(saleItems);
+  saleItemsRef.current = saleItems;
+  const stockItemsRef = useRef(stockItems);
+  stockItemsRef.current = stockItems;
+  const highlightedItemIndexRef = useRef(highlightedItemIndex);
+  highlightedItemIndexRef.current = highlightedItemIndex;
 
   // Invoice Column Visibility Settings
   const [invoiceColumns, setInvoiceColumns] = useState<InvoiceColumnSettings>(DEFAULT_INVOICE_COLUMN_SETTINGS);
@@ -619,9 +632,9 @@ export const CreateInvoicePage: React.FC = () => {
           return;
         }
 
-        const activeRow = saleItems.find((s) => s.id === activeItemDropdownRowId);
+        const activeRow = saleItemsRef.current.find((s) => s.id === activeItemDropdownRowId);
         const q = (activeRow?.item_name || '').trim().toUpperCase();
-        const matched = stockItems.filter((s) => {
+        const matched = stockItemsRef.current.filter((s) => {
           if (!q) return true;
           return (
             (s.product_name && s.product_name.toUpperCase().includes(q)) ||
@@ -653,8 +666,8 @@ export const CreateInvoicePage: React.FC = () => {
           e.preventDefault();
           e.stopPropagation();
           const targetRowId = activeItemDropdownRowId;
-          const pickedStock = matched[highlightedItemIndex] || matched[0];
-          if (pickedStock && activeRow) {
+          const pickedStock = matched[highlightedItemIndexRef.current] || (matched.length > 0 ? matched[0] : null);
+          if (pickedStock) {
             handleSelectStockItem(targetRowId, pickedStock);
           }
           setActiveItemDropdownRowId(null);
@@ -668,14 +681,19 @@ export const CreateInvoicePage: React.FC = () => {
                   'input:not([disabled]):not([readonly]), select:not([disabled])'
                 )
               );
-              const target = inputs.find(
-                (inp) =>
-                  inp.getAttribute('placeholder')?.includes('RATE') ||
-                  inp.getAttribute('placeholder')?.includes('MC') ||
-                  inp.getAttribute('placeholder')?.includes('RATE/G') ||
-                  inp.getAttribute('placeholder')?.includes('GROSS') ||
-                  inp.tagName === 'SELECT'
-              );
+              const currentInput = row.querySelector<HTMLInputElement>(`input[data-row-id="${targetRowId}"]`);
+              const currentIndex = currentInput ? inputs.indexOf(currentInput) : -1;
+              const target = (currentIndex !== -1 && currentIndex + 1 < inputs.length)
+                ? inputs[currentIndex + 1]
+                : inputs.find(
+                    (inp) =>
+                      inp !== currentInput &&
+                      (inp.getAttribute('placeholder')?.includes('RATE') ||
+                        inp.getAttribute('placeholder')?.includes('MC') ||
+                        inp.getAttribute('placeholder')?.includes('RATE/G') ||
+                        inp.getAttribute('placeholder')?.includes('GROSS') ||
+                        inp.tagName === 'SELECT')
+                  );
               if (target) {
                 target.focus();
                 if ('select' in target) (target as HTMLInputElement).select();
@@ -3270,9 +3288,11 @@ export const CreateInvoicePage: React.FC = () => {
                               setHighlightedItemIndex(0);
                             }}
                             onFocus={(e) => {
-                              updateItemDropdownCoords(e.currentTarget);
-                              setActiveItemDropdownRowId(item.id);
-                              setHighlightedItemIndex(0);
+                              if (!item.stock_item_id) {
+                                updateItemDropdownCoords(e.currentTarget);
+                                setActiveItemDropdownRowId(item.id);
+                                setHighlightedItemIndex(0);
+                              }
                             }}
                             onBlur={() => {
                               setTimeout(() => {
@@ -3406,6 +3426,7 @@ export const CreateInvoicePage: React.FC = () => {
                                 className="tag-flyout-close"
                                 onClick={(e) => {
                                   e.stopPropagation();
+                                  e.preventDefault();
                                   setActiveItemDropdownRowId(null);
                                 }}
                               >
@@ -3432,6 +3453,13 @@ export const CreateInvoicePage: React.FC = () => {
                                     onMouseEnter={() => setHighlightedItemIndex(idx)}
                                     onMouseDown={(e) => {
                                       e.preventDefault();
+                                      e.stopPropagation();
+                                      handleSelectStockItem(item.id, stock);
+                                      setActiveItemDropdownRowId(null);
+                                    }}
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
                                       handleSelectStockItem(item.id, stock);
                                       setActiveItemDropdownRowId(null);
                                     }}

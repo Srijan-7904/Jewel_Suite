@@ -5,8 +5,10 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { savingSchemeApi } from '../../services/savingScheme';
 import { customerApi } from '../../services/masters';
+import { CustomerSearchSelect } from '../../components/CustomerSearchSelect';
+import { CreateCustomerModal } from '../../components/CreateCustomerModal';
 import { SavingScheme, SavingSchemeType, Customer } from '../../types';
-import { PiggyBank, Plus, Search, Eye, X, AlertCircle } from 'lucide-react';
+import { PiggyBank, Plus, Search, Eye, X, AlertCircle, UserPlus } from 'lucide-react';
 import './SavingSchemes.css';
 
 export const SavingSchemesPage: React.FC = () => {
@@ -27,6 +29,11 @@ export const SavingSchemesPage: React.FC = () => {
   const [enrollNotes, setEnrollNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+
+  // Quick Add Customer Modal State
+  const [showAddCustomerModal, setShowAddCustomerModal] = useState(false);
+  const [newCustomerName, setNewCustomerName] = useState('');
+  const [newCustomerPhone, setNewCustomerPhone] = useState('');
 
   const loadData = async () => {
     try {
@@ -339,30 +346,66 @@ export const SavingSchemesPage: React.FC = () => {
 
             <form onSubmit={handleEnrollSubmit}>
               {/* Customer Selector */}
-              <div style={{ marginBottom: '1rem' }}>
-                <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.35rem' }}>
-                  Select Customer *
-                </label>
-                <select
-                  value={customerId}
-                  onChange={(e) => setCustomerId(e.target.value)}
-                  required
-                  style={{
-                    width: '100%',
-                    padding: '0.65rem',
-                    background: 'var(--bg-input)',
-                    border: '1px solid var(--border-default)',
-                    borderRadius: '6px',
-                    color: 'var(--text-main)',
+              <div style={{ marginBottom: '1.25rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+                  <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main)' }}>
+                    Select Customer *
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNewCustomerName('');
+                      setNewCustomerPhone('');
+                      setShowAddCustomerModal(true);
+                    }}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.3rem',
+                      padding: '0.25rem 0.65rem',
+                      background: 'rgba(212, 175, 55, 0.12)',
+                      border: '1px solid rgba(212, 175, 55, 0.4)',
+                      borderRadius: '4px',
+                      color: 'var(--accent-gold, #d4af37)',
+                      fontSize: '0.78rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                    }}
+                    title="Quick Add new customer to directory"
+                  >
+                    <UserPlus size={13} />
+                    <span>+ Add Customer</span>
+                  </button>
+                </div>
+                <CustomerSearchSelect
+                  customers={customers}
+                  selectedCustomerId={customerId}
+                  onSelectCustomer={(c) => setCustomerId(c.id)}
+                  onClearCustomer={() => setCustomerId('')}
+                  onAddNewCustomer={(typedQuery) => {
+                    if (typedQuery) {
+                      const isNum = /^[0-9+]+$/.test(typedQuery.trim());
+                      if (isNum) {
+                        setNewCustomerPhone(typedQuery.trim());
+                        setNewCustomerName('');
+                      } else {
+                        setNewCustomerName(typedQuery.trim());
+                        setNewCustomerPhone('');
+                      }
+                    } else {
+                      setNewCustomerName('');
+                      setNewCustomerPhone('');
+                    }
+                    setShowAddCustomerModal(true);
                   }}
-                >
-                  <option value="">-- Choose Customer --</option>
-                  {customers.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name} ({c.phone || 'No phone'}) - {c.customer_code}
-                    </option>
-                  ))}
-                </select>
+                  onCustomerDiscovered={(newCust) => {
+                    setCustomers((prev) => {
+                      if (prev.some((c) => c.id === newCust.id)) return prev;
+                      return [...prev, newCust];
+                    });
+                  }}
+                  placeholder="Search customer by name, mobile, or code..."
+                />
               </div>
 
               {/* Scheme Type Selector */}
@@ -468,6 +511,21 @@ export const SavingSchemesPage: React.FC = () => {
           </div>
         </div>
       )}
+      {/* Quick Add Customer Modal */}
+      <CreateCustomerModal
+        isOpen={showAddCustomerModal}
+        onClose={() => setShowAddCustomerModal(false)}
+        onSuccess={(created) => {
+          setCustomers((prev) => [created, ...prev.filter((c) => c.id !== created.id)]);
+          setCustomerId(created.id);
+          setShowAddCustomerModal(false);
+          setNewCustomerName('');
+          setNewCustomerPhone('');
+        }}
+        initialName={newCustomerName}
+        initialPhone={newCustomerPhone}
+        defaultCustomerType="RETAIL"
+      />
     </div>
   );
 };
