@@ -4860,15 +4860,19 @@ export const CreateInvoicePage: React.FC = () => {
                                 type="button"
                                 className={`segment-btn metal-gold-btn ${isGold ? 'active' : ''}`}
                                 onClick={() => handleSetPaymentMode(p.id, 'GOLD')}
+                                title="Select Gold Payment"
                               >
-                                🟡 Gold
+                                <span className="metal-icon">🟡</span>
+                                <span className="metal-text">Gold</span>
                               </button>
                               <button
                                 type="button"
                                 className={`segment-btn metal-silver-btn ${isSilver ? 'active' : ''}`}
                                 onClick={() => handleSetPaymentMode(p.id, 'SILVER')}
+                                title="Select Silver Payment"
                               >
-                                ⚪ Silver
+                                <span className="metal-icon">⚪</span>
+                                <span className="metal-text">Silver</span>
                               </button>
                             </div>
                           </div>
