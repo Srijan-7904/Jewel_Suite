@@ -250,6 +250,7 @@ export const CreateInvoicePage: React.FC = () => {
         !target.closest('.tag-suggestions-flyout')
       ) {
         setActiveItemDropdownRowId(null);
+        setItemDropdownCoords(null);
       }
     };
     document.addEventListener('mousedown', handleClickOutside, true);
@@ -629,6 +630,7 @@ export const CreateInvoicePage: React.FC = () => {
           e.preventDefault();
           e.stopPropagation();
           setActiveItemDropdownRowId(null);
+          setItemDropdownCoords(null);
           return;
         }
 
@@ -671,6 +673,7 @@ export const CreateInvoicePage: React.FC = () => {
             handleSelectStockItem(targetRowId, pickedStock);
           }
           setActiveItemDropdownRowId(null);
+          setItemDropdownCoords(null);
 
           // Focus next editable field in row in Tally style
           setTimeout(() => {
@@ -696,7 +699,9 @@ export const CreateInvoicePage: React.FC = () => {
                   );
               if (target) {
                 target.focus();
-                if ('select' in target) (target as HTMLInputElement).select();
+                if ('select' in target && typeof (target as HTMLInputElement).select === 'function') {
+                  (target as HTMLInputElement).select();
+                }
               }
             }
           }, 50);
@@ -705,6 +710,7 @@ export const CreateInvoicePage: React.FC = () => {
 
         if (e.key === 'Tab') {
           setActiveItemDropdownRowId(null);
+          setItemDropdownCoords(null);
         }
       }
 
@@ -1095,6 +1101,7 @@ export const CreateInvoicePage: React.FC = () => {
     });
 
     setActiveItemDropdownRowId(null);
+    setItemDropdownCoords(null);
     showToast('success', `Tag ${stock.tag_no} selected from Stock Inventory!`);
 
     // In Tally style: automatically move focus to next editable field in row
@@ -3409,12 +3416,15 @@ export const CreateInvoicePage: React.FC = () => {
                             onBlur={() => {
                               setTimeout(() => {
                                 setActiveItemDropdownRowId(null);
+                                setItemDropdownCoords(null);
                               }, 180);
                             }}
                             onKeyDown={(e) => {
                               if (e.key === 'Escape') {
                                 e.preventDefault();
+                                e.stopPropagation();
                                 setActiveItemDropdownRowId(null);
+                                setItemDropdownCoords(null);
                                 return;
                               }
 
@@ -3431,6 +3441,7 @@ export const CreateInvoicePage: React.FC = () => {
 
                               if (e.key === 'ArrowDown') {
                                 e.preventDefault();
+                                e.stopPropagation();
                                 if (matched.length > 0) {
                                   setHighlightedItemIndex((prev) => (prev + 1) % matched.length);
                                 }
@@ -3439,6 +3450,7 @@ export const CreateInvoicePage: React.FC = () => {
 
                               if (e.key === 'ArrowUp') {
                                 e.preventDefault();
+                                e.stopPropagation();
                                 if (matched.length > 0) {
                                   setHighlightedItemIndex((prev) => (prev - 1 + matched.length) % matched.length);
                                 }
@@ -3447,6 +3459,7 @@ export const CreateInvoicePage: React.FC = () => {
 
                               if (e.key === 'Enter') {
                                 e.preventDefault();
+                                e.stopPropagation();
                                 if (matched.length > 0) {
                                   const selectedStock = matched[highlightedItemIndex] || matched[0];
                                   if (selectedStock) {
@@ -3454,6 +3467,7 @@ export const CreateInvoicePage: React.FC = () => {
                                   }
                                 }
                                 setActiveItemDropdownRowId(null);
+                                setItemDropdownCoords(null);
 
                                 // Advance focus to next input in row
                                 setTimeout(() => {
@@ -3475,7 +3489,9 @@ export const CreateInvoicePage: React.FC = () => {
                                     );
                                     if (next) {
                                       next.focus();
-                                      if ('select' in next) (next as HTMLInputElement).select();
+                                      if ('select' in next && typeof (next as HTMLInputElement).select === 'function') {
+                                        (next as HTMLInputElement).select();
+                                      }
                                     }
                                   }
                                 }, 50);
@@ -3484,6 +3500,7 @@ export const CreateInvoicePage: React.FC = () => {
 
                               if (e.key === 'Tab') {
                                 setActiveItemDropdownRowId(null);
+                                setItemDropdownCoords(null);
                               }
                             }}
                             placeholder="ITEM NAME *"
@@ -3519,7 +3536,7 @@ export const CreateInvoicePage: React.FC = () => {
                         </div>
 
                         {/* In-Stock Autocomplete Suggestions Flyout rendered as Portal so it floats outside any container boundaries */}
-                        {activeItemDropdownRowId === item.id && itemDropdownCoords && createPortal(
+                        {activeItemDropdownRowId === item.id && !item.stock_item_id && itemDropdownCoords && createPortal(
                           <div
                             className="tag-suggestions-flyout item-flyout-portal"
                             ref={itemDropdownRef}
@@ -3540,6 +3557,7 @@ export const CreateInvoicePage: React.FC = () => {
                                   e.stopPropagation();
                                   e.preventDefault();
                                   setActiveItemDropdownRowId(null);
+                                  setItemDropdownCoords(null);
                                 }}
                               >
                                 ✕
@@ -3568,12 +3586,14 @@ export const CreateInvoicePage: React.FC = () => {
                                       e.stopPropagation();
                                       handleSelectStockItem(item.id, stock);
                                       setActiveItemDropdownRowId(null);
+                                      setItemDropdownCoords(null);
                                     }}
                                     onClick={(e) => {
                                       e.preventDefault();
                                       e.stopPropagation();
                                       handleSelectStockItem(item.id, stock);
                                       setActiveItemDropdownRowId(null);
+                                      setItemDropdownCoords(null);
                                     }}
                                   >
                                     <div className="stock-suggestion-info">
@@ -5013,14 +5033,7 @@ export const CreateInvoicePage: React.FC = () => {
 
                           {/* 3. Weight: Weight (g) with Auto mode toggle underneath */}
                           <div className="field-block weight-block">
-                            <div className="field-header">
-                              <label className="field-title">Weight (g) *</label>
-                              {p.fine_weight && Number(p.fine_weight) > 0 && (
-                                <span className="weight-fine-badge font-mono" title="Calculated Fine Weight">
-                                  Fine: {formatFineWeight(p.fine_weight, 4)}g
-                                </span>
-                              )}
-                            </div>
+                            <label className="field-title">Weight (g) *</label>
                             <div className="input-group-styled">
                               <input
                                 type="text"
