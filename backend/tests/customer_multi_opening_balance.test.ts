@@ -364,4 +364,47 @@ describe('Jewel Suite: Multi-Type Opening Balance in Customer Creation', () => {
     expect(ledger.items.length).toBe(1);
     expect(ledger.items[0].amount).toBe(12500);
   });
+
+  // 11. Updating Customer Opening Balance in Edit Customer
+  it('updates opening balance details (Cash, Bank, Gold, Silver) and resynchronizes ledger', () => {
+    const customer = customerService.create({
+      name: 'Updateable Customer',
+      phone: '9998887776',
+      customer_type: 'RETAIL',
+      opening_cash_balance: 5000,
+      opening_cash_type: 'DEBIT',
+    });
+
+    expect(customer.current_balance).toBe(5000);
+
+    // Edit customer: change cash balance to 8000, add 10g Gold, 50g Silver
+    const updated = customerService.update(customer.id, {
+      name: 'Updateable Customer Edited',
+      opening_cash_balance: 8000,
+      opening_cash_type: 'DEBIT',
+      opening_gold_weight: 10.5,
+      opening_gold_type: 'DEBIT',
+      opening_gold_purity_id: gold22kPurityId,
+      opening_gold_rate: 6500,
+      opening_silver_weight: 50.25,
+      opening_silver_type: 'CREDIT',
+      opening_silver_purity_id: silver925PurityId,
+      opening_silver_rate: 80,
+    });
+
+    expect(updated.name).toBe('Updateable Customer Edited');
+    expect(updated.opening_cash_balance).toBe(8000);
+    expect(updated.current_balance).toBe(8000);
+    expect(updated.gold_balance_grams).toBe(10.5);
+    expect(updated.silver_balance_grams).toBe(-50.25);
+
+    const statement = financeService.getPartyStatement('CUSTOMER', customer.id);
+    expect(statement.current_balance).toBe(8000);
+
+    const metalBalances = financeService.getPartyMetalBalances('CUSTOMER', customer.id);
+    const gold = metalBalances.find((m) => m.metal_code === 'GOLD');
+    const silver = metalBalances.find((m) => m.metal_code === 'SILVER');
+    expect(gold?.balance_grams).toBe(10.5);
+    expect(silver?.balance_grams).toBe(-50.25);
+  });
 });

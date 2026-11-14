@@ -100,7 +100,24 @@ export const CustomersPage: React.FC = () => {
   };
 
   const handleOpenEdit = (customer: Customer) => {
-    setSelectedCustomer({ ...customer });
+    setSelectedCustomer({
+      ...customer,
+      opening_cash_balance: customer.opening_cash_balance ?? 0,
+      opening_cash_type: customer.opening_cash_type || 'DEBIT',
+      opening_bank_balance: customer.opening_bank_balance ?? 0,
+      opening_bank_type: customer.opening_bank_type || 'DEBIT',
+      opening_gold_weight: customer.opening_gold_weight ?? 0,
+      opening_gold_type: customer.opening_gold_type || 'DEBIT',
+      opening_gold_purity_id: customer.opening_gold_purity_id || '',
+      opening_gold_rate: customer.opening_gold_rate ?? 0,
+      opening_gold_value: customer.opening_gold_value ?? 0,
+      opening_silver_weight: customer.opening_silver_weight ?? 0,
+      opening_silver_type: customer.opening_silver_type || 'DEBIT',
+      opening_silver_purity_id: customer.opening_silver_purity_id || '',
+      opening_silver_rate: customer.opening_silver_rate ?? 0,
+      opening_silver_value: customer.opening_silver_value ?? 0,
+    });
+    setPrimaryDirection((customer.opening_balance_type as any) || customer.opening_cash_type || 'DEBIT');
     setFormError(null);
     setModalMode('edit');
     setShowModal(true);
@@ -517,7 +534,27 @@ export const CustomersPage: React.FC = () => {
                   <button
                     type="button"
                     className="btn-primary"
-                    onClick={() => setModalMode('edit')}
+                    onClick={() => {
+                      setSelectedCustomer({
+                        ...selectedCustomer,
+                        opening_cash_balance: selectedCustomer.opening_cash_balance ?? 0,
+                        opening_cash_type: selectedCustomer.opening_cash_type || 'DEBIT',
+                        opening_bank_balance: selectedCustomer.opening_bank_balance ?? 0,
+                        opening_bank_type: selectedCustomer.opening_bank_type || 'DEBIT',
+                        opening_gold_weight: selectedCustomer.opening_gold_weight ?? 0,
+                        opening_gold_type: selectedCustomer.opening_gold_type || 'DEBIT',
+                        opening_gold_purity_id: selectedCustomer.opening_gold_purity_id || '',
+                        opening_gold_rate: selectedCustomer.opening_gold_rate ?? 0,
+                        opening_gold_value: selectedCustomer.opening_gold_value ?? 0,
+                        opening_silver_weight: selectedCustomer.opening_silver_weight ?? 0,
+                        opening_silver_type: selectedCustomer.opening_silver_type || 'DEBIT',
+                        opening_silver_purity_id: selectedCustomer.opening_silver_purity_id || '',
+                        opening_silver_rate: selectedCustomer.opening_silver_rate ?? 0,
+                        opening_silver_value: selectedCustomer.opening_silver_value ?? 0,
+                      });
+                      setPrimaryDirection((selectedCustomer.opening_balance_type as any) || selectedCustomer.opening_cash_type || 'DEBIT');
+                      setModalMode('edit');
+                    }}
                   >
                     Edit Profile
                   </button>
@@ -623,13 +660,17 @@ export const CustomersPage: React.FC = () => {
                       />
                     </div>
 
-                    {modalMode === 'create' ? (
-                      /* Multi-Type Opening Balance Section */
-                      <div className="opening-balance-container">
-                        <div className="opening-balance-header">
-                          <div className="opening-balance-title">
-                            <Coins size={16} /> Opening Balance (Monetary & Metal Ledgers)
-                          </div>
+                    {/* Multi-Type Opening Balance Section */}
+                    <div className="opening-balance-container">
+                      <div className="opening-balance-header">
+                        <div className="opening-balance-title">
+                          <Coins size={16} /> Opening Balance (Monetary & Metal Ledgers)
+                          {modalMode === 'edit' && (
+                            <span className="badge badge-warning" style={{ fontSize: '0.68rem', marginLeft: '0.5rem' }}>
+                              Edit Mode (Synchronizes Live Ledger Balances)
+                            </span>
+                          )}
+                        </div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                             <span style={{ fontSize: '0.75rem', color: '#9da4b3' }}>Default Direction:</span>
                             <select
@@ -944,15 +985,6 @@ export const CustomersPage: React.FC = () => {
                           )}
                         </div>
                       </div>
-                    ) : (
-                      /* In Edit Mode: Display opening balance note */
-                      <div className="form-field col-span-2">
-                        <label>Opening Balance (Recorded on Creation)</label>
-                        <div className="text-muted" style={{ fontSize: '0.8rem', padding: '0.5rem 0.75rem', background: 'var(--bg-app)', borderRadius: '6px' }}>
-                          Opening balance was posted to the ledger upon initial customer creation. To record new transactions or adjust balances, use the Customer Ledger page.
-                        </div>
-                      </div>
-                    )}
 
                     <div className="form-field col-span-2">
                       <label>Internal Notes</label>
