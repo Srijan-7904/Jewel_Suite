@@ -262,44 +262,46 @@ export class CustomerService {
         validated.opening_balance !== undefined ||
         validated.opening_balance_type !== undefined;
 
-      let netOpeningBalance = existing.opening_balance;
-      let netOpeningType = existing.opening_balance_type;
-      let cashBal = existing.opening_cash_balance;
-      let cashType = existing.opening_cash_type;
-      let bankBal = existing.opening_bank_balance;
-      let bankType = existing.opening_bank_type;
-      let goldVal = existing.opening_gold_value;
-      let silverVal = existing.opening_silver_value;
-      let goldWt = existing.opening_gold_weight;
-      let silverWt = existing.opening_silver_weight;
+      let netOpeningBalance: number = existing.opening_balance || 0;
+      let netOpeningType: 'DEBIT' | 'CREDIT' = existing.opening_balance_type || 'DEBIT';
+      let cashBal: number = existing.opening_cash_balance || 0;
+      let cashType: 'DEBIT' | 'CREDIT' = existing.opening_cash_type || 'DEBIT';
+      let bankBal: number = existing.opening_bank_balance || 0;
+      let bankType: 'DEBIT' | 'CREDIT' = existing.opening_bank_type || 'DEBIT';
+      let goldVal: number = existing.opening_gold_value || 0;
+      let silverVal: number = existing.opening_silver_value || 0;
+      let goldWt: number = existing.opening_gold_weight || 0;
+      let silverWt: number = existing.opening_silver_weight || 0;
+      let goldRate: number = existing.opening_gold_rate || 0;
+      let silverRate: number = existing.opening_silver_rate || 0;
 
       if (hasOpeningUpdate) {
-        cashBal = validated.opening_cash_balance !== undefined ? validated.opening_cash_balance : existing.opening_cash_balance;
-        cashType = validated.opening_cash_type || existing.opening_cash_type || 'DEBIT';
-        bankBal = validated.opening_bank_balance !== undefined ? validated.opening_bank_balance : existing.opening_bank_balance;
-        bankType = validated.opening_bank_type || existing.opening_bank_type || 'DEBIT';
+        cashBal = validated.opening_cash_balance !== undefined ? validated.opening_cash_balance : (existing.opening_cash_balance || 0);
+        cashType = (validated.opening_cash_type || existing.opening_cash_type || 'DEBIT') as 'DEBIT' | 'CREDIT';
+        bankBal = validated.opening_bank_balance !== undefined ? validated.opening_bank_balance : (existing.opening_bank_balance || 0);
+        bankType = (validated.opening_bank_type || existing.opening_bank_type || 'DEBIT') as 'DEBIT' | 'CREDIT';
 
-        if (cashBal === 0 && bankBal === 0 && (validated.opening_balance !== undefined ? validated.opening_balance : existing.opening_balance) > 0) {
-          cashBal = validated.opening_balance !== undefined ? validated.opening_balance : existing.opening_balance;
-          cashType = validated.opening_balance_type || existing.opening_balance_type || 'DEBIT';
+        if (cashBal === 0 && bankBal === 0 && (validated.opening_balance !== undefined ? validated.opening_balance : (existing.opening_balance || 0)) > 0) {
+          cashBal = validated.opening_balance !== undefined ? validated.opening_balance : (existing.opening_balance || 0);
+          cashType = (validated.opening_balance_type || existing.opening_balance_type || 'DEBIT') as 'DEBIT' | 'CREDIT';
         }
 
-        const cashSigned = (cashType === 'DEBIT' ? 1 : -1) * (cashBal || 0);
-        const bankSigned = (bankType === 'DEBIT' ? 1 : -1) * (bankBal || 0);
+        const cashSigned = (cashType === 'DEBIT' ? 1 : -1) * cashBal;
+        const bankSigned = (bankType === 'DEBIT' ? 1 : -1) * bankBal;
         const netMonetary = cashSigned + bankSigned;
         netOpeningBalance = Math.abs(Number(netMonetary.toFixed(2)));
         netOpeningType = netMonetary >= 0 ? 'DEBIT' : 'CREDIT';
 
-        goldWt = validated.opening_gold_weight !== undefined ? validated.opening_gold_weight : existing.opening_gold_weight;
-        const goldRate = validated.opening_gold_rate !== undefined ? validated.opening_gold_rate : existing.opening_gold_rate;
-        goldVal = validated.opening_gold_value;
+        goldWt = validated.opening_gold_weight !== undefined ? validated.opening_gold_weight : (existing.opening_gold_weight || 0);
+        goldRate = validated.opening_gold_rate !== undefined ? validated.opening_gold_rate : (existing.opening_gold_rate || 0);
+        goldVal = validated.opening_gold_value !== undefined ? validated.opening_gold_value : (existing.opening_gold_value || 0);
         if (goldWt > 0 && goldRate > 0 && (!goldVal || goldVal === 0)) {
           goldVal = Number((goldWt * goldRate).toFixed(2));
         }
 
-        silverWt = validated.opening_silver_weight !== undefined ? validated.opening_silver_weight : existing.opening_silver_weight;
-        const silverRate = validated.opening_silver_rate !== undefined ? validated.opening_silver_rate : existing.opening_silver_rate;
-        silverVal = validated.opening_silver_value;
+        silverWt = validated.opening_silver_weight !== undefined ? validated.opening_silver_weight : (existing.opening_silver_weight || 0);
+        silverRate = validated.opening_silver_rate !== undefined ? validated.opening_silver_rate : (existing.opening_silver_rate || 0);
+        silverVal = validated.opening_silver_value !== undefined ? validated.opening_silver_value : (existing.opening_silver_value || 0);
         if (silverWt > 0 && silverRate > 0 && (!silverVal || silverVal === 0)) {
           silverVal = Number((silverWt * silverRate).toFixed(2));
         }
@@ -385,8 +387,8 @@ export class CustomerService {
               entry_type: MetalEntryType.OPENING_BALANCE,
               debit_credit: (validated.opening_gold_type || existing.opening_gold_type || 'DEBIT') as DebitCredit,
               weight: goldWt,
-              valuation_rate: (validated.opening_gold_rate !== undefined ? validated.opening_gold_rate : existing.opening_gold_rate) || 0,
-              valuation_amount: goldVal || 0,
+              valuation_rate: goldRate,
+              valuation_amount: goldVal,
               reference_type: 'CUSTOMER_OPENING_BALANCE',
               reference_number: refNumber,
               description: `Gold Opening Balance (${goldWt}g)${opNotes ? ` (${opNotes})` : ''}`,
@@ -408,8 +410,8 @@ export class CustomerService {
               entry_type: MetalEntryType.OPENING_BALANCE,
               debit_credit: (validated.opening_silver_type || existing.opening_silver_type || 'DEBIT') as DebitCredit,
               weight: silverWt,
-              valuation_rate: (validated.opening_silver_rate !== undefined ? validated.opening_silver_rate : existing.opening_silver_rate) || 0,
-              valuation_amount: silverVal || 0,
+              valuation_rate: silverRate,
+              valuation_amount: silverVal,
               reference_type: 'CUSTOMER_OPENING_BALANCE',
               reference_number: refNumber,
               description: `Silver Opening Balance (${silverWt}g)${opNotes ? ` (${opNotes})` : ''}`,
