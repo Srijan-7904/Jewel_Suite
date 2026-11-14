@@ -1425,13 +1425,40 @@ export const CreateInvoicePage: React.FC = () => {
 
   // Helper to add metal payment row (Gold or Silver) with dashboard rate auto-applied
   const handleAddMetalPaymentRow = (metalType: 'GOLD' | 'SILVER') => {
+    const isGold = metalType === 'GOLD';
     const info = findMetalAndPurity(metalType);
     const currentCust = customers.find((c) => c.id === customerId);
     const currentCustomerName = currentCust ? currentCust.name : 'CASH CUSTOMER';
+    const rate = info.applicableRate > 0 ? info.applicableRate : 0;
+    const tunch = toDecimal(info.tunchPercent || (isGold ? 91.6 : 99.9));
+
+    const dueAmt = isGold
+      ? (calculations.goldBalAmount > 0 ? calculations.goldBalAmount : calculations.balanceDue)
+      : (calculations.silverBalAmount > 0 ? calculations.silverBalAmount : calculations.balanceDue);
+    const balFine = isGold ? calculations.goldBalFine : calculations.silverBalFine;
+
+    let initWeight: number | string = '';
+    let initFine: number | string = '';
+    let initAmount: number | string = '';
+
+    if (balFine > 0) {
+      const w = tunch.gt(0)
+        ? new Decimal(balFine).times(100).dividedBy(tunch).toDecimalPlaces(3, Decimal.ROUND_HALF_UP)
+        : new Decimal(balFine);
+      initWeight = w.toNumber();
+      initFine = balFine;
+      initAmount = rate > 0 ? w.times(rate).toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber() : '';
+    } else if (dueAmt > 0 && rate > 0) {
+      const w = new Decimal(dueAmt).dividedBy(rate).toDecimalPlaces(3, Decimal.ROUND_HALF_UP);
+      initWeight = w.toNumber();
+      initFine = w.times(tunch).dividedBy(100).toDecimalPlaces(3, Decimal.ROUND_HALF_UP).toNumber();
+      initAmount = dueAmt;
+    }
+
     const newPay: PaymentRow = {
       id: `pay-${Date.now()}-${payments.length + 1}`,
       payment_mode: metalType,
-      amount: '',
+      amount: initAmount,
       reference_number: '',
       payer_type: 'CUSTOMER',
       payer_name: currentCustomerName,
@@ -1442,10 +1469,10 @@ export const CreateInvoicePage: React.FC = () => {
       purity_id: info.purityId,
       purity_name: info.purityName,
       tunch_percent: info.tunchPercent,
-      metal_weight: '',
-      fine_weight: '',
-      metal_rate: info.applicableRate > 0 ? info.applicableRate : '',
-      rate_error: info.applicableRate <= 0 ? 'Today\'s benchmark rate not set in dashboard' : undefined,
+      metal_weight: initWeight,
+      fine_weight: initFine,
+      metal_rate: rate > 0 ? rate : '',
+      rate_error: rate <= 0 ? 'Today\'s benchmark rate not set in dashboard' : undefined,
       last_edited: 'weight',
     };
     setPayments((prev) => [...prev, newPay]);
@@ -1485,16 +1512,16 @@ export const CreateInvoicePage: React.FC = () => {
   // Switch Mode: Cash / Bank / Gold / Silver / Credit
   const handleSetPaymentMode = (id: string, mode: 'CASH' | 'BANK' | 'GOLD' | 'SILVER' | 'CREDIT') => {
     if (mode === 'GOLD' || mode === 'SILVER') {
+      const isGold = mode === 'GOLD';
       const info = findMetalAndPurity(mode);
       setPayments((prev) =>
         prev.map((p) => {
           if (p.id !== id) return p;
-          const tunch = info.tunchPercent || 99.9;
+          const tunch = toDecimal(info.tunchPercent || (isGold ? 91.6 : 99.9));
           const rate = info.applicableRate;
-          const baseRate = info.baseRate;
           let weight = p.metal_weight;
           let fine = p.fine_weight;
-          let calculatedAmount: number | string = '';
+          let calculatedAmount: number | string = p.amount;
 
           if (weight && toDecimal(weight).gt(0)) {
             const w = toDecimal(weight);
@@ -1502,11 +1529,30 @@ export const CreateInvoicePage: React.FC = () => {
             if (rate > 0) {
               calculatedAmount = w.times(rate).toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber();
             }
-          } else if (fine && toDecimal(fine).gt(0)) {
-            const fw = toDecimal(fine);
-            weight = fw.times(100).dividedBy(tunch).toDecimalPlaces(3, Decimal.ROUND_HALF_UP).toNumber();
-            if (baseRate > 0) {
-              calculatedAmount = fw.times(baseRate).toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber();
+          } else if (calculatedAmount && toDecimal(calculatedAmount).gt(0) && rate > 0) {
+            const w = toDecimal(calculatedAmount).dividedBy(rate).toDecimalPlaces(3, Decimal.ROUND_HALF_UP);
+            weight = w.toNumber();
+            fine = w.times(tunch).dividedBy(100).toDecimalPlaces(3, Decimal.ROUND_HALF_UP).toNumber();
+          } else {
+            const dueAmt = isGold
+              ? (calculations.goldBalAmount > 0 ? calculations.goldBalAmount : calculations.balanceDue)
+              : (calculations.silverBalAmount > 0 ? calculations.silverBalAmount : calculations.balanceDue);
+            const balFine = isGold ? calculations.goldBalFine : calculations.silverBalFine;
+
+            if (balFine > 0) {
+              const w = tunch.gt(0)
+                ? new Decimal(balFine).times(100).dividedBy(tunch).toDecimalPlaces(3, Decimal.ROUND_HALF_UP)
+                : new Decimal(balFine);
+              weight = w.toNumber();
+              fine = balFine;
+              if (rate > 0) {
+                calculatedAmount = w.times(rate).toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber();
+              }
+            } else if (dueAmt > 0 && rate > 0) {
+              const w = new Decimal(dueAmt).dividedBy(rate).toDecimalPlaces(3, Decimal.ROUND_HALF_UP);
+              weight = w.toNumber();
+              fine = w.times(tunch).dividedBy(100).toDecimalPlaces(3, Decimal.ROUND_HALF_UP).toNumber();
+              calculatedAmount = dueAmt;
             }
           }
 
@@ -1517,7 +1563,7 @@ export const CreateInvoicePage: React.FC = () => {
             metal_name: info.metalName,
             purity_id: info.purityId,
             purity_name: info.purityName,
-            tunch_percent: tunch,
+            tunch_percent: tunch.toNumber(),
             metal_rate: rate > 0 ? rate : '',
             metal_weight: weight !== undefined ? weight : '',
             fine_weight: fine !== undefined ? fine : '',
@@ -1668,7 +1714,7 @@ export const CreateInvoicePage: React.FC = () => {
         const isGold = p.payment_mode === 'GOLD';
         const info = findMetalAndPurity(p.payment_mode === 'SILVER' ? 'SILVER' : 'GOLD', p.purity_id);
         const rate = toDecimal(p.metal_rate || info.applicableRate || 0);
-        const tunch = toDecimal(p.tunch_percent || info.tunchPercent || (isGold ? 99.9 : 99.9));
+        const tunch = toDecimal(p.tunch_percent || info.tunchPercent || (isGold ? 91.6 : 99.9));
 
         const w = toDecimal(sanitized || 0);
         const fineWeight = sanitized && !w.isZero()
@@ -1709,9 +1755,37 @@ export const CreateInvoicePage: React.FC = () => {
     setPayments((prev) =>
       prev.map((p) => {
         if (p.id !== id) return p;
+
+        const isMetal = p.payment_mode === 'GOLD' || p.payment_mode === 'SILVER';
+        if (!isMetal) {
+          return {
+            ...p,
+            amount: sanitized,
+            is_auto: false,
+          };
+        }
+
+        const isGold = p.payment_mode === 'GOLD';
+        const info = findMetalAndPurity(isGold ? 'GOLD' : 'SILVER', p.purity_id);
+        const rate = toDecimal(p.metal_rate || info.applicableRate || 0);
+        const tunch = toDecimal(p.tunch_percent || info.tunchPercent || (isGold ? 91.6 : 99.9));
+        const amt = toDecimal(sanitized || 0);
+
+        let newWeight: number | string = '';
+        let newFine: number | string = '';
+
+        if (sanitized && !amt.isZero() && rate.gt(0)) {
+          const w = amt.dividedBy(rate).toDecimalPlaces(3, Decimal.ROUND_HALF_UP);
+          newWeight = w.toNumber();
+          newFine = w.times(tunch).dividedBy(100).toDecimalPlaces(3, Decimal.ROUND_HALF_UP).toNumber();
+        }
+
         return {
           ...p,
           amount: sanitized,
+          metal_weight: newWeight,
+          fine_weight: newFine,
+          last_edited: 'amount',
           is_auto: false,
         };
       })
@@ -1724,13 +1798,53 @@ export const CreateInvoicePage: React.FC = () => {
       prev.map((p) => {
         if (p.id !== id) return p;
         const r = toDecimal(sanitized || 0);
+        const isGold = p.payment_mode === 'GOLD';
+        const info = findMetalAndPurity(isGold ? 'GOLD' : 'SILVER', p.purity_id);
+        const tunch = toDecimal(p.tunch_percent || info.tunchPercent || (isGold ? 91.6 : 99.9));
+
         let newAmount = p.amount;
-        if (p.metal_weight && Number(p.metal_weight) > 0 && r.gt(0)) {
-          newAmount = toDecimal(p.metal_weight).times(r).toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber();
+        let newWeight = p.metal_weight;
+        let newFine = p.fine_weight;
+
+        if (r.gt(0)) {
+          // 1. If user previously edited weight, recalculate Amount = Weight * Rate
+          if (p.last_edited === 'weight' && p.metal_weight && Number(p.metal_weight) > 0) {
+            newAmount = toDecimal(p.metal_weight).times(r).toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber();
+          }
+          // 2. If user previously edited amount, recalculate Weight = Amount / Rate
+          else if (p.amount && Number(p.amount) > 0) {
+            const w = toDecimal(p.amount).dividedBy(r).toDecimalPlaces(3, Decimal.ROUND_HALF_UP);
+            newWeight = w.toNumber();
+            newFine = w.times(tunch).dividedBy(100).toDecimalPlaces(3, Decimal.ROUND_HALF_UP).toNumber();
+          }
+          // 3. If neither amount nor weight was typed yet, calculate from bill balance due / fine due
+          else {
+            const dueAmt = isGold
+              ? (calculations.goldBalAmount > 0 ? calculations.goldBalAmount : calculations.balanceDue)
+              : (calculations.silverBalAmount > 0 ? calculations.silverBalAmount : calculations.balanceDue);
+            const balFine = isGold ? calculations.goldBalFine : calculations.silverBalFine;
+
+            if (balFine > 0) {
+              const w = tunch.gt(0)
+                ? new Decimal(balFine).times(100).dividedBy(tunch).toDecimalPlaces(3, Decimal.ROUND_HALF_UP)
+                : new Decimal(balFine);
+              newWeight = w.toNumber();
+              newFine = balFine;
+              newAmount = w.times(r).toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber();
+            } else if (dueAmt > 0) {
+              const w = new Decimal(dueAmt).dividedBy(r).toDecimalPlaces(3, Decimal.ROUND_HALF_UP);
+              newWeight = w.toNumber();
+              newFine = w.times(tunch).dividedBy(100).toDecimalPlaces(3, Decimal.ROUND_HALF_UP).toNumber();
+              newAmount = dueAmt;
+            }
+          }
         }
+
         return {
           ...p,
           metal_rate: sanitized,
+          metal_weight: newWeight,
+          fine_weight: newFine,
           amount: newAmount,
           is_auto: false,
           rate_error: r.lte(0) ? 'Rate must be greater than zero' : undefined,
@@ -1749,10 +1863,15 @@ export const CreateInvoicePage: React.FC = () => {
         const newRate = info.applicableRate;
         const tunch = info.tunchPercent;
 
+        let newWeight = p.metal_weight;
         let newFine = p.fine_weight;
         let newAmt = p.amount;
 
-        if (p.metal_weight && Number(p.metal_weight) > 0) {
+        if (p.last_edited === 'amount' && p.amount && Number(p.amount) > 0 && newRate > 0) {
+          const w = toDecimal(p.amount).dividedBy(newRate).toDecimalPlaces(3, Decimal.ROUND_HALF_UP);
+          newWeight = w.toNumber();
+          newFine = w.times(tunch).dividedBy(100).toDecimalPlaces(3, Decimal.ROUND_HALF_UP).toNumber();
+        } else if (p.metal_weight && Number(p.metal_weight) > 0) {
           const w = toDecimal(p.metal_weight);
           newFine = w.times(tunch).dividedBy(100).toDecimalPlaces(3, Decimal.ROUND_HALF_UP).toNumber();
           if (newRate > 0) {
@@ -1765,9 +1884,10 @@ export const CreateInvoicePage: React.FC = () => {
           purity_id: newPurityId,
           purity_name: selectedPur ? selectedPur.name : info.purityName,
           metal_rate: newRate > 0 ? newRate : p.metal_rate,
-          tunch_percent: tunch,
+          metal_weight: newWeight,
           fine_weight: newFine,
           amount: newAmt,
+          tunch_percent: tunch,
           rate_error: newRate <= 0 ? 'No active rate configured for this purity' : undefined,
         };
       })
