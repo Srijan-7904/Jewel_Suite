@@ -188,6 +188,9 @@ export function handleTallyKeyDown(
     }
 
     if (currentIndex !== -1 && currentIndex + 1 < focusables.length) {
+      if (options?.onCloseDropdown) {
+        options.onCloseDropdown();
+      }
       e.preventDefault();
       e.stopPropagation();
       const nextEl = focusables[currentIndex + 1];

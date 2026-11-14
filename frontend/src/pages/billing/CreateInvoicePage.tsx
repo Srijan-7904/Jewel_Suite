@@ -186,6 +186,7 @@ export const CreateInvoicePage: React.FC = () => {
   // In-Stock Inventory Tracking & Item Name Autocomplete Selection
   const [stockItems, setStockItems] = useState<StockItem[]>([]);
   const [activeItemDropdownRowId, setActiveItemDropdownRowId] = useState<string | null>(null);
+  const [highlightedItemIndex, setHighlightedItemIndex] = useState<number>(0);
   const [itemDropdownCoords, setItemDropdownCoords] = useState<{ top: number; left: number; width: number } | null>(null);
   const itemDropdownRef = useRef<HTMLDivElement | null>(null);
 
@@ -605,6 +606,76 @@ export const CreateInvoicePage: React.FC = () => {
           setActiveItemDropdownRowId(null);
           return;
         }
+
+        const activeRow = saleItems.find((s) => s.id === activeItemDropdownRowId);
+        const q = (activeRow?.item_name || '').trim().toUpperCase();
+        const matched = stockItems.filter((s) => {
+          if (!q) return true;
+          return (
+            (s.product_name && s.product_name.toUpperCase().includes(q)) ||
+            (s.tag_no && s.tag_no.toUpperCase().includes(q)) ||
+            (s.metal_name && s.metal_name.toUpperCase().includes(q)) ||
+            (s.notes && s.notes.toUpperCase().includes(q))
+          );
+        }).slice(0, 10);
+
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          e.stopPropagation();
+          if (matched.length > 0) {
+            setHighlightedItemIndex((prev) => (prev + 1) % matched.length);
+          }
+          return;
+        }
+
+        if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          e.stopPropagation();
+          if (matched.length > 0) {
+            setHighlightedItemIndex((prev) => (prev - 1 + matched.length) % matched.length);
+          }
+          return;
+        }
+
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          e.stopPropagation();
+          const targetRowId = activeItemDropdownRowId;
+          const pickedStock = matched[highlightedItemIndex] || matched[0];
+          if (pickedStock && activeRow) {
+            handleSelectStockItem(targetRowId, pickedStock);
+          }
+          setActiveItemDropdownRowId(null);
+
+          // Focus next editable field in row in Tally style
+          setTimeout(() => {
+            const row = document.querySelector(`[data-row-id="${targetRowId}"]`)?.closest('tr');
+            if (row) {
+              const inputs = Array.from(
+                row.querySelectorAll<HTMLInputElement | HTMLSelectElement>(
+                  'input:not([disabled]):not([readonly]), select:not([disabled])'
+                )
+              );
+              const target = inputs.find(
+                (inp) =>
+                  inp.getAttribute('placeholder')?.includes('RATE') ||
+                  inp.getAttribute('placeholder')?.includes('MC') ||
+                  inp.getAttribute('placeholder')?.includes('RATE/G') ||
+                  inp.getAttribute('placeholder')?.includes('GROSS') ||
+                  inp.tagName === 'SELECT'
+              );
+              if (target) {
+                target.focus();
+                if ('select' in target) (target as HTMLInputElement).select();
+              }
+            }
+          }, 50);
+          return;
+        }
+
+        if (e.key === 'Tab') {
+          setActiveItemDropdownRowId(null);
+        }
       }
 
       // 4. Default Tally Navigation across all invoice inputs
@@ -620,7 +691,7 @@ export const CreateInvoicePage: React.FC = () => {
 
     window.addEventListener('keydown', handleGlobalTallyNav, true);
     return () => window.removeEventListener('keydown', handleGlobalTallyNav, true);
-  }, [showCustomerModal, showCustomerDetailsModal, activeItemDropdownRowId]);
+  }, [showCustomerModal, showCustomerDetailsModal, activeItemDropdownRowId, highlightedItemIndex, saleItems, stockItems]);
 
   const [customerForm, setCustomerForm] = useState({
     name: '',
@@ -1005,11 +1076,15 @@ export const CreateInvoicePage: React.FC = () => {
           (inp) =>
             inp.placeholder.includes('RATE') ||
             inp.placeholder.includes('MC') ||
-            inp.placeholder.includes('RATE/G')
+            inp.placeholder.includes('RATE/G') ||
+            inp.placeholder.includes('GROSS')
         );
         if (nextTarget) {
           nextTarget.focus();
           nextTarget.select();
+        } else {
+          const activeInput = document.querySelector<HTMLInputElement>(`input[data-row-id="${rowId}"]`);
+          activeInput?.blur();
         }
       }
     }, 60);
@@ -3176,13 +3251,90 @@ export const CreateInvoicePage: React.FC = () => {
                               handleUpdateSaleRow(item.id, { item_name: val });
                               updateItemDropdownCoords(e.currentTarget);
                               setActiveItemDropdownRowId(item.id);
+                              setHighlightedItemIndex(0);
                             }}
                             onFocus={(e) => {
                               updateItemDropdownCoords(e.currentTarget);
                               setActiveItemDropdownRowId(item.id);
+                              setHighlightedItemIndex(0);
+                            }}
+                            onBlur={() => {
+                              setTimeout(() => {
+                                setActiveItemDropdownRowId(null);
+                              }, 180);
                             }}
                             onKeyDown={(e) => {
                               if (e.key === 'Escape') {
+                                e.preventDefault();
+                                setActiveItemDropdownRowId(null);
+                                return;
+                              }
+
+                              const q = (item.item_name || '').trim().toUpperCase();
+                              const matched = stockItems.filter((s) => {
+                                if (!q) return true;
+                                return (
+                                  (s.product_name && s.product_name.toUpperCase().includes(q)) ||
+                                  (s.tag_no && s.tag_no.toUpperCase().includes(q)) ||
+                                  (s.metal_name && s.metal_name.toUpperCase().includes(q)) ||
+                                  (s.notes && s.notes.toUpperCase().includes(q))
+                                );
+                              }).slice(0, 10);
+
+                              if (e.key === 'ArrowDown') {
+                                e.preventDefault();
+                                if (matched.length > 0) {
+                                  setHighlightedItemIndex((prev) => (prev + 1) % matched.length);
+                                }
+                                return;
+                              }
+
+                              if (e.key === 'ArrowUp') {
+                                e.preventDefault();
+                                if (matched.length > 0) {
+                                  setHighlightedItemIndex((prev) => (prev - 1 + matched.length) % matched.length);
+                                }
+                                return;
+                              }
+
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                if (matched.length > 0) {
+                                  const selectedStock = matched[highlightedItemIndex] || matched[0];
+                                  if (selectedStock) {
+                                    handleSelectStockItem(item.id, selectedStock);
+                                  }
+                                }
+                                setActiveItemDropdownRowId(null);
+
+                                // Advance focus to next input in row
+                                setTimeout(() => {
+                                  const row = e.currentTarget.closest('tr');
+                                  if (row) {
+                                    const inputs = Array.from(
+                                      row.querySelectorAll<HTMLInputElement | HTMLSelectElement>(
+                                        'input:not([disabled]):not([readonly]), select:not([disabled])'
+                                      )
+                                    );
+                                    const next = inputs.find(
+                                      (inp) =>
+                                        inp !== e.currentTarget &&
+                                        (inp.getAttribute('placeholder')?.includes('RATE') ||
+                                          inp.getAttribute('placeholder')?.includes('MC') ||
+                                          inp.getAttribute('placeholder')?.includes('RATE/G') ||
+                                          inp.getAttribute('placeholder')?.includes('GROSS') ||
+                                          inp.tagName === 'SELECT')
+                                    );
+                                    if (next) {
+                                      next.focus();
+                                      if ('select' in next) (next as HTMLInputElement).select();
+                                    }
+                                  }
+                                }, 50);
+                                return;
+                              }
+
+                              if (e.key === 'Tab') {
                                 setActiveItemDropdownRowId(null);
                               }
                             }}
@@ -3257,13 +3409,15 @@ export const CreateInvoicePage: React.FC = () => {
                                   );
                                 })
                                 .slice(0, 10)
-                                .map((stock) => (
+                                .map((stock, idx) => (
                                   <div
                                     key={stock.id}
-                                    className="tag-suggestion-item"
+                                    className={`tag-suggestion-item ${highlightedItemIndex === idx ? 'active' : ''}`}
+                                    onMouseEnter={() => setHighlightedItemIndex(idx)}
                                     onMouseDown={(e) => {
                                       e.preventDefault();
                                       handleSelectStockItem(item.id, stock);
+                                      setActiveItemDropdownRowId(null);
                                     }}
                                   >
                                     <div className="stock-suggestion-info">

@@ -3171,7 +3171,9 @@
   border-bottom: none;
 }
 
-.tag-suggestion-item:hover {
+.tag-suggestion-item:hover,
+.tag-suggestion-item.active,
+.tag-suggestion-item.selected {
   background: #fdfbf5 !important;
   border-left: 3.5px solid #d4af37;
   padding-left: calc(0.85rem - 3.5px);
